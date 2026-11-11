@@ -1,36 +1,6 @@
-/** One discoverable entry for the optional local-library tools. */
-import { useRouter } from 'expo-router';
-import { Text } from 'react-native';
-import { DockScrollView } from '@/components/DockScrollView';
-import { SettingRow, SettingsPage, settingsStyles } from '@/components/SettingsUI';
-import { useT } from '@/i18n';
-import { useTheme } from '@/theme';
-export default function MusicToolsSettings() {
-  useTheme(); const t = useT(), router = useRouter();
-  return <SettingsPage title={t('Music tools and customization')}><DockScrollView contentContainerStyle={settingsStyles.content}>
-    <Text style={settingsStyles.sectionTitle}>{t('Discovery and organization')}</Text>
-    <SettingRow label={t('Home and search layouts')} onPress={() => router.push('/settings/discovery-layout')} />
-    <SettingRow label={t('Pinyin library search')} onPress={() => router.push('/settings/music-search')} />
-    <SettingRow label={t('Listening scenes')} onPress={() => router.push('/listening-intents')} />
-    <SettingRow label={t('Discover internet radio')} onPress={() => router.push('/radio-discover')} />
-    <SettingRow label={t('Media folders and tags')} onPress={() => router.push('/media-collections')} />
-    <Text style={settingsStyles.sectionTitle}>{t('Playback and lyrics')}</Text>
-    <SettingRow label={t('Listening sessions, groups and chapters')} onPress={() => router.push('/settings/listening-tools')} />
-    <SettingRow label={t('Metadata centre')} onPress={() => router.push('/metadata')} />
-    <SettingRow label={t('A–B repeat')} onPress={() => router.push('/playback-range')} />
-    <SettingRow label={t('Local loudness analysis')} onPress={() => router.push('/settings/loudness-analysis')} />
-    <SettingRow label={t('CUE virtual tracks')} onPress={() => router.push('/cue-import')} />
-    <SettingRow label={t('Local podcasts')} onPress={() => router.push('/local-podcasts')} />
-    <SettingRow label={t('Local edits and artist aliases')} onPress={() => router.push('/settings/local-customizations')} />
-    <SettingRow label={t('Lyric language fonts')} onPress={() => router.push('/settings/lyric-fonts')} />
-    <Text style={settingsStyles.sectionDescription}>{t('Edit song metadata and export or edit lyrics from a song’s menu.')}</Text>
-    <SettingRow label={t('Home screen widgets')} onPress={() => router.push('/settings/home-widgets')} />
-    <Text style={settingsStyles.sectionTitle}>{t('Backup and transfer')}</Text>
-    <SettingRow label={t('Personal backup and restore')} onPress={() => router.push('/settings/personal-backup')} />
-    <SettingRow label={t('Wi-Fi music transfer')} onPress={() => router.push('/settings/wifi-transfer')} />
-    <SettingRow label={t('Pending favorites and ratings')} onPress={() => router.push('/settings/pending-marks')} />
-    <SettingRow label={t('Recently deleted')} onPress={() => router.push('/settings/recently-deleted')} />
-    <SettingRow label={t('Playlist recovery')} onPress={() => router.push('/settings/playlist-recovery')} />
-    <SettingRow label={t('Playlist import and export')} onPress={() => router.push('/settings/playlist-exchange')} />
-  </DockScrollView></SettingsPage>;
+import { SettingsCategoryPage } from '@/components/SettingsCategoryPage';
+import { SETTINGS_CATEGORY_PAGES } from '@/lib/settingsNavigation';
+
+export default function LibraryToolsSettings() {
+  return <SettingsCategoryPage {...SETTINGS_CATEGORY_PAGES.library} />;
 }

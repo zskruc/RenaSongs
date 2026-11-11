@@ -6,8 +6,8 @@ import { SettingAnchor, SettingsAnchorProvider } from './SettingAnchor';
  * compact floating menu.
  */
 import Icon from '@/components/Icon';
-import { GlassBackdrop, GlassPressable, GlassSlider, GlassSurface, GlassSwitch, GlassTextInput } from '@/components/glass';
-import { Children, createContext, useContext, useEffect, useRef, useState, type ComponentProps } from 'react';
+import { GlassPressable, GlassSlider, GlassSwitch, GlassTextInput } from '@/components/glass';
+import { Children, Fragment, createContext, isValidElement, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -20,18 +20,15 @@ import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-cont
 
 import { useAccent } from '@/hooks/useAccent';
 import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
-import { useAppleMusicStyle } from '@/hooks/useAppleMusicStyle';
-import { appleMusicStyles } from '@/theme/appleMusic';
-import { useGlassTuning } from '@/store/glassTuning';
 import { CONTENT_MAX_WIDTH } from '@/hooks/useScreenSize';
 import { colors, fontSize, radius, spacing, SCREEN_BOTTOM_PADDING, themed, tracking, useTheme, useThemeMode } from '@/theme';
 import { BackChevron } from './BackChevron';
 import { MenuGlassPanel, menuGlassScrimColor } from './MenuGlassCard';
-import { DynamicGlassBackdrop, StaticGlassBackdropProvider, useStaticGlassBackdropColor } from './glass/StaticGlassBackdropContext';
+import { DynamicGlassBackdrop, StaticGlassBackdropProvider } from './glass/StaticGlassBackdropContext';
 import { SettingsScrollPaddingContext } from './SettingsScrollPaddingContext';
 
-/** A 44dp control plus 6dp above/below; text may grow the row when it wraps. */
-export const SETTINGS_ROW_LAYOUT = { minHeight: 56, paddingVertical: 6 } as const;
+/** Switches have a 44dp touch frame. Every ordinary row reserves the same space. */
+export const SETTINGS_ROW_LAYOUT = { minHeight: 60, paddingVertical: 8 } as const;
 
 /**
  * The frame every settings screen sits in.
@@ -62,11 +59,11 @@ export function SettingsSafeArea({ children }: { children: React.ReactNode }) {
 /** Header with back arrow and centered title. `back={false}` for a screen that
  *  is a tab, with nowhere to go back to. */
 export function ScreenHeader({ title, back = true }: { title: string; back?: boolean }) {
-  const appleMusic = useAppleMusicStyle();
+  useTheme();
   return (
-    <View style={[settingsStyles.header, appleMusic && appleMusicStyles.settingsHeader]}>
+    <View style={settingsStyles.header}>
       {back ? <BackChevron size={28} /> : <View style={{ width: 28 }} />}
-      <Text style={[settingsStyles.headerTitle, appleMusic && appleMusicStyles.settingsTitle]}>{title}</Text>
+      <Text accessibilityRole="header" style={settingsStyles.headerTitle}>{title}</Text>
       <View style={{ width: 28 }} />
     </View>
   );
@@ -93,13 +90,25 @@ export function SettingsPage({ title, children }: { title: string; children: Rea
 /** Inside a `SettingsGroup`, a row leaves the box to the group. */
 const GroupContext = createContext(false);
 
-/** Only these plain-page cards opt into a uniform source; previews stay live. */
-function SettingsCard(props: ComponentProps<typeof GlassSurface>) {
-  const staticBackdropColor = useStaticGlassBackdropColor(props.variant ?? 'regular');
-  const plainGroup = useGlassTuning((state) => state.mode === 'amPlus');
-  // Group containers are not LiquidButtons. Keep the Apple-style settings
-  // surface flat; the original switches, sliders and action buttons stay glass.
-  return <GlassSurface {...props} enabled={plainGroup ? false : props.enabled} staticBackdropColor={staticBackdropColor} />;
+/** Uniform reading surfaces avoid repeating a sampled glass layer under each row. */
+function SettingsCard({ children, style }: Pick<ComponentProps<typeof View>, 'children' | 'style'> & { enabled?: boolean; radius?: number }) {
+  useTheme();
+  return <View style={style}>{children}</View>;
+}
+
+/** For custom settings content that needs the same panel as ordinary rows. */
+export function SettingsPanel({ children, style }: Pick<ComponentProps<typeof View>, 'children' | 'style'>) {
+  useTheme();
+  return <View style={[settingsStyles.cardBox, style]}>{children}</View>;
+}
+
+/** A short page introduction, outside the first group rather than inside a row. */
+export function SettingsIntro({ title, description }: { title?: string; description: string }) {
+  useTheme();
+  return <View style={settingsStyles.intro}>
+    {title ? <Text accessibilityRole="header" style={settingsStyles.introTitle}>{title}</Text> : null}
+    <Text style={settingsStyles.introDescription}>{description}</Text>
+  </View>;
 }
 
 /** The box a row draws around itself, unless a group already draws one. */
@@ -113,10 +122,18 @@ function useCardBox() {
  * apart. What is inside keeps working on its own too; it just stops drawing
  * its own box.
  */
-export function SettingsGroup({ children }: { children: React.ReactNode }) {
-  const rows = Children.toArray(children);
+function groupRows(children: ReactNode): ReactNode[] {
+  // Fragments should not conceal row boundaries or leave a separator behind
+  // when all of their conditional controls are absent in a local profile.
+  return Children.toArray(children).flatMap((child) => isValidElement<{ children?: ReactNode }>(child) && child.type === Fragment
+    ? groupRows(child.props.children) : [child]);
+}
+
+export function SettingsGroup({ children, title, description }: { children: ReactNode; title?: string; description?: string }) {
+  useTheme();
+  const rows = groupRows(children);
   if (rows.length === 0) return null;
-  return (
+  const panel = (
     <GroupContext.Provider value>
       <SettingsCard radius={radius.lg} style={settingsStyles.cardBox}>
         {rows.map((row, i) => (
@@ -128,6 +145,12 @@ export function SettingsGroup({ children }: { children: React.ReactNode }) {
       </SettingsCard>
     </GroupContext.Provider>
   );
+  if (!title && !description) return panel;
+  return <View style={settingsStyles.groupSection}>
+    {title ? <Text accessibilityRole="header" style={settingsStyles.groupSectionTitle}>{title}</Text> : null}
+    {description ? <Text style={settingsStyles.groupSectionDescription}>{description}</Text> : null}
+    {panel}
+  </View>;
 }
 
 /**
@@ -141,6 +164,8 @@ export function SettingRow({
   right,
   chevron,
   destructive,
+  disabled = false,
+  iconColor,
   onPress,
 }: {
   label: string;
@@ -155,15 +180,17 @@ export function SettingRow({
   /** Right arrow: only for rows that navigate to another screen. */
   chevron?: boolean;
   destructive?: boolean;
+  /** Disabled destinations stay visible with their explanation and saved value. */
+  disabled?: boolean;
+  iconColor?: string;
   onPress?: () => void;
 }) {
+  useTheme();
   const box = useCardBox();
-  const plainGroup = useGlassTuning((state) => state.mode === 'amPlus');
-  const staticBackdropColor = useStaticGlassBackdropColor('regular');
   const body = (
     <>
       {icon ? (
-        <Icon name={icon} size={20} color={destructive ? colors.danger : colors.text} />
+        <Icon name={icon} size={21} color={destructive ? colors.danger : iconColor ?? colors.textSecondary} />
       ) : null}
       <View style={settingsStyles.rowLabelBox}>
         <Text style={[settingsStyles.rowLabel, destructive && { color: colors.danger }]}>
@@ -178,8 +205,7 @@ export function SettingRow({
   if (!onPress) {
     return (
       <SettingAnchor label={label}>
-      <View style={[box, settingsStyles.row, box && !plainGroup && { backgroundColor: 'transparent' }]}>
-        {box && !plainGroup ? <GlassBackdrop radius={radius.lg} tint={colors.surface} staticBackdropColor={staticBackdropColor} /> : null}
+      <View style={[box, settingsStyles.row, disabled && settingsStyles.disabledRow]}>
         {body}
       </View>
       </SettingAnchor>
@@ -188,10 +214,16 @@ export function SettingRow({
   return (
       <SettingAnchor label={label}>
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={description}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       style={({ pressed }) => [
         box,
         settingsStyles.row,
-        pressed && { opacity: 0.6 },
+        disabled && settingsStyles.disabledRow,
+        pressed && !disabled && settingsStyles.pressedRow,
       ]}
       onPress={onPress}
     >
@@ -291,11 +323,16 @@ export function SelectList<T extends string | number | boolean>({
           const isActive = opt.value === value;
           return (
             <SettingAnchor key={String(opt.value)} label={opt.label}>
+            {i > 0 ? <View style={settingsStyles.groupDivider} /> : null}
             <Pressable
+              accessibilityRole="radio"
+              accessibilityLabel={opt.label}
+              accessibilityState={{ checked: isActive, disabled }}
+              disabled={disabled}
               style={({ pressed }) => [
                 settingsStyles.row,
-                i > 0 && settingsStyles.rowBorder,
-                pressed && { opacity: 0.6 },
+                disabled && settingsStyles.disabledRow,
+                pressed && !disabled && settingsStyles.pressedRow,
               ]}
               onPress={() => {
                 if (!isActive) onChange(opt.value);
@@ -331,8 +368,8 @@ export function SelectList<T extends string | number | boolean>({
           // Dimming the whole row, not recolouring the label: the muted colour
           // is the description's own, so label and description came out the
           // same and the row lost the hierarchy the others keep.
-          disabled && { opacity: 0.5 },
-          pressed && !disabled && { opacity: 0.6 },
+          disabled && settingsStyles.disabledRow,
+          pressed && !disabled && settingsStyles.pressedRow,
         ]}
         onPress={openMenu}
       >
@@ -718,6 +755,7 @@ export function SwitchList({
         // as one to a screen reader, and the switch inside stops announcing
         // itself separately.
         <SettingAnchor key={opt.label} label={opt.label}>
+        {i > 0 ? <View style={settingsStyles.groupDivider} /> : null}
         <Pressable
           disabled={opt.disabled}
           onPress={() => opt.onChange(!opt.value)}
@@ -727,10 +765,9 @@ export function SwitchList({
           accessibilityState={{ checked: opt.value, disabled: !!opt.disabled }}
           style={({ pressed }) => [
             settingsStyles.row,
-            i > 0 && settingsStyles.rowBorder,
             // The whole row, not the label alone: see `SelectList`.
-            opt.disabled && { opacity: 0.5 },
-            pressed && { opacity: 0.6 },
+            opt.disabled && settingsStyles.disabledRow,
+            pressed && !opt.disabled && settingsStyles.pressedRow,
           ]}
         >
           <View style={settingsStyles.rowLabelBox}>
@@ -812,6 +849,7 @@ export function TextRow({
 }
 
 export function Field({ label, value }: { label: string; value: string }) {
+  useTheme();
   const box = useCardBox();
   return (
       <SettingAnchor label={label}>
@@ -833,9 +871,11 @@ export const settingsStyles = themed((colors) => ({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    minHeight: 60,
+    gap: spacing.md,
   },
-  headerTitle: { color: colors.text, fontSize: fontSize.lg, letterSpacing: tracking.heading, fontWeight: '500' },
-  content: { padding: spacing.lg, gap: spacing.sm, paddingBottom: SCREEN_BOTTOM_PADDING },
+  headerTitle: { color: colors.text, fontSize: fontSize.lg, lineHeight: 27, letterSpacing: tracking.heading, fontWeight: '600', flex: 1, textAlign: 'center' },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, gap: spacing.sm, paddingBottom: SCREEN_BOTTOM_PADDING },
   /** Where the settings themselves live, centred once there is room to spare. */
   pane: { flex: 1, width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center' },
   // Small and grey, over the card it names: at the size of the screen's own
@@ -844,16 +884,24 @@ export const settingsStyles = themed((colors) => ({
   sectionTitle: {
     color: colors.textSecondary,
     fontSize: fontSize.sm,
-    fontWeight: '500',
+    lineHeight: 20,
+    fontWeight: '600',
     marginTop: spacing.lg,
     marginBottom: spacing.xs,
     marginLeft: spacing.xs,
   },
   sectionDescription: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     marginBottom: spacing.xs,
   },
+  intro: { gap: spacing.xs, paddingHorizontal: spacing.xs, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  introTitle: { color: colors.text, fontSize: fontSize.xl, lineHeight: 31, fontWeight: '700', letterSpacing: tracking.title },
+  introDescription: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 21 },
+  groupSection: { marginTop: spacing.md, gap: spacing.sm },
+  groupSectionTitle: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20, fontWeight: '600', paddingHorizontal: spacing.xs },
+  groupSectionDescription: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20, paddingHorizontal: spacing.xs },
   // A division inside a section, for when the same settings come in more than
   // one set (streaming, once per network). Quieter than `sectionTitle` and with
   // less air above it, so it reads as belonging to the title above rather than
@@ -861,12 +909,14 @@ export const settingsStyles = themed((colors) => ({
   // Between the rows of a `SettingsGroup`, inset like `rowBorder`.
   groupDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.highlight,
+    backgroundColor: colors.border,
     marginLeft: spacing.lg,
+    marginRight: spacing.lg,
   },
   groupTitle: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     fontWeight: '500',
     marginTop: spacing.md,
     marginBottom: spacing.xs,
@@ -880,15 +930,15 @@ export const settingsStyles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
-  // A hairline that starts where the text does: the row trades its left
-  // padding for a margin, so the content stays put and the line is inset.
+  // Compatibility for custom rows. A separator must never change the content
+  // inset; shared controls above use a separate inset hairline instead.
   rowBorder: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.highlight,
-    marginLeft: spacing.lg,
-    paddingLeft: 0,
+    borderTopColor: colors.border,
   },
-  rowLabel: { color: colors.text, fontSize: fontSize.md },
+  pressedRow: { backgroundColor: colors.surfaceHighlight },
+  disabledRow: { opacity: 0.5 },
+  rowLabel: { color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
   /**
    * Label side of a settings row. The `minWidth` is what keeps it alive: with a
    * zero flex basis it can't claim any space of its own, so a long value on the
@@ -899,7 +949,7 @@ export const settingsStyles = themed((colors) => ({
    * long one can stretch to 60% before the label starts pushing back.
    */
   rowLabelBox: { flex: 1, minWidth: '40%' },
-  rowDescription: { color: colors.textMuted, fontSize: fontSize.xs, marginTop: 2 },
+  rowDescription: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20, marginTop: 3 },
   /**
    * The value on the right of a settings row. `flexShrink` is 0 by default in
    * React Native, so without this a long value never gave way; it wraps onto
@@ -909,6 +959,7 @@ export const settingsStyles = themed((colors) => ({
   rowValue: {
     color: colors.textSecondary,
     fontSize: fontSize.sm,
+    lineHeight: 20,
     flexShrink: 1,
     textAlign: 'right',
   },
@@ -980,9 +1031,9 @@ export const settingsStyles = themed((colors) => ({
   // flexShrink (not flex: 1, whose flex-basis:0 collapses the text and wraps it
   // aggressively): the menu hugs the widest label instead of squeezing it.
   menuItemText: { color: colors.text, fontSize: fontSize.sm, flexShrink: 1 },
-  field: { ...SETTINGS_ROW_LAYOUT, paddingHorizontal: spacing.lg },
-  fieldLabel: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: 2 },
-  fieldValue: { color: colors.text, fontSize: fontSize.md },
+  field: { ...SETTINGS_ROW_LAYOUT, justifyContent: 'center', paddingHorizontal: spacing.lg },
+  fieldLabel: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20, marginBottom: 2 },
+  fieldValue: { color: colors.text, fontSize: fontSize.md, lineHeight: 22 },
   // Centered white pill button (Spotify's "Log out").
   pillButton: {
     alignSelf: 'center',

@@ -8,7 +8,7 @@
  */
 
 import { DockScrollView } from '@/components/DockScrollView';
-import { SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
+import { SettingsGroup, SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
 import { useSettings } from '@/store/settings';
 import { useTheme } from '@/theme';
@@ -38,6 +38,7 @@ export default function SongListsSettings() {
   return (
     <SettingsPage title={t('Song lists')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
+        <SettingsGroup title={t('Song information')}>
         <SwitchList
           options={[
             {
@@ -60,6 +61,12 @@ export default function SongListsSettings() {
               value: showExplicitTag,
               onChange: setShowExplicitTag,
             },
+          ]}
+        />
+        </SettingsGroup>
+        <SettingsGroup title={t('Album and artist details')}>
+        <SwitchList
+          options={[
             {
               label: t('Show description'),
               value: showPlaylistDescription,
@@ -82,6 +89,7 @@ export default function SongListsSettings() {
             },
           ]}
         />
+        </SettingsGroup>
       </DockScrollView>
     </SettingsPage>
   );

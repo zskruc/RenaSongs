@@ -53,14 +53,14 @@ export default function LongAudioSettings() {
     <DockScrollView ref={scroll} contentContainerStyle={settingsStyles.content} keyboardShouldPersistTaps="handled">
       <Text style={settingsStyles.sectionDescription}>{t('Opt in per track for ASMR, concerts or other long recordings. Positions and note bookmarks are kept on this device for this account.')}</Text>
       {song ? <>
-        <SettingsGroup><Field label={t('Song')} value={song.title} />
+        <SettingsGroup title={t('Song')}><Field label={t('Song')} value={song.title} />
           {song.artist ? <Field label={t('Artist')} value={song.artist} /> : null}
           <Field label={t('Saved position')} value={formatDuration(entry?.positionSec)} />
         </SettingsGroup>
+        <SettingsGroup title={t('Playback')}>
         <SwitchList options={[{ label: t('Remember this audio position'),
           description: t('Save while listening, pausing and leaving the app. Continue playing rewinds 10 seconds.'),
           value: !!entry?.enabled, onChange: (enabled) => { void act(() => data.setEnabled(scope, song, enabled)); } }]} />
-        <SettingsGroup>
           <SettingRow icon="play-outline" label={t('Continue playing')}
             right={formatDuration(longAudioResumePosition(entry))}
             onPress={!busy && ready && entry?.enabled ? () => { void act(() => playLongAudioAt(song, longAudioResumePosition(entry), scope)); } : undefined} />
@@ -69,7 +69,7 @@ export default function LongAudioSettings() {
           {entry ? <SettingRow icon="trash-outline" label={t('Remove saved audio')} destructive
             onPress={ready && !busy ? () => setConfirmForget(true) : undefined} /> : null}
         </SettingsGroup>
-        <Text style={settingsStyles.sectionTitle}>{t('Audio bookmarks')}</Text>
+        <SettingsGroup title={t('Audio bookmarks')}>
         <TextRow label={t('Bookmark note')} value={note} maxLength={160} onChange={setNote} placeholder={t('Optional note')} />
         <SettingRow icon="bookmark-outline" label={t('Bookmark current position')}
           description={playingId === song.id ? t('Tap a saved bookmark to play from that point.') : t('Play this audio first to bookmark the current position.')}
@@ -83,6 +83,7 @@ export default function LongAudioSettings() {
               return ok;
             });
           } : undefined} />
+        </SettingsGroup>
         {(entry?.bookmarks ?? []).map((mark) => <SettingsGroup key={mark.id}>
           <SettingRow icon="play-outline" label={mark.note || t('Audio bookmark')} right={formatDuration(mark.seconds)}
             onPress={ready && !busy ? () => { void act(() => playLongAudioAt(song, mark.seconds, scope)); } : undefined} />
@@ -92,8 +93,7 @@ export default function LongAudioSettings() {
       </> : <Text style={settingsStyles.sectionDescription}>{t('Open a song menu to choose long audio, or select a saved recording below.')}</Text>}
       {data.error ? <SettingRow icon="refresh-outline" label={t('Retry')} description={t('Long-audio data could not be read or saved. Existing bookmarks are retained.')}
         onPress={() => { if (data.hydrated) void data.retry(); else void data.load(scope); }} /> : null}
-      <Text style={settingsStyles.sectionTitle}>{t('Saved long audio')}</Text>
-      {saved.length ? <SettingsGroup>{saved.slice(0, limit).map((item) => <SettingRow key={item.song.id}
+      {saved.length ? <SettingsGroup title={t('Saved long audio')}>{saved.slice(0, limit).map((item) => <SettingRow key={item.song.id}
         label={item.song.title} description={item.song.artist || undefined} right={formatDuration(item.positionSec)} chevron
         onPress={() => { if (scope !== longAudioScope()) return; setSelected(item.song); setNote(''); scroll.current?.scrollTo({ y: 0, animated: true }); }} />)}</SettingsGroup>
         : <Text style={settingsStyles.sectionDescription}>{t('No saved long audio yet')}</Text>}

@@ -4,6 +4,10 @@ export interface SettingsSearchEntry {
   title: string;
   chinese: string;
   section: string;
+  /** Translation keys from the Settings home category to the destination page. */
+  breadcrumbs?: string[];
+  /** Older search-history IDs whose controls now live at this destination. */
+  legacyIds?: string[];
   anchor?: string;
   aliases?: string[];
 }
@@ -19,12 +23,13 @@ export function searchSettings(entries: readonly SettingsSearchEntry[], text: st
   if (!query) return [];
   return entries.map((entry, order) => {
     const names = [entry.title, entry.chinese].map(normalizeSettingsQuery);
-    const other = [entry.section, ...(entry.aliases ?? [])].map(normalizeSettingsQuery);
+    const other = [entry.section, ...(entry.breadcrumbs ?? []), ...(entry.aliases ?? [])].map(normalizeSettingsQuery);
     const score = names.includes(query) ? 0 : names.some((name) => name.startsWith(query)) ? 1
       : names.some((name) => name.includes(query)) ? 2 : other.some((name) => name.includes(query)) ? 3
       : tokens.length > 1 && tokens.every((token) => [...names, ...other].some((name) => name.includes(token))) ? 4 : 99;
     return { entry, score, order };
-  }).filter((item) => item.score < 99).sort((a, b) => a.score - b.score || a.order - b.order).map((item) => item.entry);
+  }).filter((item) => item.score < 99).sort((a, b) => a.score - b.score
+    || Number(!!a.entry.anchor) - Number(!!b.entry.anchor) || a.order - b.order).map((item) => item.entry);
 }
 
 export function settingsRecentIds(value: unknown, valid: ReadonlySet<string>): string[] {

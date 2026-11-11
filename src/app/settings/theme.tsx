@@ -10,7 +10,7 @@ import { useState } from 'react';
 import { Text, View } from 'react-native';
 
 import { GlassPressable } from '@/components/glass';
-import { SETTINGS_ROW_LAYOUT, SelectList, SettingsGroup, SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
+import { SelectList, SettingsGroup, SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
 import type { AccentSource } from '@/lib/appAccent';
 import { ACCENT_OPTIONS, useSettings } from '@/store/settings';
@@ -196,9 +196,9 @@ export default function ThemeSettings() {
         {/* "Mode" and not "Appearance": Appearance is the screen this one hangs
             off, and two headings with the same word one level apart read as a
             mistake. */}
-        <Text style={styles.label}>{t('Mode')}</Text>
+        <SettingsGroup title={t('Mode')}>
         <SelectList<ThemePreference>
-          collapsible={false}
+          label={t('Mode')}
           value={themeMode}
           onChange={setThemeMode}
           options={[
@@ -210,8 +210,6 @@ export default function ThemeSettings() {
         />
         {themeMode === 'schedule' ? (
           <>
-            <View style={styles.gap} />
-            <SettingsGroup>
               <SelectList<number>
                 label={t('Light from')}
                 options={HOURS}
@@ -224,12 +222,10 @@ export default function ThemeSettings() {
                 value={themeDarkFrom}
                 onChange={setThemeDarkFrom}
               />
-            </SettingsGroup>
           </>
         ) : null}
         {/* A variant of dark rather than a fourth mode, so following the
             system still works with it. */}
-        <View style={styles.gap} />
         <SwitchList
           options={[
             {
@@ -240,9 +236,12 @@ export default function ThemeSettings() {
           ]}
         />
 
+        </SettingsGroup>
+
         {/* Still pickable with pure black, for when it is turned off; dimmed
             so it is clear it is not what is on screen. */}
-        <Text style={[styles.label, styles.secondLabel]}>{t('Background')}</Text>
+        <SettingsGroup title={t('Background')}>
+        <View style={styles.paletteBody}>
         <TintSwatches
           value={backgroundTint}
           onPick={setBackgroundTint}
@@ -250,13 +249,16 @@ export default function ThemeSettings() {
           light={mode === 'light'}
         />
 
+        </View>
+        </SettingsGroup>
+
         {/* One row, and it belongs to the appearance you are looking at: each
             keeps its own colour, so switching mode brings back the one chosen
             there rather than repainting it with the other's. Nothing has to say
             so on screen — the ticked swatch is already the answer. */}
-        <Text style={[styles.label, styles.secondLabel]}>{t('Accent color')}</Text>
+        <SettingsGroup title={t('Accent color')}>
         <SelectList<AccentSource>
-          collapsible={false}
+          label={t('Accent color')}
           value={accentSource}
           onChange={setAccentSource}
           options={[
@@ -264,8 +266,8 @@ export default function ThemeSettings() {
             { value: 'artwork', label: t('Follow album artwork') },
           ]}
         />
-        {accentSource === 'manual' ? <>
-          <Text style={[styles.subLabel, styles.secondSubLabel]}>{t('Palette')}</Text>
+        {accentSource === 'manual' ? <View style={styles.paletteBody}>
+          <Text style={styles.subLabel}>{t('Palette')}</Text>
           <Swatches value={accent} onPick={(hex) => setAccentColor(hex, mode)} />
           <Text style={[styles.subLabel, styles.secondSubLabel]}>{t('Custom::color')}</Text>
           <CustomSwatch
@@ -274,7 +276,7 @@ export default function ThemeSettings() {
             onPick={() => setAccentColor(customAccentColor, mode)}
             onEdit={() => setPickerOpen(true)}
           />
-        </> : <>
+        </View> : <View style={styles.paletteBody}>
           <View style={styles.accentPreview}>
             <View style={[styles.previewDot, { backgroundColor: colors.accent }]} />
             <Text style={styles.previewLabel}>{t('Current theme color')}</Text>
@@ -282,7 +284,8 @@ export default function ThemeSettings() {
           <Text style={styles.autoDescription}>
             {t('Colors buttons and selected items from the current cover. Your manual colors are kept as a fallback.')}
           </Text>
-        </>}
+        </View>}
+        </SettingsGroup>
         {pickerOpen ? (
           <ColorPickerDialog
             initialColor={customAccentColor || accent}
@@ -300,26 +303,17 @@ export default function ThemeSettings() {
 }
 
 const styles = themed((colors) => ({
-  label: {
-    color: colors.textSecondary,
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    marginBottom: spacing.md,
-  },
-  secondLabel: { marginTop: spacing.xl },
+  paletteBody: { padding: spacing.lg },
   subLabel: { color: colors.textMuted, fontSize: fontSize.xs, marginBottom: spacing.sm },
   secondSubLabel: { marginTop: spacing.lg },
-  accentPreview: { ...SETTINGS_ROW_LAYOUT, marginTop: spacing.md, paddingHorizontal: spacing.lg,
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    backgroundColor: colors.surface, borderRadius: radius.lg },
+  accentPreview: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   previewDot: { width: 24, height: 24, borderRadius: 12 },
   previewLabel: { color: colors.text, fontSize: fontSize.sm, flexShrink: 1 },
   autoDescription: { color: colors.textSecondary, fontSize: fontSize.xs, lineHeight: 20, marginTop: spacing.sm },
-  gap: { height: spacing.md },
   swatches: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.lg },
   swatch: {
-    width: 56,
-    height: 56,
+    width: 44,
+    height: 44,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',

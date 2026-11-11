@@ -1,229 +1,57 @@
-/** Settings › About: version, repository, report bugs, and the one
- *  action that reaches every setting there is. */
-import { DockScrollView } from '@/components/DockScrollView';
+/** Version, updates, help and diagnostics; personal data tools have their own category. */
 import Constants from 'expo-constants';
-import { useRootNavigationState, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useLocalSearchParams, useRootNavigationState, useRouter } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { Linking, Pressable, Share } from 'react-native';
-
-import { Dialog } from '@/components/Dialog';
+import { DockScrollView } from '@/components/DockScrollView';
 import { Field, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
 import { fullReport } from '@/lib/diagnosticsReport';
 import { GITHUB_REPOSITORY, PROJECT_NAME, RELEASES_PAGE, REPOSITORY_URL, SOURCE_BRANCH } from '@/lib/project';
-import { pickSettingsFile, shareSettingsFile } from '@/lib/settingsFile';
 import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 import { useUpdate } from '@/store/update';
-import { useTheme } from '@/theme';
 
-/**
- * The bug form itself, not the page that asks which kind of issue this is:
- * whoever pressed a button called "Report a bug" has already answered that.
- *
- * The version goes in with it. It is the one required field of the form, the
- * app is the only one here who knows the answer, and a report that arrives
- * with the wrong one costs a round trip to find out it was fixed two releases
- * ago. `version` is the field's `id` in `.github/ISSUE_TEMPLATE/bug_report.yml`:
- * renaming it there quietly stops filling it in here.
- */
-function bugReportUrl(version: string | undefined): string {
-  const form = `${REPOSITORY_URL}/issues/new?template=bug_report.yml`;
-  return version ? `${form}&version=${encodeURIComponent(version)}` : form;
-}
-/**
- * The FAQ is a page on GitHub and not a screen in here on purpose: what gets
- * asked most is what changes most (the car, casting, offline), and an answer
- * written into the app is frozen until the next APK reaches everybody. Linking
- * to the Glass branch means the answer somebody reads today is the one written this
- * morning.
- *
- * Its headings are anchors (`#android-auto`), so this can grow into links from
- * the screen each question is about rather than only this one.
- */
-const FAQ_URL = `${REPOSITORY_URL}/blob/${SOURCE_BRANCH}/docs/FAQ.md`;
-
+const PREFERENCES_ANCHORS = new Set(['Export settings', 'Import settings', 'Restore default settings']);
 export default function AboutSettings() {
-  // Repaints on a change of appearance or accent: a stack keeps this screen
-  // mounted while you are on another one, out of reach of anything else.
-  useTheme();
-  const t = useT();
-  const router = useRouter();
-  // Five taps on the version open Diagnostics. It exists for chasing a report
-  // with someone, so it is not worth a row of its own that everybody else has
-  // to scroll past.
+  const t = useT(), router = useRouter();
+  const { setting, settingVisit } = useLocalSearchParams<{ setting?: string; settingVisit?: string }>();
+  useEffect(() => {
+    if (typeof setting === 'string' && PREFERENCES_ANCHORS.has(setting)) {
+      router.replace({ pathname: '/settings/preferences-file', params: { setting, ...(settingVisit ? { settingVisit } : {}) } });
+    }
+  }, [setting, settingVisit, router]);
   const taps = useRef(0);
   const screensOpen = useRootNavigationState()?.routes?.length;
   const version = Constants.expoConfig?.version;
-  const diagnostics = useSettings((s) => s.diagnostics);
-  const setDiagnostics = useSettings((s) => s.setDiagnostics);
-  const updateCheck = useSettings((s) => s.updateCheck);
-  const setUpdateCheck = useSettings((s) => s.setUpdateCheck);
-  // The prompt itself is global (`UpdatePrompt`): this only starts the check
-  // and reports the one answer that has nowhere else to appear.
-  const check = useUpdate((s) => s.check);
-  const checking = useUpdate((s) => s.checking);
-  // Restoring every setting used to be a row in the Settings index, in among
-  // the categories and looking like one of them, a tap away from the button
-  // that puts the app in offline mode. It reaches everything, it is done once
-  // if ever, and it belongs with the app itself rather than with any of the
-  // categories it would undo, which is what put it here.
-  const resetToDefaults = useSettings((s) => s.resetToDefaults);
+  const diagnostics = useSettings((s) => s.diagnostics), setDiagnostics = useSettings((s) => s.setDiagnostics);
+  const updateCheck = useSettings((s) => s.updateCheck), setUpdateCheck = useSettings((s) => s.setUpdateCheck);
+  const check = useUpdate((s) => s.check), checking = useUpdate((s) => s.checking);
   const toast = useToast((s) => s.show);
-  const [confirmReset, setConfirmReset] = useState(false);
-  const importSettings = useSettings((s) => s.importSettings);
-  // What a picked file holds, waiting on the confirmation.
-  const [pending, setPending] = useState<Record<string, unknown> | null>(null);
-
-  return (
-    <SettingsPage title={t('About::app')}>
-      <DockScrollView contentContainerStyle={settingsStyles.content}>
-        <SettingsGroup>
-          <Pressable
-            onPress={() => {
-              taps.current += 1;
-              if (taps.current < 5) return;
-              taps.current = 0;
-              router.push('/settings/diagnostics');
-            }}
-          >
-            <Field label={t('Version')} value={`${PROJECT_NAME} v${version ?? '?'}`} />
-          </Pressable>
-          <SettingRow
-            icon="sparkles-outline"
-            label={t("What's new")}
-            onPress={() => Linking.openURL(RELEASES_PAGE)}
-          />
-        </SettingsGroup>
-        {/* Above the bug report because half of what arrives there is a
-            question, and this is where the answer already is. */}
-        <SettingsGroup>
-          <SettingRow
-            icon="help-circle-outline"
-            label={t('FAQ')}
-            onPress={() => Linking.openURL(FAQ_URL)}
-          />
-          <SettingRow
-            icon="logo-github"
-            label="GitHub"
-            description={GITHUB_REPOSITORY}
-            onPress={() => Linking.openURL(REPOSITORY_URL)}
-          />
-          <SettingRow
-            icon="bug-outline"
-            label={t('Report a bug')}
-            onPress={() => Linking.openURL(bugReportUrl(version))}
-          />
-          {/* Next to the bug report, which is where it gets pasted. The full
-              Diagnostics screen stays behind the five taps; this is the part
-              of it anyone reporting a problem can hand over without being
-              walked there. */}
-          <SettingRow
-            icon="document-text-outline"
-            label={t('Share diagnostic report')}
-            onPress={() => void Share.share({ message: fullReport(screensOpen) })}
-          />
-          {/* Asking now sits against the switch that asks by itself: same
-              question, one of them answered on the spot and the other left
-              standing. Nothing between them, so the switch reads as the
-              automatic version of the button above it. */}
-          <SettingRow
-            icon={checking ? 'hourglass-outline' : 'cloud-download-outline'}
-            label={t('Check for updates')}
-            onPress={() => {
-              if (checking) return;
-              void check(true).then(({ ok, release }) => {
-                // An update opens the prompt and speaks for itself. The other two
-                // answers have nowhere else to appear, and they are different
-                // answers: "nothing newer" is not "could not look".
-                if (!ok) toast(t("Couldn't check for updates"));
-                else if (!release) toast(t("You're on the latest version"));
-              });
-            }}
-          />
-        </SettingsGroup>
-        {/* Measuring is out in the open, unlike the screen it feeds: it is
-            turned on when somebody is being walked through a slowdown, and it
-            has to be as easy to turn back off. No description, for the same
-            reason the screen has no row: it means nothing to anyone not in
-            that conversation. */}
-        <SwitchList
-          options={[
-            {
-              label: t('Check for updates automatically'),
-              value: updateCheck,
-              onChange: setUpdateCheck,
-            },
-            {
-              label: t('Measure performance'),
-              value: diagnostics,
-              onChange: setDiagnostics,
-            },
-          ]}
-        />
-        {/* Last on the screen, and the only thing here that changes something
-            and cannot be taken back: everything above it is a link out or a
-            switch. So it is marked the way the app marks those, in the same red
-            as deleting a playlist or the downloads, and the confirmation it
-            always had stays. */}
-        {/* Next to the reset: importing replaces every setting just the same,
-            and asks first for the same reason. */}
-        <SettingsGroup>
-          <SettingRow
-            icon="share-outline"
-            label={t('Export settings')}
-            onPress={() => {
-              shareSettingsFile()
-                .then((ok) => {
-                  if (!ok) toast(t("Couldn't export the settings"));
-                })
-                .catch(() => toast(t("Couldn't export the settings")));
-            }}
-          />
-          <SettingRow
-            icon="download-outline"
-            label={t('Import settings')}
-            onPress={() => {
-              pickSettingsFile()
-                .then((settings) => {
-                  if (settings) setPending(settings);
-                })
-                .catch(() => toast(t("Couldn't read this settings file")));
-            }}
-          />
-        </SettingsGroup>
-        <SettingRow
-          icon="arrow-undo-outline"
-          label={t('Restore default settings')}
-          destructive
-          onPress={() => setConfirmReset(true)}
-        />
-      </DockScrollView>
-
-      <Dialog
-        visible={confirmReset}
-        title={t('Restore default settings')}
-        message={t('Your preferences will go back to their defaults. Your language stays.')}
-        confirmLabel={t('Restore')}
-        onCancel={() => setConfirmReset(false)}
-        onConfirm={() => {
-          setConfirmReset(false);
-          resetToDefaults();
-          toast(t('Settings restored'));
-        }}
-      />
-      <Dialog
-        visible={pending !== null}
-        title={t('Import settings')}
-        message={t('Your preferences will be replaced by the ones in the file. Your language and accounts stay.')}
-        confirmLabel={t('Import')}
-        onCancel={() => setPending(null)}
-        onConfirm={() => {
-          if (pending) importSettings(pending);
-          setPending(null);
-          toast(t('Settings imported'));
-        }}
-      />
-    </SettingsPage>
-  );
+  const reportUrl = `${REPOSITORY_URL}/issues/new?template=bug_report.yml${version ? `&version=${encodeURIComponent(version)}` : ''}`;
+  return <SettingsPage title={t('About & diagnostics')}>
+    <DockScrollView contentContainerStyle={settingsStyles.content}>
+      <SettingsGroup title={t('Version & updates')}>
+        <Pressable accessibilityRole="button" onPress={() => { taps.current++; if (taps.current >= 5) { taps.current = 0; router.push('/settings/diagnostics'); } }}>
+          <Field label={t('Version')} value={`${PROJECT_NAME} v${version ?? '?'}`} />
+        </Pressable>
+        <SettingRow icon="sparkles-outline" label={t("What's new")} onPress={() => Linking.openURL(RELEASES_PAGE)} />
+        <SettingRow icon={checking ? 'hourglass-outline' : 'cloud-download-outline'} label={t('Check for updates')} disabled={checking} onPress={() => {
+          if (checking) return;
+          void check(true).then(({ ok, release }) => { if (!ok) toast(t("Couldn't check for updates")); else if (!release) toast(t("You're on the latest version")); });
+        }} />
+        <SwitchList options={[{ label: t('Check for updates automatically'), value: updateCheck, onChange: setUpdateCheck }]} />
+      </SettingsGroup>
+      <SettingsGroup title={t('Help & feedback')}>
+        <SettingRow icon="help-circle-outline" label={t('FAQ')} onPress={() => Linking.openURL(`${REPOSITORY_URL}/blob/${SOURCE_BRANCH}/docs/FAQ.md`)} />
+        <SettingRow icon="logo-github" label="GitHub" description={GITHUB_REPOSITORY} onPress={() => Linking.openURL(REPOSITORY_URL)} />
+        <SettingRow icon="bug-outline" label={t('Report a bug')} onPress={() => Linking.openURL(reportUrl)} />
+      </SettingsGroup>
+      <SettingsGroup title={t('Diagnostics')}>
+        <SwitchList options={[{ label: t('Measure performance'), value: diagnostics, onChange: setDiagnostics }]} />
+        <SettingRow icon="pulse-outline" label={t('Diagnostics')} chevron onPress={() => router.push('/settings/diagnostics')} />
+        <SettingRow icon="document-text-outline" label={t('Share diagnostic report')} onPress={() => void Share.share({ message: fullReport(screensOpen) })} />
+      </SettingsGroup>
+    </DockScrollView>
+  </SettingsPage>;
 }

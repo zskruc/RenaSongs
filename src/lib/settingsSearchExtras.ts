@@ -10,7 +10,7 @@ export const SETTINGS_SEARCH_ALIASES: { terms: string[]; aliases: string[] }[] =
   { terms: ['折射', 'refraction', 'lens'], aliases: ['zheshe', 'zs', '透镜', 'toujing'] },
   { terms: ['播放', 'player', 'playback'], aliases: ['bofang', 'bf', 'bofangqi', 'bfq', '播放器'] },
   { terms: ['歌词', 'lyric'], aliases: ['geci', 'gc', '字幕', 'zimu'] },
-  { terms: ['音质', 'quality', 'bitrate', 'codec'], aliases: ['yinzhi', 'yz', '码率', '无损', 'wusun', 'flac', 'aac', 'opus'] },
+  { terms: ['音质', 'quality', 'bitrate', 'codec'], aliases: ['音质', 'yinzhi', 'yz', '码率', '无损', 'wusun', 'flac', 'aac', 'opus'] },
   { terms: ['下载', 'download'], aliases: ['xiazai', 'xz', '缓存', 'huancun', 'hc', '离线', 'lixian', 'lx'] },
   { terms: ['主题', 'theme', 'appearance', 'accent'], aliases: ['zhuti', 'zt', 'waiguan', 'wg', '颜色', 'yanse', 'ys', '取色', 'quse'] },
   { terms: ['深色', 'dark', 'light', 'schedule'], aliases: ['shense', 'qianse', '夜间', 'yejian', '白天', 'baitian', '深浅模式'] },
@@ -31,7 +31,7 @@ export const SETTINGS_SEARCH_ALIASES: { terms: string[]; aliases: string[] }[] =
 ];
 
 export function withSettingsSearchAliases(entry: SettingsSearchEntry): SettingsSearchEntry {
-  const names = normalizeSettingsQuery(`${entry.title}${entry.chinese}${entry.section}`);
+  const names = normalizeSettingsQuery(`${entry.title}${entry.chinese}${entry.section}${(entry.breadcrumbs ?? []).join('')}`);
   const aliases = SETTINGS_SEARCH_ALIASES.filter((group) => group.terms.some((term) => names.includes(normalizeSettingsQuery(term))))
     .flatMap((group) => group.aliases);
   if (names.includes('lyric') && names.includes('blur')) aliases.push('歌词模糊', '模糊歌词', 'gecimohu', 'gcmh');

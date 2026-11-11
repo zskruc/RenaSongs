@@ -10,6 +10,7 @@ import { create as createStore } from 'zustand';
 
 import { formatBytes } from '../src/lib/format';
 import { SETTINGS_SEARCH_ENTRIES } from '../src/lib/settingsSearchEntries';
+import { SETTINGS_CATEGORY_PAGES, SETTINGS_HOME_GROUPS } from '../src/lib/settingsNavigation';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 const element = React.createElement;
@@ -215,52 +216,62 @@ test('settings search exposes the real bilingual podcast-storage page and catego
     assert.ok(entries.some((entry) => entry.title === title && entry.anchor === title));
 });
 
-test('the actual main settings and downloads screens both keep the podcast-storage entry usable offline', async () => {
+test('the actual settings directory reaches podcast storage through storage and spoken-audio categories in a local offline profile', async () => {
   const paths: string[] = [], native = { View: 'View', Text: 'Text', Pressable: 'Pressable' };
   const colors = { text: '#ffffff', textSecondary: '#aaaaaa', accent: '#1db954' };
-  const settingState: Record<string, any> = { language: 'en', downloadBitRate: 0, downloadConcurrency: 2,
-    songCache: false, songCacheLimitGb: 1, appFont: 'system' };
+  const settingState = { language: 'en', appFont: 'system' };
   const auth = { auth: null, offline: true, logout() {}, goOnline() {}, goOffline() {} };
-  const downloadState = { hydrated: true, files: {}, usageBytes: async () => 0, clearAll: async () => {} };
   const Icon = Object.assign(() => null, { glyphMap: {} });
   const imports: Record<string, any> = {
     react: React, 'react/jsx-runtime': JSXRuntime, 'react-native': native,
     'expo-router': { useRouter: () => ({ push: (path: string) => paths.push(path), replace() {} }) },
-    'expo-file-system': { Paths: { totalDiskSpace: 0, availableDiskSpace: 0 } },
     '@/components/DockScrollView': { DockScrollView: 'ScrollView' },
-    '@/components/Dialog': { Dialog: 'Dialog' },
-    '@/components/glass': { GlassSurface: 'GlassSurface', GlassSwitch: 'GlassSwitch', GlassPressable: 'GlassPressable' },
     '@/components/Icon': { __esModule: true, default: Icon },
-    '@/components/SettingsUI': { SETTINGS_ROW_LAYOUT: {}, ScreenHeader: 'ScreenHeader', SettingsSafeArea: 'SettingsSafeArea',
-      SettingRow: 'SettingRow', SettingsPage: 'SettingsPage', SettingsGroup: 'SettingsGroup', SelectList: 'SelectList', SwitchList: 'SwitchList', settingsStyles: {} },
-    '@/i18n': { useT: () => translate, albumsLabel: String, playlistsLabel: String, songsLabel: String },
-    '@/lib/appStorage': { appStorageParts: () => ({}), appStorageTotal: () => 0 },
-    '@/lib/format': { formatBytes },
-    '@/store/auth': { useAuthStore: (select: (state: any) => unknown) => select(auth) },
-    '@/store/downloads': { useDownloads: (select: (state: any) => unknown) => select(downloadState), anyDownloads: () => false },
-    '@/store/libraryMirror': { useLibraryMirror: { getState: () => ({ stats: async () => null }) } },
-    '@/store/settings': { useSettings: (select: (state: any) => unknown) => select(settingState),
-      BITRATE_OPTIONS: [], DOWNLOAD_CONCURRENCY_OPTIONS: [], SONG_CACHE_LIMITS_GB: [], TRANSCODE_FORMATS: [] },
-    '@/store/songCache': { useSongCache: (select: (state: any) => unknown) => select({ entries: {} }), cacheBytes: () => 0 },
-    '@/store/toast': { useToast: (select: (state: any) => unknown) => select({ show() {} }) },
-    '@/theme': { colors, useTheme: () => ({ accent: colors.accent }), fontSize: {}, radius: {}, spacing: {}, tracking: {},
-      themed: (factory: (value: any) => unknown) => factory(colors) },
+    '@/components/SettingsUI': { ScreenHeader: 'ScreenHeader', SettingsSafeArea: 'SettingsSafeArea',
+      SettingRow: 'SettingRow', SettingsPage: 'SettingsPage', SettingsGroup: 'SettingsGroup', SettingsIntro: 'SettingsIntro',
+      SwitchList: 'SwitchList', settingsStyles: {} },
+    '@/i18n': { useT: () => translate },
+    '@/lib/settingsNavigation': { SETTINGS_CATEGORY_PAGES, SETTINGS_HOME_GROUPS },
+    '@/store/auth': { useAuthStore: (select: (state: typeof auth) => unknown) => select(auth) },
+    '@/store/downloads': { useDownloads: (select: (state: { hydrated: boolean }) => unknown) => select({ hydrated: true }), anyDownloads: () => false },
+    '@/store/settings': { useSettings: (select: (state: typeof settingState) => unknown) => select(settingState) },
+    '@/store/toast': { useToast: (select: (state: { show(): void }) => unknown) => select({ show() {} }) },
+    '@/theme': { useTheme: () => colors, fontSize: {}, radius: {}, themed: (factory: (value: typeof colors) => unknown) => factory(colors) },
   };
-  for (const path of ['index', 'downloads']) {
+  function load(path: string) {
     const exports: Record<string, any> = {};
-    runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/app/settings/${path}.tsx`, import.meta.url), 'utf8'), {
+    runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/${path}.tsx`, import.meta.url), 'utf8'), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
     }).outputText, { exports, require(name: string) { assert.ok(Object.hasOwn(imports, name), name); return imports[name]; } });
-    let renderer!: ReactTestRenderer;
-    try {
-      await act(async () => { renderer = create(element(exports.default)); });
-      const entry = path === 'index'
-        ? renderer.root.findAll((node) => String(node.type) === 'Pressable').find((node) => node.findAll((child) => String(child.type) === 'Text' && child.props.children === 'Podcast storage').length > 0)!
-        : renderer.root.findAll((node) => String(node.type) === 'SettingRow').find((node) => node.props.label === 'Podcast storage')!;
-      assert.ok(entry, `${path} keeps the row in a local offline profile`);
-      assert.notEqual(entry.props.disabled, true);
-      await act(async () => { entry.props.onPress(); });
-    } finally { await act(async () => { renderer?.unmount(); }); }
+    return exports;
   }
-  assert.deepEqual(paths, ['/settings/podcast-storage', '/settings/podcast-storage']);
+  // Keep both navigation components real; only native hosts and account IO are mocked.
+  imports['@/components/SettingsCategoryPage'] = load('components/SettingsCategoryPage');
+  const Main = load('app/settings/index').default;
+  let renderer!: ReactTestRenderer;
+  const row = (label: string) => renderer.root.findAll((node) => String(node.type) === 'SettingRow').find((node) => node.props.label === label);
+  try {
+    for (const [label, route] of [['Downloads & storage', 'storage'], ['Podcasts & long audio', 'longform']]) {
+      await act(async () => { renderer = create(element(Main)); });
+      const category = row(label);
+      assert.ok(category, `the local offline profile retains ${label}`);
+      assert.notEqual(category.props.disabled, true);
+      await act(async () => { category.props.onPress(); });
+      assert.equal(paths.at(-1), `/settings/${route}`);
+      await act(async () => { renderer.unmount(); });
+      const Category = load(`app/settings/${route}`).default;
+      await act(async () => { renderer = create(element(Category)); });
+      const storage = row('Podcast storage');
+      assert.ok(storage, `${label} retains podcast storage in a local offline profile`);
+      assert.notEqual(storage.props.disabled, true);
+      await act(async () => { storage.props.onPress(); });
+      assert.equal(paths.at(-1), '/settings/podcast-storage');
+      if (route === 'storage') {
+        assert.equal(row('Downloads & offline'), undefined, 'server-only rules remain hidden locally');
+        assert.equal(row('Download manager'), undefined);
+      }
+      await act(async () => { renderer.unmount(); });
+    }
+  } finally { await act(async () => { renderer?.unmount(); }); }
+  assert.deepEqual(paths, ['/settings/storage', '/settings/podcast-storage', '/settings/longform', '/settings/podcast-storage']);
 });

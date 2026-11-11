@@ -7,7 +7,7 @@
  * turns them all on or off at once; it is not a separate setting.
  */
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { GlassSurface, GlassSwitch } from '@/components/glass';
+import { GlassSwitch } from '@/components/glass';
 import Icon from '@/components/Icon';
 import { Pressable, Text, View } from 'react-native';
 import ReorderableList, {
@@ -58,7 +58,7 @@ function ChipRow({ chip, disabled }: { chip: HomeChip; disabled?: boolean }) {
   return (
     // Still draggable while greyed out: where it goes is a preference about the
     // Home screen you get back, and it costs nothing to set now.
-    <GlassSurface radius={radius.md} style={[styles.row, disabled && { opacity: 0.5 }]}>
+    <View style={[styles.row, disabled && { opacity: 0.5 }]}>
       <Pressable
         hitSlop={10}
         onPressIn={() => {
@@ -72,13 +72,14 @@ function ChipRow({ chip, disabled }: { chip: HomeChip; disabled?: boolean }) {
       </Pressable>
       <Text style={styles.label}>{t(LABEL[chip.key])}</Text>
       <GlassSwitch
+          accessibilityLabel={t(LABEL[chip.key])}
         value={chip.enabled}
         onValueChange={(v) => setHomeChip(chip.key, v)}
         disabled={disabled}
         trackColor={{ false: colors.control, true: accent }}
         thumbColor={colors.knob}
       />
-    </GlassSurface>
+    </View>
   );
 }
 
@@ -120,7 +121,7 @@ export default function HomeChipsSettings() {
           ]}
         />
       </View>
-      <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+      <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
       <ReorderableList
         onScroll={dockScroll}
         data={visible}
@@ -169,8 +170,9 @@ const styles = themed((colors) => ({
   iconsBox: { marginTop: spacing.lg },
   allBox: { marginBottom: spacing.md },
   hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -183,7 +185,7 @@ const styles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
-  label: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  label: { flex: 1, flexShrink: 1, color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
 }));

@@ -1,17 +1,16 @@
 /** Settings › Library: scanning, server libraries and cache clearing. */
 import { DockScrollView } from '@/components/DockScrollView';
-import { GlassPressable, GlassSurface } from '@/components/glass';
+import { GlassPressable } from '@/components/glass';
 import Icon from '@/components/Icon';
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Modal, ScrollView, Text, View } from 'react-native';
 
 import { rescanLocal } from '@/api/data';
 import { getScanStatus, startScan } from '@/api/backend';
-import { Field, SettingRow, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
+import { Field, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
 import { clearExportCache } from '@/lib/exportSong';
 import { ensureAudioPermission, folderNameFromUri, pickFolder } from '@/lib/localLibrary';
@@ -150,15 +149,16 @@ export default function LibrarySettings() {
       <DockScrollView contentContainerStyle={settingsStyles.content}>
         {offline ? (
           <>
+            <SettingsGroup title={t('Local music')}>
             <Field
               label={t('Source')}
               value={source?.mode === 'folder' ? t('Folder') : t('Device')}
             />
+            </SettingsGroup>
             {source?.mode === 'folder' ? (
-              <>
-                <Text style={settingsStyles.sectionTitle}>{t('Music folders')}</Text>
+              <SettingsGroup title={t('Music folders')}>
                 {folderUris.map((uri) => (
-                  <GlassSurface radius={radius.lg} key={uri} style={[settingsStyles.cardBox, settingsStyles.row]}>
+                  <View key={uri} style={settingsStyles.row}>
                     <Icon name="folder-outline" size={20} color={colors.text} />
                     <View style={settingsStyles.rowLabelBox}>
                       <Text style={settingsStyles.rowLabel} numberOfLines={1}>
@@ -173,34 +173,34 @@ export default function LibrarySettings() {
                     >
                       <Icon name="close" size={20} color={colors.textMuted} />
                     </GlassPressable>
-                  </GlassSurface>
+                  </View>
                 ))}
                 <SettingRow icon="add" label={t('Add another folder')} onPress={addFolder} />
-              </>
+              </SettingsGroup>
             ) : null}
+            <SettingsGroup title={t('Scan')}>
             <SettingRow
               icon="refresh"
               label={rescanning ? t('Rescanning your music…') : t('Rescan')}
               onPress={rescanNow}
             />
             <SettingRow icon="swap-horizontal" label={t('Change source')} onPress={() => setChanging(true)} />
+            </SettingsGroup>
           </>
         ) : (
           <>
             {/* The first title sticks to the header (no section margin). */}
-            <Text style={[settingsStyles.sectionTitle, { marginTop: 0 }]}>{t('Scan')}</Text>
+            <SettingsGroup title={t('Scan')}>
             <Field
               label={t('Scan status')}
               value={scan?.scanning ? t('Scanning…') : t('{n} items', { n: scan?.count ?? 0 })}
             />
             <SettingRow icon="refresh" label={t('Scan now')} onPress={scanNow} />
+            </SettingsGroup>
 
             {folders.length >= 2 ? (
-              <>
-                <Text style={settingsStyles.sectionTitle}>{t('Libraries')}</Text>
-                <Text style={settingsStyles.sectionDescription}>
-                  {t('Choose which libraries appear across the app.')}
-                </Text>
+              <SettingsGroup title={t('Libraries')} description={t('Choose which libraries appear across the app.')}>
+
                 <SwitchList
                   options={folders.map((f) => ({
                     label: f.name,
@@ -208,20 +208,16 @@ export default function LibrarySettings() {
                     onChange: (v) => toggleLibrary(f.id, v),
                   }))}
                 />
-              </>
+              </SettingsGroup>
             ) : null}
           </>
         )}
 
-        <Text style={settingsStyles.sectionTitle}>{t('Music tools')}</Text>
-        <SettingRow icon="stats-chart-outline" label={t('Listening statistics')} chevron onPress={() => router.push('/settings/listening-stats')} />
-        <SettingRow icon="sparkles-outline" label={t('Smart playlists')} chevron onPress={() => router.push('/settings/smart-playlists')} />
-        <SettingRow icon="copy-outline" label={t('Duplicates and versions')} chevron onPress={() => router.push('/settings/duplicates')} />
-        <SettingRow icon="swap-horizontal" label={t('Playlist import and export')} chevron onPress={() => router.push('/settings/playlist-exchange')} />
-
-        {/* Separated from scanning/source: it's maintenance, not configuration. */}
-        <Text style={settingsStyles.sectionTitle}>{t('Storage')}</Text>
-        <SettingRow icon="trash-outline" label={t('Clear cache')} onPress={clearCache} />
+        <SettingsGroup title={t('Storage')}>
+          <SettingRow icon="trash-outline" label={t('Clear cache')}
+            description={t('Clears browsing data, artwork and temporary exports. Your downloads stay on this device.')}
+            onPress={clearCache} />
+        </SettingsGroup>
       </DockScrollView>
 
       <Modal

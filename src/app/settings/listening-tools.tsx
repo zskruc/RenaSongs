@@ -25,21 +25,20 @@ export default function ListeningToolsScreen() {
   return <SettingsPage title={t('Listening tools')}><DockScrollView contentContainerStyle={settingsStyles.content}>
     {pending && !error ? <ActivityIndicator color={colors.accent} /> : null}
     {error ? <SettingsGroup><SettingRow label={t('Retry')} description={t("Couldn't load listening settings.")} onPress={() => void run(retry)} /></SettingsGroup> : null}
+    <SettingsGroup title={t('Listening tools')}>
     <SwitchList options={[{ label: t('Separate listening sessions'), description: t('Keep music, podcasts, radio and audiobooks ready to continue.'),
       value: !!source?.separateSessions, disabled: busy || pending,
       onChange: (value) => void run(async () => { const saved = await mutateListeningSource((data) => ({ ...data, separateSessions: value }));
         if (saved && value) await rememberCurrentListeningSession(); return saved; }) }]} />
-    <Text style={settingsStyles.groupTitle}>{t('Continue listening')}</Text>
-    <SettingsGroup>{LISTENING_SPACES.map((space) => { const session = source?.sessions[space], song = session?.songs[session.index];
+    </SettingsGroup>
+    <SettingsGroup title={t('Continue listening')}>{LISTENING_SPACES.map((space) => { const session = source?.sessions[space], song = session?.songs[session.index];
       return <SettingRow key={space} label={t(titles[space])} description={song?.title ?? t('No saved session')}
         right={session && space !== 'radio' ? `${Math.floor(session.position / 60)}:${String(Math.floor(session.position % 60)).padStart(2, '0')}` : undefined}
         onPress={!busy && session ? () => void run(() => resumeListeningSpace(space)) : undefined} />; })}</SettingsGroup>
     <Text style={settingsStyles.sectionDescription}>{t('Restoring starts only when you tap a session. Up to 500 queue items are retained around the selected track.')}</Text>
-    <SettingsGroup>
+    <SettingsGroup title={t('Playback')}>
       <SettingRow label={t('Linked songs in shuffle')} description={t('Keep neighbouring album tracks together.')} chevron onPress={() => router.push('/settings/shuffle-links')} />
       <SettingRow label={t('Local chapters')} description={t('Import chapters or stop after a selected chapter.')} chevron onPress={() => router.push('/settings/chapters')} />
-      <SettingRow label={t('Home screen widgets')} chevron onPress={() => router.push('/settings/home-widgets')} />
-      <SettingRow label={t('Wi-Fi music transfer')} chevron onPress={() => router.push('/settings/wifi-transfer')} />
     </SettingsGroup>
   </DockScrollView></SettingsPage>;
 }

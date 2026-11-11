@@ -11,9 +11,9 @@
  * the way in from the bar.
  */
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { GlassSurface, GlassSwitch } from '@/components/glass';
+import { GlassSwitch } from '@/components/glass';
 import Icon from '@/components/Icon';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import ReorderableList, {
   useReorderableDrag,
   type ReorderableListReorderEvent,
@@ -47,7 +47,7 @@ function TabRow({ tab }: { tab: BottomTab }) {
   // preference like any other; whether it is there at all is not.
   const fixed = tab.key === 'index';
   return (
-    <GlassSurface radius={radius.md} style={styles.row}>
+    <View style={styles.row}>
       <Pressable
         hitSlop={10}
         onPressIn={() => {
@@ -64,13 +64,14 @@ function TabRow({ tab }: { tab: BottomTab }) {
         <Text style={styles.fixed}>{t('Always shown')}</Text>
       ) : (
         <GlassSwitch
+          accessibilityLabel={t(label)}
           value={tab.enabled}
           onValueChange={(v) => setBottomTab(tab.key, v)}
           trackColor={{ false: colors.control, true: accent }}
           thumbColor={colors.knob}
         />
       )}
-    </GlassSurface>
+    </View>
   );
 }
 
@@ -87,7 +88,7 @@ export default function NavigationBarSettings() {
   return (
     <SettingsSafeArea>
       <ScreenHeader title={t('Navigation bar')} />
-      <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+      <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
       <ReorderableList
         onScroll={dockScroll}
         data={bottomTabs}
@@ -112,8 +113,9 @@ export default function NavigationBarSettings() {
 
 const styles = themed((colors) => ({
   hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -126,10 +128,10 @@ const styles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
-  label: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  label: { flex: 1, flexShrink: 1, color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
   // Where the switch would be, in the voice of something that is not a
   // control: it is an answer to "why can I not turn this one off".
-  fixed: { color: colors.textMuted, fontSize: fontSize.xs },
+  fixed: { color: colors.textSecondary, fontSize: fontSize.sm, lineHeight: 20, flexShrink: 1, textAlign: 'right' },
 }));

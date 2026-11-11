@@ -4,7 +4,7 @@
  * exemption: every one of them has another way in.
  */
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { GlassSurface, GlassSwitch } from '@/components/glass';
+import { GlassSwitch } from '@/components/glass';
 import Icon from '@/components/Icon';
 import { Pressable, Text, View } from 'react-native';
 import ReorderableList, {
@@ -45,7 +45,7 @@ function ButtonRow({ button }: { button: PlayerButton }) {
   const accent = useAccent();
   const { label, icon } = BUTTONS[button.key];
   return (
-    <GlassSurface radius={radius.md} style={styles.row}>
+    <View style={styles.row}>
       <Pressable
         hitSlop={10}
         onPressIn={() => {
@@ -62,12 +62,13 @@ function ButtonRow({ button }: { button: PlayerButton }) {
         <Text style={styles.label}>{t(label)}</Text>
       </View>
       <GlassSwitch
+          accessibilityLabel={t(label)}
         value={button.enabled}
         onValueChange={(v) => setPlayerButton(button.key, v)}
         trackColor={{ false: colors.control, true: accent }}
         thumbColor={colors.knob}
       />
-    </GlassSurface>
+    </View>
   );
 }
 
@@ -97,7 +98,7 @@ export default function PlayerButtonsSettings() {
           ]}
         />
       </View>
-      <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+      <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
       <ReorderableList
         onScroll={dockScroll}
         data={playerButtons}
@@ -121,8 +122,9 @@ export default function PlayerButtonsSettings() {
 const styles = themed((colors) => ({
   layout: { marginBottom: spacing.md },
   hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -135,8 +137,8 @@ const styles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
   text: { flex: 1 },
-  label: { color: colors.text, fontSize: fontSize.md },
+  label: { color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
 }));

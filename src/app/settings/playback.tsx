@@ -14,7 +14,6 @@
  */
 import { DockScrollView } from '@/components/DockScrollView';
 import { useRouter } from 'expo-router';
-import { Text } from 'react-native';
 
 import {
   SelectList,
@@ -86,128 +85,11 @@ export default function PlaybackSettings() {
   }));
 
   return (
-    <SettingsPage title={t('Quality & playback')}>
+    <SettingsPage title={t('Playback & sound')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
-        {/* Nothing here exists without a server to stream from, so the local
-            profile does not get the section at all: it is the one profile where
-            these will never do anything (see `useLocalProfile`). Everything
-            below it stands on its own and stays. */}
-        {local ? null : (
-          <>
-            {/* The first title sticks to the header (no section margin). */}
-            <Text style={[settingsStyles.sectionTitle, { marginTop: 0 }]}>{t('Streaming')}</Text>
-            {/* Offline there is no stream, so none of this does anything. It is
-                greyed out rather than taken away: a setting that is not where you
-                left it sends you hunting through every other screen before you work
-                out it was never there (#114). What each one says still holds for
-                when the connection is back. A line saying as much used to stand
-                here; a whole section in grey already says it, and being told twice
-                reads like being talked down to (raised by @ztx-lyghters). */}
-            {/* First, because it is the question of whether any of the quality
-                settings below apply to a song at all. It used to sit under them,
-                which read fine while they were four plain rows; under a heading it
-                would have looked like one more mobile data setting. */}
-            <SettingsGroup>
-              <SelectList
-                label={t('Play downloaded songs from the phone')}
-                description={t(
-                  'Playing the file costs no data. Choose otherwise if your downloads are smaller copies. Offline, the file is always used.',
-                )}
-                options={[
-                  { value: 'always', label: t('Always') },
-                  { value: 'cellular', label: t('On mobile data only') },
-                  { value: 'original', label: t('Only if it is the original file') },
-                  { value: 'never', label: t('Never') },
-                ]}
-                value={preferDownloads}
-                onChange={setPreferDownloads}
-                disabled={offline}
-              />
-              <SwitchList
-                options={[
-                  {
-                    label: t('Preload upcoming tracks'),
-                    value: preloadUpcoming,
-                    onChange: setPreloadUpcoming,
-                    disabled: offline,
-                  },
-                  {
-                    label: t('Transcode lossless files only'),
-                    description: t(
-                      'MP3, AAC, Opus and other lossy files stream as they are. Only files like FLAC are transcoded.',
-                    ),
-                    value: streamLosslessOnly,
-                    onChange: setStreamLosslessOnly,
-                    // Nothing to skip when neither network transcodes.
-                    disabled: offline || (maxBitRate === 0 && maxBitRateCellular === 0),
-                  },
-                ]}
-              />
-            </SettingsGroup>
-            {/* One set per network, each under a heading of its own, instead of
-                four rows in a row telling them apart by what is in brackets. The
-                brackets stay: read on its own, out of the group it is under, a row
-                still has to say which network it is about. Last in the section, so
-                nothing after them falls under a heading it has nothing to do
-                with. */}
-            <Text style={settingsStyles.groupTitle}>Wi-Fi</Text>
-            <SettingsGroup>
-              <SelectList
-                label={t('Streaming quality (Wi-Fi)')}
-                options={bitrateOptions}
-                value={maxBitRate}
-                onChange={setMaxBitRate}
-                disabled={offline}
-              />
-              {/* Each codec right under its own quality: the codec only applies
-                  where a bitrate is set. At "Original" nothing is transcoded, so the
-                  codec of that network has nothing to do and is greyed out rather
-                  than silently ignored (#72). */}
-              <SelectList
-                label={t('Streaming codec (Wi-Fi)')}
-                description={
-                  maxBitRate > 0
-                    ? t('Your server must support it.')
-                    : t('At “Original” quality nothing is transcoded.')
-                }
-                options={codecOptions}
-                value={streamFormat}
-                onChange={setStreamFormat}
-                disabled={offline || maxBitRate === 0}
-                // "Not used" is about the quality above being "Original", which is
-                // still worth saying offline; being offline is not, or every row in
-                // the section would repeat the line already above it.
-                disabledLabel={maxBitRate === 0 ? t('Not used') : undefined}
-              />
-            </SettingsGroup>
-            <Text style={settingsStyles.groupTitle}>{t('Mobile data')}</Text>
-            {/* No descriptions in this group on purpose: they would be the same two
-                paragraphs as above, in the same section. The Wi-Fi pair explains
-                both. */}
-            <SettingsGroup>
-              <SelectList
-                label={t('Streaming quality (mobile data)')}
-                options={bitrateOptions}
-                value={maxBitRateCellular}
-                onChange={setMaxBitRateCellular}
-                disabled={offline}
-              />
-              <SelectList
-                label={t('Streaming codec (mobile data)')}
-                options={codecOptions}
-                value={streamFormatCellular}
-                onChange={setStreamFormatCellular}
-                disabled={offline || maxBitRateCellular === 0}
-                disabledLabel={maxBitRateCellular === 0 ? t('Not used') : undefined}
-              />
-            </SettingsGroup>
-          </>
-        )}
-
         {/* First on the screen when the streaming section is gone, and a
             heading that sticks to the header wants no margin above it. */}
-        <Text style={[settingsStyles.sectionTitle, local && { marginTop: 0 }]}>{t('Sound')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Sound')}>
           <SliderRow
             label={t('Crossfade')}
             value={crossfadeSec}
@@ -250,13 +132,13 @@ export default function PlaybackSettings() {
             chevron
             onPress={() => router.push('/settings/equalizer')}
           />
+          <SettingRow label={t('Local loudness analysis')} chevron onPress={() => router.push('/settings/loudness-analysis')} />
         </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Playback')}</Text>
         {/* Both server only: what comes next is the server's idea of similar,
             and the queue on the server is the server's. In the local profile
             there is nobody to ask, and an empty SwitchList still draws its card. */}
-        <SettingsGroup>
+        <SettingsGroup title={t('Playback')}>
           {local ? null : (
             <SwitchList
               options={[
@@ -281,6 +163,10 @@ export default function PlaybackSettings() {
           )}
           {/* Its own screen: two sliders and a line of explanation is more than
               fits under a heading here, and it is a thing somebody sets once. */}
+          <SettingRow label={t('A–B repeat')} chevron onPress={() => router.push('/playback-range')} />
+          <SettingRow label={t('Shuffle preference')} chevron onPress={() => router.push('/settings/shuffle')} />
+          <SettingRow label={t('Linked songs in shuffle')} chevron onPress={() => router.push('/settings/shuffle-links')} />
+          <SettingRow label={t('Skip leading and trailing silence')} chevron onPress={() => router.push('/settings/silence-trim')} />
           <SettingRow
             label={t('Scrobbling')}
             chevron
@@ -288,7 +174,120 @@ export default function PlaybackSettings() {
           />
         </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('System::section')}</Text>
+        {/* Nothing here exists without a server to stream from, so the local
+            profile does not get the section at all: it is the one profile where
+            these will never do anything (see `useLocalProfile`). Everything
+            below it stands on its own and stays. */}
+        {local ? null : (
+          <>
+            {/* The first title sticks to the header (no section margin). */}
+            {/* Offline there is no stream, so none of this does anything. It is
+                greyed out rather than taken away: a setting that is not where you
+                left it sends you hunting through every other screen before you work
+                out it was never there (#114). What each one says still holds for
+                when the connection is back. A line saying as much used to stand
+                here; a whole section in grey already says it, and being told twice
+                reads like being talked down to (raised by @ztx-lyghters). */}
+            {/* First, because it is the question of whether any of the quality
+                settings below apply to a song at all. It used to sit under them,
+                which read fine while they were four plain rows; under a heading it
+                would have looked like one more mobile data setting. */}
+            <SettingsGroup title={t('Streaming')}>
+              <SelectList
+                label={t('Play downloaded songs from the phone')}
+                description={t(
+                  'Playing the file costs no data. Choose otherwise if your downloads are smaller copies. Offline, the file is always used.',
+                )}
+                options={[
+                  { value: 'always', label: t('Always') },
+                  { value: 'cellular', label: t('On mobile data only') },
+                  { value: 'original', label: t('Only if it is the original file') },
+                  { value: 'never', label: t('Never') },
+                ]}
+                value={preferDownloads}
+                onChange={setPreferDownloads}
+                disabled={offline}
+              />
+              <SwitchList
+                options={[
+                  {
+                    label: t('Preload upcoming tracks'),
+                    value: preloadUpcoming,
+                    onChange: setPreloadUpcoming,
+                    disabled: offline,
+                  },
+                  {
+                    label: t('Transcode lossless files only'),
+                    description: t(
+                      'MP3, AAC, Opus and other lossy files stream as they are. Only files like FLAC are transcoded.',
+                    ),
+                    value: streamLosslessOnly,
+                    onChange: setStreamLosslessOnly,
+                    // Nothing to skip when neither network transcodes.
+                    disabled: offline || (maxBitRate === 0 && maxBitRateCellular === 0),
+                  },
+                ]}
+              />
+            </SettingsGroup>
+            {/* One set per network, each under a heading of its own, instead of
+                four rows in a row telling them apart by what is in brackets. The
+                brackets stay: read on its own, out of the group it is under, a row
+                still has to say which network it is about. Last in the section, so
+                nothing after them falls under a heading it has nothing to do
+                with. */}
+            <SettingsGroup title="Wi-Fi">
+              <SelectList
+                label={t('Streaming quality (Wi-Fi)')}
+                options={bitrateOptions}
+                value={maxBitRate}
+                onChange={setMaxBitRate}
+                disabled={offline}
+              />
+              {/* Each codec right under its own quality: the codec only applies
+                  where a bitrate is set. At "Original" nothing is transcoded, so the
+                  codec of that network has nothing to do and is greyed out rather
+                  than silently ignored (#72). */}
+              <SelectList
+                label={t('Streaming codec (Wi-Fi)')}
+                description={
+                  maxBitRate > 0
+                    ? t('Your server must support it.')
+                    : t('At “Original” quality nothing is transcoded.')
+                }
+                options={codecOptions}
+                value={streamFormat}
+                onChange={setStreamFormat}
+                disabled={offline || maxBitRate === 0}
+                // "Not used" is about the quality above being "Original", which is
+                // still worth saying offline; being offline is not, or every row in
+                // the section would repeat the line already above it.
+                disabledLabel={maxBitRate === 0 ? t('Not used') : undefined}
+              />
+            </SettingsGroup>
+            {/* No descriptions in this group on purpose: they would be the same two
+                paragraphs as above, in the same section. The Wi-Fi pair explains
+                both. */}
+            <SettingsGroup title={t('Mobile data')}>
+              <SelectList
+                label={t('Streaming quality (mobile data)')}
+                options={bitrateOptions}
+                value={maxBitRateCellular}
+                onChange={setMaxBitRateCellular}
+                disabled={offline}
+              />
+              <SelectList
+                label={t('Streaming codec (mobile data)')}
+                options={codecOptions}
+                value={streamFormatCellular}
+                onChange={setStreamFormatCellular}
+                disabled={offline || maxBitRateCellular === 0}
+                disabledLabel={maxBitRateCellular === 0 ? t('Not used') : undefined}
+              />
+            </SettingsGroup>
+          </>
+        )}
+
+        <SettingsGroup title={t('System::section')}>
         <SwitchList
           options={[
             {
@@ -303,6 +302,7 @@ export default function PlaybackSettings() {
             },
           ]}
         />
+        </SettingsGroup>
       </DockScrollView>
     </SettingsPage>
   );

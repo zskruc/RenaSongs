@@ -430,6 +430,14 @@ export default function RootLayout() {
                 <Stack.Screen name="history" />
                 <Stack.Screen name="lyric-poster" />
                 <Stack.Screen name="settings/index" />
+                <Stack.Screen name="settings/longform" />
+                <Stack.Screen name="settings/storage" />
+                <Stack.Screen name="settings/data-tools" />
+                <Stack.Screen name="settings/preferences-file" />
+                <Stack.Screen name="settings/page-layouts" />
+                <Stack.Screen name="settings/home-layout" />
+                <Stack.Screen name="settings/interface" />
+                <Stack.Screen name="settings/lyrics" />
                 <Stack.Screen name="settings/search" />
                 <Stack.Screen name="settings/downloads" />
                 <Stack.Screen name="settings/podcast-storage" />

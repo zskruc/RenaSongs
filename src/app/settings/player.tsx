@@ -1,7 +1,6 @@
 /** Settings › Player: looks and extras for the playback screen. */
 import { DockScrollView } from '@/components/DockScrollView';
-import { useRouter } from 'expo-router';
-import { Platform, Text } from 'react-native';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { usePlayerGlass } from '@/store/playerGlass';
 import { type PlayerGlassRecipe } from '@/theme/playerGlassRecipes';
@@ -14,7 +13,6 @@ import {
   SettingsGroup,
   SettingsPage,
   settingsStyles,
-  SliderRow,
   SwitchList,
 } from '@/components/SettingsUI';
 import { useLocalProfile } from '@/hooks/useLocalProfile';
@@ -22,16 +20,10 @@ import { useT } from '@/i18n';
 import { useAuthStore } from '@/store/auth';
 import { useTheme } from '@/theme';
 import {
-  type CardBackground,
   type PlayerPresentation,
   type CoverDoubleTapAction,
   type CoverTapAction,
-  type LyricsAlign,
-  LYRICS_SIZE_MAX,
-  LYRICS_SIZE_MIN,
-  type LyricsWeight,
   type MiniPlayerButtons,
-  type LyricsSource,
   type ScreenBackground,
   type PreviousButtonMode,
   useSettings,
@@ -54,6 +46,12 @@ function coverTapOptions(t: ReturnType<typeof useT>): { value: CoverTapAction; l
   ];
 }
 
+// Stable search links from earlier versions still open the moved lyric control.
+const LEGACY_LYRIC_ANCHORS = new Set([
+  'Lyrics source', 'Lyrics size', 'Lyrics weight', 'Lyrics alignment',
+  'Blur inactive lyrics', 'Show lyrics card', 'Lyrics background', 'Lyrics card background',
+]);
+
 export default function PlayerSettings() {
   // Repaints on a change of appearance or accent: a stack keeps this screen
   // mounted while you are on another one, out of reach of anything else.
@@ -72,6 +70,7 @@ export default function PlayerSettings() {
   const playerArtworkPalette = useSettings((state) => state.playerArtworkPalette);
   const setPlayerArtworkPalette = useSettings((state) => state.setPlayerArtworkPalette);
   const router = useRouter();
+  const params = useLocalSearchParams<{ setting?: string; settingVisit?: string }>();
   // Rating is a Subsonic thing: needs a server account and doesn't apply to
   // Jellyfin. It does work offline (queued in the outbox and uploaded on
   // reconnect), so its toggle is also shown offline, same as in the player.
@@ -98,29 +97,13 @@ export default function PlayerSettings() {
   const blurMiniPlayer = useSettings((s) => s.blurMiniPlayer);
   const miniPlayerButtons = useSettings((s) => s.miniPlayerButtons);
   const setMiniPlayerButtons = useSettings((s) => s.setMiniPlayerButtons);
-  const lyricsSize = useSettings((s) => s.lyricsSize);
-  const setLyricsSize = useSettings((s) => s.setLyricsSize);
-  const lyricsWeight = useSettings((s) => s.lyricsWeight);
-  const setLyricsWeight = useSettings((s) => s.setLyricsWeight);
-  const lyricsAlign = useSettings((s) => s.lyricsAlign);
-  const setLyricsAlign = useSettings((s) => s.setLyricsAlign);
-  const blurInactiveLyrics = useSettings((s) => s.blurInactiveLyrics);
-  const setBlurInactiveLyrics = useSettings((s) => s.setBlurInactiveLyrics);
   const setBlurMiniPlayer = useSettings((s) => s.setBlurMiniPlayer);
-  const lyricsBackground = useSettings((s) => s.lyricsBackground);
-  const setLyricsBackground = useSettings((s) => s.setLyricsBackground);
-  const lyricsCardBackground = useSettings((s) => s.lyricsCardBackground);
-  const setLyricsCardBackground = useSettings((s) => s.setLyricsCardBackground);
-  const showLyricsCard = useSettings((s) => s.showLyricsCard);
-  const setShowLyricsCard = useSettings((s) => s.setShowLyricsCard);
   const showArtistCard = useSettings((s) => s.showArtistCard);
   const setShowArtistCard = useSettings((s) => s.setShowArtistCard);
   const coverTapAction = useSettings((s) => s.coverTapAction);
   const coverDoubleTapAction = useSettings((s) => s.coverDoubleTapAction);
   const setCoverDoubleTapAction = useSettings((s) => s.setCoverDoubleTapAction);
   const setCoverTapAction = useSettings((s) => s.setCoverTapAction);
-  const lyricsSource = useSettings((s) => s.lyricsSource);
-  const setLyricsSource = useSettings((s) => s.setLyricsSource);
   const marqueeTitles = useSettings((s) => s.marqueeTitles);
   const setMarqueeTitles = useSettings((s) => s.setMarqueeTitles);
   const seekButtonsSec = useSettings((s) => s.seekButtonsSec);
@@ -130,27 +113,38 @@ export default function PlayerSettings() {
   const keepPausedOnSkip = useSettings((s) => s.keepPausedOnSkip);
   const setKeepPausedOnSkip = useSettings((s) => s.setKeepPausedOnSkip);
 
+  const legacyTool = params.setting ? ({ 'Lyrics tools': '/settings/lyrics-tools', 'Long audio and bookmarks': '/settings/long-audio', 'Shuffle preference': '/settings/shuffle', 'Skip leading and trailing silence': '/settings/silence-trim' } as Record<string, string>)[params.setting] : undefined;
+  if (legacyTool) return <Redirect href={legacyTool} />;
+  if (params.setting && LEGACY_LYRIC_ANCHORS.has(params.setting)) {
+    return <Redirect href={{ pathname: '/settings/lyrics', params: { setting: params.setting, settingVisit: params.settingVisit } }} />;
+  }
+
   return (
-    <SettingsPage title={t('Player')}>
+    <SettingsPage title={t('Player & lyrics')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
-        <Text style={[settingsStyles.sectionTitle, { marginTop: 0 }]}>{t('Player appearance')}</Text>
-        <SelectList<PlayerPresentation> label={t('Player layout')}
-          options={[{ value: 'amll', label: t('AMLL reference') }, { value: 'resonus', label: t('Resonus layout') }]}
-          value={playerPresentation} onChange={setPlayerPresentation} />
-        <Text style={[settingsStyles.rowDescription, { marginHorizontal: 16, marginTop: 8 }]}>
-          {t('AMLL uses a shared cover transition, full-page lyrics and an artwork mesh background. Your previous player remains available.')}
-        </Text>
-        <Text style={settingsStyles.sectionTitle}>{t('Music tools')}</Text>
-        <SettingsGroup>
-          <SettingRow label={t('Lyrics tools')} chevron onPress={() => router.push('/settings/lyrics-tools')} />
-          <SettingRow label={t('Long audio and bookmarks')} chevron onPress={() => router.push('/settings/long-audio')} />
-          <SettingRow label={t('Shuffle preference')} chevron onPress={() => router.push('/settings/shuffle')} />
-          <SettingRow label={t('Skip leading and trailing silence')} chevron onPress={() => router.push('/settings/silence-trim')} />
+        <SettingsGroup title={t('Lyrics')}>
+          <SettingRow label={t('Lyrics')} description={t('Sources, fonts, blur and lyric backgrounds.')}
+            chevron onPress={() => router.push('/settings/lyrics')} />
         </SettingsGroup>
-        <Text style={settingsStyles.sectionTitle}>{t('AM++ player features')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Player appearance')} description={t('AMLL uses a shared cover transition, full-page lyrics and an artwork mesh background. Your previous player remains available.')}>
+          <SelectList<PlayerPresentation> label={t('Player layout')}
+            options={[{ value: 'amll', label: t('AMLL reference') }, { value: 'resonus', label: t('Resonus layout') }]}
+            value={playerPresentation} onChange={setPlayerPresentation} />
+          <SelectList<ScreenBackground>
+            label={t('Player background')}
+            options={[
+              { value: 'none', label: t('Plain') },
+              { value: 'color', label: t('Cover color') },
+              { value: 'cover', label: t('Blurred cover') },
+            ]}
+            value={playerBackground} onChange={setPlayerBackground}
+          />
+          <SwitchList options={[
+            { label: t('Artwork palette in full player'), value: playerArtworkPalette, onChange: setPlayerArtworkPalette },
+          ]} />
           <SelectList<PlayerGlassRecipe>
             label={t('Floating popup glass')}
+            description={t('Popup presets keep their reference blur. Artwork colors affect only the full player, never the mini player or tabs.')}
             options={[
               { value: 'dock', label: t('Same as bottom bar') },
               { value: 'menu', label: t('Same as More menu') },
@@ -160,28 +154,8 @@ export default function PlayerSettings() {
             value={glassRecipe}
             onChange={(value) => { void setGlassRecipe(value).catch(() => toast(t("Couldn't complete the action"))); }}
           />
-          <SwitchList options={[
-            { label: t('Show system volume'), value: showSystemVolume, onChange: setShowSystemVolume },
-            { label: t('Show output device name'), value: showOutputDevice, onChange: setShowOutputDevice },
-            { label: t('Artwork palette in full player'), value: playerArtworkPalette, onChange: setPlayerArtworkPalette },
-          ]} />
         </SettingsGroup>
-        <Text style={[settingsStyles.rowDescription, { marginHorizontal: 16, marginTop: 8 }]}>{t('Popup presets keep their reference blur. Artwork colors affect only the full player, never the mini player or tabs.')}</Text>
-        {/* The first title sticks to the header (no section margin). */}
-        <Text style={settingsStyles.sectionTitle}>{t('Background')}</Text>
-        <SelectList<ScreenBackground>
-          label={t('Player background')}
-          options={[
-            { value: 'none', label: t('Plain') },
-            { value: 'color', label: t('Cover color') },
-            { value: 'cover', label: t('Blurred cover') },
-          ]}
-          value={playerBackground}
-          onChange={setPlayerBackground}
-        />
-
-        <Text style={settingsStyles.sectionTitle}>{t('Mini player')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Mini player')}>
           <SwitchList
             options={[
               // Android draws the blur from Android 12 on (see `BarBlur`).
@@ -209,8 +183,7 @@ export default function PlayerSettings() {
           />
         </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Cover art')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Cover art')}>
           <SwitchList
             options={[
               {
@@ -239,9 +212,11 @@ export default function PlayerSettings() {
           />
         </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Elements')}</Text>
+        <SettingsGroup title={t('Elements')}>
         <SwitchList
           options={[
+            { label: t('Show system volume'), value: showSystemVolume, onChange: setShowSystemVolume },
+            { label: t('Show output device name'), value: showOutputDevice, onChange: setShowOutputDevice },
             {
               label: t('Show album & year'),
               value: showAlbumInfo,
@@ -279,8 +254,9 @@ export default function PlayerSettings() {
                 ]),
           ]}
         />
+        </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Queue')}</Text>
+        <SettingsGroup title={t('Queue')}>
         <SwitchList
           options={[
             {
@@ -290,9 +266,9 @@ export default function PlayerSettings() {
             },
           ]}
         />
+        </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Buttons')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Buttons')}>
           <SettingRow
             label={t('Bottom row')}
             chevron
@@ -341,92 +317,6 @@ export default function PlayerSettings() {
           />
         </SettingsGroup>
 
-        <Text style={settingsStyles.sectionTitle}>{t('Lyrics')}</Text>
-        <SettingsGroup>
-          <SelectList<LyricsSource>
-            label={t('Lyrics source')}
-            description={t(
-              'Where to get lyrics from. Online search uses LRCLIB (sends the artist and title).',
-            )}
-            options={[
-              { value: 'local', label: t('Prefer local lyrics') },
-              { value: 'online', label: t('Prefer online search') },
-              { value: 'off', label: t('Disable online search') },
-            ]}
-            value={lyricsSource}
-            onChange={setLyricsSource}
-          />
-          <SliderRow
-            label={t('Lyrics size')}
-            value={lyricsSize}
-            min={LYRICS_SIZE_MIN}
-            max={LYRICS_SIZE_MAX}
-            step={1}
-            formatValue={(value) => `${Math.round(value)}`}
-            onChange={setLyricsSize}
-          />
-          <SelectList<LyricsWeight>
-            label={t('Lyrics weight')}
-            options={[
-              { value: '300', label: t('Light font weight') },
-              { value: '400', label: t('Regular font weight') },
-              { value: '500', label: t('Medium font weight') },
-              { value: '600', label: t('Semi-bold font weight') },
-              { value: '700', label: t('Bold font weight') },
-            ]}
-            value={lyricsWeight}
-            onChange={setLyricsWeight}
-          />
-          <SelectList<LyricsAlign>
-            label={t('Lyrics alignment')}
-            options={[
-              { value: 'left', label: t('Left') },
-              { value: 'center', label: t('Centered') },
-            ]}
-            value={lyricsAlign}
-            onChange={setLyricsAlign}
-          />
-          <SwitchList
-            options={[
-              ...(Platform.OS === 'android'
-                ? [
-                    {
-                      label: t('Blur inactive lyrics'),
-                      description: t(
-                        'Slightly blur synchronized lyrics other than the current line to emphasize what is playing.',
-                      ),
-                      value: blurInactiveLyrics,
-                      onChange: setBlurInactiveLyrics,
-                    },
-                  ]
-                : []),
-              {
-                label: t('Show lyrics card'),
-                value: showLyricsCard,
-                onChange: setShowLyricsCard,
-              },
-            ]}
-          />
-          <SelectList<ScreenBackground>
-            label={t('Lyrics background')}
-            options={[
-              { value: 'none', label: t('Plain') },
-              { value: 'color', label: t('Cover color') },
-              { value: 'cover', label: t('Blurred cover') },
-            ]}
-            value={lyricsBackground}
-            onChange={setLyricsBackground}
-          />
-          <SelectList<CardBackground>
-            label={t('Lyrics card background')}
-            options={[
-              { value: 'none', label: t('Plain') },
-              { value: 'color', label: t('Cover color') },
-            ]}
-            value={lyricsCardBackground}
-            onChange={setLyricsCardBackground}
-          />
-        </SettingsGroup>
       </DockScrollView>
     </SettingsPage>
   );

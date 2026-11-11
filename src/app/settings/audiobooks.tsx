@@ -27,8 +27,10 @@ export default function AudiobooksSettings() {
     Math.abs(value - rewind) < Math.abs(AUDIOBOOK_CONTINUE_REWIND_STEPS[nearest] - rewind) ? index : nearest, 0);
   return <SettingsPage title={t('Audiobooks')}>
     <DockScrollView contentContainerStyle={settingsStyles.content}>
-      <SettingRow icon="book-outline" label={t('Browse audiobooks')} onPress={() => router.push('/audiobooks')} />
-      <SettingsGroup>
+      <SettingsGroup title={t('Audiobooks')}>
+        <SettingRow icon="book-outline" label={t('Browse audiobooks')} chevron onPress={() => router.push('/audiobooks')} />
+      </SettingsGroup>
+      <SettingsGroup title={t('Continue listening')}>
         <SwitchList options={[{ label: t('Save audiobook progress'), description: t('Remember where you stopped in audiobooks. Saved on this device for each profile.'),
           value: enabled, onChange: setEnabled }]} />
         <SliderRow label={t('Rewind on resume')}
@@ -40,7 +42,9 @@ export default function AudiobooksSettings() {
           onChange={(index) => setRewind(AUDIOBOOK_CONTINUE_REWIND_STEPS[Math.round(index)] ?? 0)} />
       </SettingsGroup>
       {error ? <Text style={settingsStyles.sectionDescription}>{t('Audiobook progress could not be saved. Existing positions are retained.')}</Text> : null}
-      <SettingRow icon="trash-outline" label={t('Delete audiobook progress')} destructive onPress={() => setConfirmClear(true)} />
+      <SettingsGroup title={t('Saved position')}>
+        <SettingRow icon="trash-outline" label={t('Delete audiobook progress')} destructive onPress={() => setConfirmClear(true)} />
+      </SettingsGroup>
     </DockScrollView>
     <Dialog visible={confirmClear} title={t('Delete audiobook progress')} message={t('Delete saved audiobook positions for all profiles on this device?')}
       confirmLabel={t('Delete')} destructive onCancel={() => setConfirmClear(false)} onConfirm={() => {

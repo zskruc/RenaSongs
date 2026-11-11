@@ -6,20 +6,20 @@
  * remote). Only applies to server profiles.
  */
 import { DockScrollView } from '@/components/DockScrollView';
-import { GlassPressable, GlassSurface } from '@/components/glass';
+import { GlassPressable } from '@/components/glass';
 import Icon from '@/components/Icon';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { Dialog } from '@/components/Dialog';
-import { SETTINGS_ROW_LAYOUT, SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
+import { SETTINGS_ROW_LAYOUT, SettingRow, SettingsGroup, SettingsPage, settingsStyles, SwitchList } from '@/components/SettingsUI';
 import { reachable } from '@/api/backend';
 import { isLanUrl } from '@/lib/serverUrls';
 import { useT } from '@/i18n';
 import { useAuthStore } from '@/store/auth';
 import { checkAutoUrlNow } from '@/store/autoUrl';
 import { useToast } from '@/store/toast';
-import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
+import { colors, fontSize, spacing, themed, useTheme } from '@/theme';
 
 /** Strips the scheme to show a more compact URL. */
 function shown(url: string): string {
@@ -89,10 +89,8 @@ export default function NetworkSettings() {
   return (
     <SettingsPage title={t('Network')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
-        <Text style={[settingsStyles.sectionTitle, { marginTop: 0 }]}>
-          {t('Current server address')}
-        </Text>
-        <GlassSurface radius={radius.lg} style={[settingsStyles.cardBox, styles.activeRow]}>
+        <SettingsGroup title={t('Current server address')}>
+        <View style={styles.activeRow}>
           {health === 'checking' ? (
             <ActivityIndicator size="small" color={colors.textMuted} />
           ) : (
@@ -105,8 +103,7 @@ export default function NetworkSettings() {
           <Text style={styles.activeUrl} numberOfLines={1}>
             {shown(activeUrl)}
           </Text>
-        </GlassSurface>
-
+        </View>
         <SwitchList
           options={[
             {
@@ -120,21 +117,16 @@ export default function NetworkSettings() {
           ]}
         />
 
-        <Text style={settingsStyles.sectionTitle}>{t('Server addresses')}</Text>
-        <Text style={settingsStyles.sectionDescription}>
-          {t(
-            'Add the address you use from outside next to the one you use at home, so the server works wherever you are.',
-          )}
-        </Text>
-        <GlassSurface radius={radius.lg} style={settingsStyles.cardBox}>
-          {urls.map((url, i) => {
+        </SettingsGroup>
+        <SettingsGroup title={t('Server addresses')} description={t('Add the address you use from outside next to the one you use at home, so the server works wherever you are.')}>
+
+          {urls.map((url) => {
             const isActive = url === activeUrl;
             return (
               <Pressable
                 key={url}
                 style={({ pressed }) => [
                   settingsStyles.row,
-                  i > 0 && settingsStyles.rowBorder,
                   pressed && { opacity: 0.6 },
                 ]}
                 onPress={() => {
@@ -180,23 +172,8 @@ export default function NetworkSettings() {
               </Pressable>
             );
           })}
-        </GlassSurface>
-        <GlassPressable
-          radius={radius.md}
-          variant="regular"
-          style={({ pressed }) => [
-            settingsStyles.cardBox,
-            settingsStyles.row,
-            styles.addRow,
-            pressed && { opacity: 0.6 },
-          ]}
-          onPress={() => setAdding(true)}
-        >
-          <Icon name="add" size={22} color={accent} />
-          <Text style={[settingsStyles.rowLabel, { color: accent }]}>
-            {t('Add address')}
-          </Text>
-        </GlassPressable>
+          <SettingRow icon="add" label={t('Add address')} onPress={() => setAdding(true)} />
+        </SettingsGroup>
       </DockScrollView>
 
       <Dialog
@@ -233,5 +210,4 @@ const styles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
   },
   activeUrl: { color: colors.text, fontSize: fontSize.md, flex: 1 },
-  addRow: { marginTop: spacing.sm, borderRadius: radius.md },
 }));

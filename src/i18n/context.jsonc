@@ -59,8 +59,6 @@
     // ── Settings section headers (short titles grouping toggles) ─────────────
     "Elements": "Which player elements to show",
     "Buttons": "Which player buttons to show",
-    "Interaction": "Section header grouping toggles",
-    "Interface": "Section header grouping toggles",
     "Size": "The size of the quick grid tiles",
     "Sources": "Which shortcuts the quick grid shows",
 

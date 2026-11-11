@@ -4,7 +4,7 @@
  * applied and saved immediately.
  */
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { GlassSurface, GlassSwitch, GlassPressable } from '@/components/glass';
+import { GlassSwitch, GlassPressable } from '@/components/glass';
 import { useDiscoveryPreferences } from '@/store/discoveryPreferences';
 import { homeShelfPreset, type ShelfLayout, type ShelfPreference } from '@/lib/discoveryPreferences';
 import Icon from '@/components/Icon';
@@ -16,7 +16,7 @@ import ReorderableList, {
 
 import { centredPadding, useScreenSize } from '@/hooks/useScreenSize';
 
-import { SETTINGS_ROW_LAYOUT, ScreenHeader, SettingsSafeArea } from '@/components/SettingsUI';
+import { SETTINGS_ROW_LAYOUT, ScreenHeader, SelectList, SettingsGroup, SettingsSafeArea, SliderRow } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
 import { haptic } from '@/lib/haptics';
 import { useAuthStore } from '@/store/auth';
@@ -24,7 +24,6 @@ import { useSettings, type HomeSection, type HomeSectionKey } from '@/store/sett
 import {
   colors,
   fontSize,
-  radius,
   spacing,
   SCREEN_BOTTOM_PADDING,
   themed,
@@ -59,7 +58,8 @@ function SectionRow({ section }: { section: HomeSection }) {
   // keep the previous accent while the screen stays mounted.
   const { accent } = useTheme();
   return (
-    <GlassSurface radius={radius.md} style={{ marginBottom: spacing.sm, overflow: 'hidden' }}>
+    <View style={styles.section}>
+    <SettingsGroup>
     <View style={styles.row}>
       <Pressable
         hitSlop={10}
@@ -74,19 +74,37 @@ function SectionRow({ section }: { section: HomeSection }) {
       </Pressable>
       <Text style={styles.label}>{t(LABEL[section.key])}</Text>
       <GlassSwitch
+        accessibilityLabel={t(LABEL[section.key])}
         value={section.enabled}
         onValueChange={(v) => setHomeSection(section.key, v)}
         trackColor={{ false: colors.control, true: accent }}
         thumbColor={colors.knob}
       />
     </View>
-    {section.key !== 'dailyRecommendations' ? <View style={{ paddingHorizontal: spacing.lg, paddingBottom: 12, gap: 10 }}>
-      {!['mostPlayedSongs', 'randomSongs'].includes(section.key) ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(['default', 'cards', 'rows', 'grid'] as const).map((layout) => <GlassPressable key={layout} onPress={() => change({ layout })} style={{ padding: 8, borderRadius: 10, backgroundColor: preference.layout === layout ? colors.surfaceHighlight : 'transparent' }}><Text style={{ color: preference.layout === layout ? colors.accent : colors.textSecondary }}>{t(layout === 'default' ? 'Default layout' : layout === 'cards' ? 'Cards' : layout === 'grid' ? 'Grid' : 'Rows')}</Text></GlassPressable>)}</View> : null}
-      {!['mostPlayedSongs', 'randomSongs'].includes(section.key) && !['rows', 'compact'].includes(preference.layout) ? <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{(['small', 'default', 'large'] as const).map((size) => <GlassPressable key={size} onPress={() => change({ size })} style={{ padding: 8, borderRadius: 10, backgroundColor: preference.size === size ? colors.surfaceHighlight : 'transparent' }}><Text style={{ color: preference.size === size ? colors.accent : colors.textSecondary }}>{t(size === 'small' ? 'Small covers' : size === 'large' ? 'Large covers' : 'Default size')}</Text></GlassPressable>)}</View> : null}
-      {preference.layout === 'grid' || ['mostPlayedSongs', 'randomSongs'].includes(section.key) ? <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}><Text style={{ color: colors.textSecondary }}>{t('Rows per column')}</Text>{([1, 2, 3] as const).map((rows) => <GlassPressable key={rows} accessibilityLabel={t('{n} rows', { n: rows })} accessibilityState={{ selected: (preference.rows ?? (['mostPlayedSongs', 'randomSongs'].includes(section.key) ? 3 : 2)) === rows }} onPress={() => change({ rows })} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, backgroundColor: (preference.rows ?? (['mostPlayedSongs', 'randomSongs'].includes(section.key) ? 3 : 2)) === rows ? colors.surfaceHighlight : 'transparent' }}><Text style={{ color: colors.text }}>{rows}</Text></GlassPressable>)}</View> : null}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}><Text style={{ color: colors.textSecondary }}>{t('Items per section')}: {preference.limit}</Text><GlassPressable accessibilityLabel={t('Decrease')} onPress={() => change({ limit: Math.max(3, preference.limit - 5) })}><Text style={{ color: colors.accent, fontSize: 24 }}>−</Text></GlassPressable><GlassPressable accessibilityLabel={t('Increase')} onPress={() => change({ limit: Math.min(50, preference.limit + 5) })}><Text style={{ color: colors.accent, fontSize: 24 }}>+</Text></GlassPressable></View>
-    </View> : null}
-    </GlassSurface>
+    {section.key !== 'dailyRecommendations' ? <>
+      {!['mostPlayedSongs', 'randomSongs'].includes(section.key) ? <SelectList
+        label={t('Layout')}
+        value={preference.layout}
+        options={(['default', 'cards', 'rows', 'grid'] as const).map((layout) => ({ value: layout, label: t(layout === 'default' ? 'Default layout' : layout === 'cards' ? 'Cards' : layout === 'grid' ? 'Grid' : 'Rows') }))}
+        onChange={(layout) => change({ layout })}
+      /> : null}
+      {!['mostPlayedSongs', 'randomSongs'].includes(section.key) && !['rows', 'compact'].includes(preference.layout) ? <SelectList
+        label={t('Cover size')}
+        value={preference.size}
+        options={(['small', 'default', 'large'] as const).map((size) => ({ value: size, label: t(size === 'small' ? 'Small covers' : size === 'large' ? 'Large covers' : 'Default size') }))}
+        onChange={(size) => change({ size })}
+      /> : null}
+      {preference.layout === 'grid' || ['mostPlayedSongs', 'randomSongs'].includes(section.key) ? <SelectList
+        label={t('Rows per column')}
+        value={preference.rows ?? (['mostPlayedSongs', 'randomSongs'].includes(section.key) ? 3 : 2)}
+        options={([1, 2, 3] as const).map((rows) => ({ value: rows, label: t('{n} rows', { n: rows }) }))}
+        onChange={(rows) => change({ rows })}
+      /> : null}
+      <SliderRow label={t('Items per section')} value={preference.limit} min={3} max={50}
+        formatValue={String} onChange={(limit) => change({ limit })} />
+    </> : null}
+    </SettingsGroup>
+    </View>
   );
 }
 
@@ -113,8 +131,8 @@ export default function HomeSectionsSettings() {
   return (
     <SettingsSafeArea>
       <ScreenHeader title={t('Home sections')} />
-      <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, gap: 8, marginBottom: spacing.sm }}>{(['default', 'compact', 'covers'] as const).map((preset) => <GlassPressable key={preset} onPress={() => void prefs.change((data) => homeShelfPreset(data, homeSections.map((row) => row.key), preset))} style={{ paddingHorizontal: 12, paddingVertical: 9, borderRadius: 14, backgroundColor: colors.surfaceHighlight }}><Text style={{ color: colors.text }}>{t(preset === 'default' ? 'Default layout' : preset === 'compact' ? 'Compact shelves' : 'Cover focus')}</Text></GlassPressable>)}</View>
+      <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+      <View style={[styles.presets, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{(['default', 'compact', 'covers'] as const).map((preset) => <GlassPressable key={preset} onPress={() => void prefs.change((data) => homeShelfPreset(data, homeSections.map((row) => row.key), preset))} style={styles.presetButton}><Text style={styles.presetLabel}>{t(preset === 'default' ? 'Default layout' : preset === 'compact' ? 'Compact shelves' : 'Cover focus')}</Text></GlassPressable>)}</View>
       <ReorderableList
         onScroll={dockScroll}
         data={visible}
@@ -145,21 +163,23 @@ export default function HomeSectionsSettings() {
 
 const styles = themed((colors) => ({
   hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
   list: { paddingHorizontal: spacing.lg, paddingBottom: SCREEN_BOTTOM_PADDING },
+  section: { marginBottom: spacing.sm },
+  presets: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  presetButton: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 44, justifyContent: 'center', borderRadius: 14, backgroundColor: colors.surfaceHighlight },
+  presetLabel: { color: colors.text, fontSize: fontSize.sm, lineHeight: 20, fontWeight: '500' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     ...SETTINGS_ROW_LAYOUT,
     paddingHorizontal: spacing.lg,
-    marginBottom: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
   },
-  label: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  label: { flex: 1, color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
 }));

@@ -41,25 +41,26 @@ export default function LyricsToolsSettings() {
   return <SettingsPage title={t('Lyrics tools')}>
     <DockScrollView contentContainerStyle={settingsStyles.content}>
       {song ? <>
-        <SettingsGroup>
+        <SettingsGroup title={t('Song')}>
+          <Field label={t('Song')} value={song.title} />
+          {song.artist ? <Field label={t('Artist')} value={song.artist} /> : null}
+        </SettingsGroup>
+        <SettingsGroup title={t('Lyrics tools')}>
           <SettingRow label={t('Edit and export lyrics')} chevron onPress={() => {
             useLyricToolTarget.getState().open(song); router.push('/lyric-editor');
           }} />
           <SettingRow label={t('Offline lyric translation')} chevron onPress={() => { useLyricToolTarget.getState().open(song); router.push('/lyric-translate'); }} />
           <SettingRow label={t('Align lyric words')} chevron onPress={() => { useLyricToolTarget.getState().open(song); router.push('/lyric-align'); }} />
-          <SettingRow label={t('Lyric fonts')} chevron onPress={() => router.push('/settings/lyric-fonts')} />
           <SettingRow label={t('Lyric sources')} chevron onPress={() => {
             useLyricToolTarget.getState().open(song); router.push('/settings/lyric-sources');
           }} />
-          <Field label={t('Song')} value={song.title} />
-          {song.artist ? <Field label={t('Artist')} value={song.artist} /> : null}
         </SettingsGroup>
+        <SettingsGroup title={t('Lyric timing')}>
         <SliderRow label={t('Lyric timing')} value={offset} min={-MAX_LYRIC_OFFSET_MS} max={MAX_LYRIC_OFFSET_MS}
           step={100} fineTune={{ step: 10, doneLabel: t('Done') }} disabled={!ready || busy || !data?.synced}
           description={t('Negative values show lyrics earlier; positive values show them later. Saved for this song only.')}
           formatValue={(value) => `${value > 0 ? '+' : ''}${(value / 1000).toFixed(2)} s`}
           onChange={(value) => { void save(value); }} />
-        <SettingsGroup>
           <SettingRow label={t('Show lyrics earlier')} right="−0.10 s" onPress={() => { if (!busy && data?.synced) void save(offset - 100); }} />
           <SettingRow label={t('Show lyrics later')} right="+0.10 s" onPress={() => { if (!busy && data?.synced) void save(offset + 100); }} />
           <SettingRow label={t('Reset this song timing')} right="0.00 s" onPress={() => { void save(0); }} />
@@ -68,7 +69,7 @@ export default function LyricsToolsSettings() {
           onPress={() => { void useLyricOffsets.getState().hydrate(profile); }} /> : null}
         {!data?.synced ? <Text style={styles.note}>{t('Timing adjustment needs synchronized lyrics.')}</Text> : null}
         <Text style={styles.note}>{t('Original lyric files and downloaded copies stay unchanged.')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Preview lyrics')}>
           {playingId === song.id ? <SettingRow label={t('Preview lyrics')} chevron onPress={() => router.push('/lyrics')} /> : null}
           <SettingRow label={t('Lyric poster')} chevron onPress={() => {
             useLyricToolTarget.getState().open(song); router.push('/lyric-poster');

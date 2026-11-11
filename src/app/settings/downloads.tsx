@@ -151,19 +151,15 @@ export default function DownloadsSettings() {
   return (
     <SettingsPage title={t('Downloads & offline')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
-        <SettingsGroup>
+        <SettingsGroup title={t('Download manager')}>
           <SettingRow label={t('Download manager')}
             description={t('View song progress and pause, start or cancel your download queue.')}
             icon="download-outline" chevron onPress={() => router.push('/settings/download-manager')} />
           <SettingRow label={t('Bulk artwork & lyrics')}
             description={t('Cache artwork and lyrics across your entire library.')}
             icon="download-outline" chevron onPress={() => router.push('/settings/media-cache')} />
-          <SettingRow label={t('Podcast storage')}
-            description={t('Current-profile podcast downloads, covers and cached catalog.')}
-            icon="mic-outline" chevron onPress={() => router.push('/settings/podcast-storage')} />
         </SettingsGroup>
         {/* The first title sticks to the header (no section margin). */}
-        <Text style={[settingsStyles.sectionTitle, { marginTop: 0 }]}>{t('Downloading')}</Text>
         {/* Nothing can be downloaded without a server, so offline these are
             greyed out rather than taken away: what they say still holds for the
             next download, and a setting that moves house is one you hunt for
@@ -173,7 +169,7 @@ export default function DownloadsSettings() {
         {/* Quality first and the codec under it, as in Quality & playback:
             at "Original" the original file is downloaded and the codec has
             nothing to do, so it reads as a pair and is greyed out (#72). */}
-        <SettingsGroup>
+        <SettingsGroup title={t('Downloading')}>
           <SelectList
             label={t('Download quality')}
             description={t('Applies to new downloads only.')}
@@ -233,8 +229,7 @@ export default function DownloadsSettings() {
             ]}
           />
         </SettingsGroup>
-        <Text style={settingsStyles.sectionTitle}>{t('Song cache')}</Text>
-        <SettingsGroup>
+        <SettingsGroup title={t('Song cache')}>
           <SwitchList
             options={[
               {
@@ -268,7 +263,7 @@ export default function DownloadsSettings() {
             />
           ) : null}
         </SettingsGroup>
-        <Text style={settingsStyles.sectionTitle}>{t('Offline')}</Text>
+        <SettingsGroup title={t('Offline')}>
         <SwitchList
           options={[
             {
@@ -283,7 +278,9 @@ export default function DownloadsSettings() {
             },
           ]}
         />
-        <Text style={settingsStyles.sectionTitle}>{t('Storage used')}</Text>
+        </SettingsGroup>
+        <SettingsGroup title={t('Storage used')}>
+        <View style={styles.storageBody}>
         {(() => {
           const disk = diskSpace();
           if (!disk || usage == null) {
@@ -369,6 +366,8 @@ export default function DownloadsSettings() {
                 </Text>
               ))
           : null}
+        </View>
+        </SettingsGroup>
         {count > 0 ? (
           <SettingRow
             icon="trash-outline"
@@ -398,6 +397,7 @@ export default function DownloadsSettings() {
 }
 
 const styles = themed((colors) => ({
+  storageBody: { padding: spacing.lg },
   bar: {
     flexDirection: 'row',
     height: 10,

@@ -1,6 +1,6 @@
 /** Show/hide and reorder the library's filters, without changing its page style. */
 import Icon from '@/components/Icon';
-import { GlassSurface, GlassSwitch } from '@/components/glass';
+import { GlassSwitch } from '@/components/glass';
 import { SETTINGS_ROW_LAYOUT, ScreenHeader, SettingsSafeArea } from '@/components/SettingsUI';
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
 import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
@@ -9,7 +9,7 @@ import { useT } from '@/i18n';
 import { haptic } from '@/lib/haptics';
 import { useSettings, type LibraryChip, type LibraryChipKey } from '@/store/settings';
 import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import ReorderableList, { useReorderableDrag, type ReorderableListReorderEvent } from 'react-native-reorderable-list';
 
 const LABEL: Record<LibraryChipKey, string> = {
@@ -19,15 +19,15 @@ const LABEL: Record<LibraryChipKey, string> = {
 function ChipRow({ chip }: { chip: LibraryChip }) {
   const t = useT(), drag = useReorderableDrag(), { accent } = useTheme();
   const setChip = useSettings((state) => state.setLibraryChip);
-  return <GlassSurface radius={radius.md} style={styles.row}>
+  return <View style={styles.row}>
     <Pressable hitSlop={10} accessibilityRole="button" accessibilityLabel={t('Reorder')}
       onPressIn={() => { haptic('medium'); drag(); }}>
       <Icon name="reorder-two" size={24} color={colors.textSecondary} />
     </Pressable>
     <Text style={styles.label}>{t(LABEL[chip.key])}</Text>
-    <GlassSwitch value={chip.enabled} onValueChange={(value) => setChip(chip.key, value)}
+    <GlassSwitch accessibilityLabel={t(LABEL[chip.key])} value={chip.enabled} onValueChange={(value) => setChip(chip.key, value)}
       trackColor={{ false: colors.control, true: accent }} thumbColor={colors.knob} />
-  </GlassSurface>;
+  </View>;
 }
 
 export default function LibraryChipsSettings() {
@@ -38,7 +38,7 @@ export default function LibraryChipsSettings() {
   const setChips = useSettings((state) => state.setLibraryChips);
   return <SettingsSafeArea>
     <ScreenHeader title={t('Your library chips')} />
-    <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+    <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
     <ReorderableList data={chips} onScroll={dockScroll}
       keyExtractor={(item) => item.key} renderItem={({ item }) => <ChipRow chip={item} />}
       contentContainerStyle={{ paddingBottom: bottomPad, paddingHorizontal: centredPadding(width, spacing.lg) }}
@@ -51,8 +51,8 @@ export default function LibraryChipsSettings() {
 }
 
 const styles = themed((palette) => ({
-  hint: { color: palette.textMuted, fontSize: fontSize.xs, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  hint: { color: palette.textSecondary, fontSize: fontSize.sm, lineHeight: 20, paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, ...SETTINGS_ROW_LAYOUT,
-    paddingHorizontal: spacing.lg, marginBottom: spacing.sm, borderRadius: radius.md },
-  label: { flex: 1, color: palette.text, fontSize: fontSize.md },
+    paddingHorizontal: spacing.lg, marginBottom: spacing.sm, backgroundColor: palette.surface, borderRadius: radius.lg },
+  label: { flex: 1, flexShrink: 1, color: palette.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
 }));

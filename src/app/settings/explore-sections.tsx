@@ -14,9 +14,9 @@
  * Jellyfin account has no folder tree, and offline there are no stations.
  */
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { GlassSurface, GlassSwitch } from '@/components/glass';
+import { GlassSwitch } from '@/components/glass';
 import Icon from '@/components/Icon';
-import { Pressable, Text } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import ReorderableList, {
   useReorderableDrag,
   type ReorderableListReorderEvent,
@@ -65,7 +65,7 @@ function SectionRow({
   // keep the previous accent while the screen stays mounted.
   const { accent } = useTheme();
   return (
-    <GlassSurface radius={radius.md} style={styles.row}>
+    <View style={styles.row}>
       <Pressable
         hitSlop={10}
         onPressIn={() => {
@@ -79,12 +79,13 @@ function SectionRow({
       </Pressable>
       <Text style={styles.label}>{t(LABEL[section.key])}</Text>
       <GlassSwitch
+          accessibilityLabel={t(LABEL[section.key])}
         value={section.enabled}
         onValueChange={onToggle}
         trackColor={{ false: colors.control, true: accent }}
         thumbColor={colors.knob}
       />
-    </GlassSurface>
+    </View>
   );
 }
 
@@ -118,7 +119,7 @@ export default function ExploreSectionsSettings() {
           what is stored is a preference about any profile, and a Jellyfin
           account rearranging the list an offline one comes back to is the kind
           of surprise nobody asked for (#114). */}
-      <Text style={styles.hint}>{t('Drag to reorder, toggle to show or hide.')}</Text>
+      <Text style={[styles.hint, { paddingHorizontal: centredPadding(width, spacing.lg) }]}>{t('Drag to reorder, toggle to show or hide.')}</Text>
       <ReorderableList
         onScroll={dockScroll}
         data={sections}
@@ -146,8 +147,9 @@ export default function ExploreSectionsSettings() {
 
 const styles = themed((colors) => ({
   hint: {
-    color: colors.textMuted,
-    fontSize: fontSize.xs,
+    color: colors.textSecondary,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
   },
@@ -160,7 +162,7 @@ const styles = themed((colors) => ({
     paddingHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
   },
-  label: { flex: 1, color: colors.text, fontSize: fontSize.md },
+  label: { flex: 1, flexShrink: 1, color: colors.text, fontSize: fontSize.md, lineHeight: 22, fontWeight: '500' },
 }));

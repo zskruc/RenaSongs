@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import Icon from '@/components/Icon';
-import { GlassPressable, GlassTextInput, GlassSurface } from '@/components/glass';
-import { SettingsPage } from '@/components/SettingsUI';
+import { GlassPressable, GlassTextInput } from '@/components/glass';
+import { SettingsPage, SettingsPanel } from '@/components/SettingsUI';
 import { EmptyState } from '@/components/EmptyState';
 import { Message } from '@/components/Message';
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
@@ -20,10 +20,10 @@ import { hashKey } from '@/lib/localLibrary';
 import { listPerf } from '@/lib/listPerf';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { useToast } from '@/store/toast';
-import { fontSize, radius, spacing, themed, useTheme } from '@/theme';
+import { fontSize, spacing, themed, useTheme } from '@/theme';
 
 const entries = SETTINGS_SEARCH_ENTRIES.map(withSettingsSearchAliases);
-const byId = new Map(entries.map((entry) => [entry.id, entry]));
+const byId = new Map(entries.flatMap((entry) => [entry.id, ...(entry.legacyIds ?? [])].map((id) => [id, entry] as const)));
 const history = createSettingsSearchHistory({ read: getItem, write: setItemStrict }, new Set(byId.keys()));
 
 export default function SettingsSearchScreen() {
@@ -36,7 +36,7 @@ export default function SettingsSearchScreen() {
   const recent = useQuery({ queryKey: ['settingsSearchRecent', scope], queryFn: () => history.load(storageKey) });
   const searching = !!query.trim();
   const results = useMemo(() => searching ? searchSettings(entries, query)
-    : (recent.data ?? []).flatMap((id) => byId.has(id) ? [byId.get(id)!] : []), [searching, query, recent.data]);
+    : [...new Set((recent.data ?? []).flatMap((id) => byId.has(id) ? [byId.get(id)!] : []))], [searching, query, recent.data]);
   function open(entry: SettingsSearchEntry, visit: string) {
     Keyboard.dismiss();
     const askedScope = scope;
@@ -46,7 +46,7 @@ export default function SettingsSearchScreen() {
   }
   return <SettingsPage title={t('Search settings')}>
     <View style={{ paddingHorizontal: padding, paddingBottom: spacing.md }}>
-      <GlassSurface radius={radius.lg} style={styles.inputBox}>
+      <SettingsPanel style={styles.inputBox}>
         <Icon name="search" size={20} color={colors.textMuted} />
         <GlassTextInput autoFocus value={query} onChangeText={setQuery} style={styles.input}
           placeholder={t('Search settings, English or pinyin')} placeholderTextColor={colors.textMuted}
@@ -54,7 +54,7 @@ export default function SettingsSearchScreen() {
         {query ? <GlassPressable variant="subtle" hitSlop={10} accessibilityLabel={t('Clear')} onPress={() => setQuery('')}>
           <Icon name="close-circle" size={20} color={colors.textMuted} />
         </GlassPressable> : null}
-      </GlassSurface>
+      </SettingsPanel>
     </View>
     <Animated.FlatList {...listPerf} onScroll={dockScroll} scrollEventThrottle={16} data={results}
       keyExtractor={(entry) => entry.id} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
@@ -75,7 +75,8 @@ export default function SettingsSearchScreen() {
         style={({ pressed }) => [styles.row, pressed && { opacity: .6 }]}>
         <View style={{ flex: 1, gap: 5 }}>
           <Text style={styles.title}>{t(item.title)}</Text>
-          <Text style={styles.breadcrumb}>{t('Settings')} › {t(item.section)}{item.anchor ? ` › ${t(item.title)}` : ''}</Text>
+          <Text style={styles.breadcrumb}>{[t('Settings'), ...(item.breadcrumbs ?? [item.section]).map((segment) => t(segment)),
+            ...(item.anchor ? [t(item.title)] : [])].join(' › ')}</Text>
         </View>
         <Icon name="chevron-forward" size={20} color={colors.textMuted} />
       </Pressable>} />
