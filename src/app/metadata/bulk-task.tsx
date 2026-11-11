@@ -63,7 +63,7 @@ function BulkMetadataTask({ id }: { id?: string }) {
         {!active ? <Text style={metadataStyles.note}>{t('The music source changed. Reopen this page to choose songs again.')}</Text> : !job || !counts ? <>
           {loading ? <ActivityIndicator color={palette.accent} /> : <Text style={metadataStyles.note}>{t('Metadata task not found')}</Text>}
         </> : <>
-          <Text style={metadataStyles.title}>{job.title}</Text><Text style={metadataStyles.label}>{t(job.status)} · {t(job.enumerationDone ? 'Processing queued songs' : 'Reading music in pages')}</Text>
+          <Text style={metadataStyles.title}>{job.title}</Text><Text style={metadataStyles.label}>{t(job.status)}{job.status === 'running' ? ` · ${t(job.enumerationDone ? 'Processing queued songs' : 'Reading music in pages')}` : ''}</Text>
           <Text style={metadataStyles.note}>{t('Scanned {scanned} · Queued {queued} · Processed {processed}', { scanned: counts.scanned, queued: counts.queued, processed: counts.processed })}</Text>
           {!job.enumerationDone && job.status === 'running' ? <ActivityIndicator color={palette.accent} /> : null}
           {job.enumerationDone ? <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, counts.queued), now: counts.processed }} style={{ height: 7, borderRadius: 4, backgroundColor: palette.surfaceHighlight }}>

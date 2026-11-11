@@ -29,7 +29,7 @@ function defaultJob(id = 'job-A') {
     counts: { scanned: 80, queued: 80, processed: 5, applied: 3, needsReview: 1, failed: 1, skipped: 0 } };
 }
 
-function harness(params: Record<string, string> = {}, task = false) {
+function harness(params: Record<string, string> = {}, task = false, localize = translate) {
   let epoch = 0, currentParams = params, auth = { auth: { username: 'A' }, offline: false, offlineSource: null, autoOffline: false };
   const authListeners = new Set<() => void>(), storeListeners = new Set<() => void>();
   const timers = new Map<number, () => void>(); let nextTimer = 0;
@@ -95,7 +95,7 @@ function harness(params: Record<string, string> = {}, task = false) {
     '@/components/SettingsUI': { SettingsPage: 'Page', SettingsGroup: 'Group', SettingRow: 'Row', SelectList: 'Select', SwitchList: 'Switches', settingsStyles: {} },
     '@/theme': { useTheme: () => palette, themed: (make: any) => make(palette), fontSize: { sm: 12, md: 16, lg: 20, xs: 10 }, spacing: { sm: 4, md: 8, lg: 12 } },
     '@/hooks/useLiquidDock': { useLiquidDockScrollHandler: () => dockHandler }, '@/hooks/useScreenBottomPadding': { useScreenBottomPadding: () => 160 },
-    '@/i18n': { useT: () => translate }, '@/store/auth': { useAuthStore: useAuth }, '@/store/metadataBulk': { useMetadataBulk: useStore },
+    '@/i18n': { useT: () => localize }, '@/store/auth': { useAuthStore: useAuth }, '@/store/metadataBulk': { useMetadataBulk: useStore },
     '@/lib/metadata/repository': { metadataOperation }, '@/lib/metadata/models': { isMetadataCancelled: (error: unknown) => (error as Error)?.name === 'MetadataCancelled' },
     '@/lib/metadata/catalog': {
       readMetadataCatalogPage: (...args: any[]) => { pages.push(args); return catalogReader(...args as Parameters<typeof catalogReader>); },
@@ -305,4 +305,27 @@ test('setup and task lists normalize the real processed scroll object before the
       assert.equal(h.starts.length, 0); assert.equal(h.stops.length, 0); assert.equal(h.resumes.length, 0);
     } finally { await act(async () => root?.unmount()); }
   }
+});
+
+test('paused, cancelled and completed task headers show only their localized status while running tasks retain the current phase', async () => {
+  const messages: Record<string, string> = { running: '运行中', paused: '已暂停', cancelled: '已取消', completed: '已完成',
+    'Processing queued songs': '正在处理排队歌曲', 'Reading music in pages': '正在分页读取曲库' };
+  const h = harness({ id: 'status-task' }, true, (key, values) => messages[key] ?? translate(key, values)); let root!: ReactTestRenderer;
+  const labels = () => root.root.findAllByType('Text' as any).map((node) => [node.props.children].flat(Infinity).join(''));
+  try {
+    await act(async () => { root = create(React.createElement(h.Screen)); });
+    for (const status of ['completed', 'cancelled', 'paused']) {
+      for (const enumerationDone of [false, true]) {
+        await act(async () => { h.publishJob({ ...h.job(), status, enumerationDone, updatedAt: h.job().updatedAt + 1 }); });
+        assert.equal(labels().includes(messages[status]), true, `${status} must remain translated`);
+        assert.equal(labels().some((text) => text.includes(messages['Processing queued songs']) || text.includes(messages['Reading music in pages'])), false,
+          `${status} must not claim it is still processing or reading music`);
+      }
+    }
+    for (const enumerationDone of [false, true]) {
+      await act(async () => { h.publishJob({ ...h.job(), status: 'running', enumerationDone, updatedAt: h.job().updatedAt + 1 }); });
+      const phase = messages[enumerationDone ? 'Processing queued songs' : 'Reading music in pages'];
+      assert.equal(labels().includes(`${messages.running} · ${phase}`), true);
+    }
+  } finally { await act(async () => root?.unmount()); }
 });
