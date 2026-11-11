@@ -89,6 +89,7 @@ function harness(initialAt = new Date(2026, 10, 12, 12).getTime(), withScreen = 
     '@/lib/lyricOwner': owner, '@/store/auth': authModule, '@/store/listeningStats': { useListeningStats: stats },
     '@/store/toast': { useToast: (select: any) => select({ show: (value: string) => toasts.push(value) }) },
   }, clock);
+  const frames: any[] = [];
   const screen = withScreen ? load('../src/app/settings/listening-stats.tsx', {
     react: React, 'react/jsx-runtime': JSXRuntime, 'expo-router': { router: { push: (path: unknown) => pushes.push(path) }, useLocalSearchParams: () => context.params },
     'react-native': { Pressable: 'Button', Text: 'Text', View: 'View' },
@@ -98,7 +99,7 @@ function harness(initialAt = new Date(2026, 10, 12, 12).getTime(), withScreen = 
     '@/components/stats/ListeningDashboard': { ListeningSegments: 'Segments', ListeningDashboardHeader: ({ controls, rankingControls, podium, ...props }: any) =>
       React.createElement('Dashboard', props, controls, rankingControls, podium) },
     '@/components/stats/ListeningRankings': { ListeningPodium: 'Podium', ListeningRankRow: 'RankRow' },
-    '@/hooks/useListeningReport': { useListeningReport: () => { latest = api.useListeningReport(); return latest; } },
+    '@/hooks/useListeningReport': { useListeningReport: () => { latest = api.useListeningReport(); frames.push(latest); return latest; } },
     '@/i18n': { useT: () => (key: string, values?: Record<string, unknown>) => key.replace(/\{(\w+)\}/g, (_all, name) => String(values?.[name] ?? `{${name}}`)) },
     '@/lib/listeningPresentation': { listeningRankItems },
     '@/store/player': { currentSong: () => undefined, usePlayerStore: Object.assign((select: any) => select({}), { getState: () => ({ playQueue: async (...args: unknown[]) => { plays.push(args); } }) }) },
@@ -108,9 +109,9 @@ function harness(initialAt = new Date(2026, 10, 12, 12).getTime(), withScreen = 
   }).default : undefined;
   const client = new Query.QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 300_000, gcTime: Infinity } } });
   let latest: any, root!: ReactTestRenderer;
-  function Probe() { latest = api.useListeningReport(); return null; }
+  function Probe() { latest = api.useListeningReport(); frames.push(latest); return null; }
   const tree = () => React.createElement(Query.QueryClientProvider, { client }, React.createElement(screen ?? Probe));
-  return { auth, firstAuth, client, requests, writes, toasts, timers, stats, listeners, navigationListeners, pushes, plays, apiSongReads, context,
+  return { auth, firstAuth, client, requests, writes, toasts, timers, stats, listeners, navigationListeners, pushes, plays, apiSongReads, context, frames,
     get root() { return root.root; }, apiSong(next: typeof apiSongReader) { apiSongReader = next; },
     get latest() { return latest; }, get now() { return now; },
     read(next: typeof reader) { reader = next; }, write(next: typeof write) { write = next; }, preferences(next: typeof preferences) { preferences = next; },
@@ -258,7 +259,7 @@ test('actual stats page bounds initial rankings, expands on request and routes a
     assert.equal(h.root.findAllByType('RankRow' as any).length, 7, 'podium plus rows initially shows ten, not every saved item');
     const more = () => h.root.findAllByType('Button' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Show all 30'))!;
     await h.action(() => more().props.onPress()); assert.equal(h.root.findAllByType('RankRow' as any).length, 27);
-    await h.action(() => segments('Ranking order').props.onChange('plays')); await h.loaded(); assert.equal(h.root.findAllByType('RankRow' as any).length, 7);
+    await h.action(() => segments('Ranking order').props.onChange('plays')); await h.loaded(); assert.equal(h.root.findAllByType('RankRow' as any).length, 27);
     assert.equal(h.root.findAllByType('Podium' as any)[0].props.sort, 'plays');
     await h.action(() => segments('Ranking category').props.onChange('artists'));
     let podium = h.root.findAllByType('Podium' as any)[0]; await h.action(() => podium.props.onOpen(podium.props.items[0]));
@@ -378,5 +379,79 @@ test('the previous Year settings-search link reveals the yearly selector on the 
     const selector = h.root.findAllByType('Select' as any).find((node) => node.props.label === 'Year'); assert.ok(selector);
     assert.equal(selector.props.value, 2026); assert.equal(h.requests.at(-1)?.from, '2026-01-01');
     await h.action(() => selector.props.onChange(2025)); assert.equal(h.requests.at(-1)?.until, '2026-01-01');
+  } finally { await h.close(); }
+});
+
+test('a held sort change keeps the same report and mounted rankings until the new SQL order arrives', async () => {
+  const h = harness(undefined, true), pending = deferred<ListeningReport>();
+  const original = rankingReport(30);
+  h.read(async () => original);
+  try {
+    await h.mount(); await h.loaded();
+    const previous = h.latest.report;
+    const more = h.root.findAllByType('Button' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Show all 30'))!;
+    await h.action(() => more.props.onPress());
+    const podium = h.root.findAllByType('Podium' as any)[0], row = h.root.findAllByType('RankRow' as any)[0];
+    h.frames.length = 0;
+    h.read(() => pending.promise);
+    const order = h.root.findAllByType('Segments' as any).find((node) => node.props.label === 'Ranking order')!;
+    await h.action(() => order.props.onChange('plays'));
+    assert.equal(h.latest.sort, 'plays'); assert.equal(h.latest.refreshing, true); assert.equal(h.latest.initialLoading, false);
+    assert.equal(h.latest.report, previous, 'the complete window remains present while only its order is pending');
+    assert.equal(h.root.findAllByType('Podium' as any)[0], podium);
+    assert.equal(h.root.findAllByType('RankRow' as any)[0], row);
+    assert.equal(h.root.findAllByType('RankRow' as any).length, 27, 'expanded content does not collapse while reordering');
+    assert.ok(h.frames.length > 0 && h.frames.every((frame) => frame.report === previous), 'no intermediate render removes the existing report');
+    const sorted = { ...original, top: original.top.slice().reverse() };
+    await h.action(() => pending.resolve(sorted)); await h.loaded();
+    assert.equal(h.latest.report.top[0].song.id, 'song-29');
+    assert.equal(h.root.findAllByType('Podium' as any)[0], podium);
+    assert.equal(h.root.findAllByType('RankRow' as any).length, 27);
+  } finally { await h.close(); }
+});
+
+test('sort placeholders never carry a report into another content, calendar or account scope', async () => {
+  for (const scope of ['kind', 'period', 'year', 'midnight', 'profile', 'source', 'account-ABA'] as const) {
+    const h = harness(undefined, true), waiting: ReturnType<typeof deferred<ListeningReport>>[] = [];
+    h.read(async () => rankingReport(3));
+    try {
+      await h.mount(); await h.loaded();
+      if (scope === 'year') { await h.action(() => h.latest.setPeriod('year')); await h.loaded(); }
+      const previous = h.latest.report;
+      h.read(() => { const pending = deferred<ListeningReport>(); waiting.push(pending); return pending.promise; });
+      await h.action(() => h.latest.setSort('plays'));
+      assert.equal(h.latest.report, previous, `${scope}: same-window sort retains its data first`);
+      if (scope === 'kind') await h.action(() => h.latest.setKind('podcast'));
+      if (scope === 'period') await h.action(() => h.latest.setPeriod('week'));
+      if (scope === 'year') await h.action(() => h.latest.setYear(2025));
+      if (scope === 'midnight') await h.time(new Date(2026, 10, 13, 0, 0, 1).getTime(), true);
+      if (scope === 'profile') await h.action(() => h.auth.setState({ auth: { username: 'B' } }));
+      if (scope === 'source') await h.action(() => h.auth.setState({ offlineSource: { uri: 'file:///changed-folder' } }));
+      if (scope === 'account-ABA') await h.action(() => { h.auth.setState({ auth: { username: 'B' } }); h.auth.setState({ auth: h.firstAuth }); });
+      assert.equal(h.latest.report, undefined, `${scope}: the previous complete report must be hidden`);
+      assert.equal(h.root.findAllByType('Podium' as any).length, 0);
+      await h.action(() => waiting.forEach((pending) => pending.resolve(rankingReport(4, scope === 'kind')))); await h.loaded();
+      assert.notEqual(h.latest.report, previous);
+    } finally { await h.close(); }
+  }
+});
+
+test('same-day return retains the scrolled report throughout readiness, while midnight changes clear the old window', async () => {
+  const h = harness(undefined, true), pending = deferred<ListeningReport>();
+  h.read(async () => rankingReport(3));
+  try {
+    await h.mount(); await h.loaded();
+    const previous = h.latest.report, podium = h.root.findAllByType('Podium' as any)[0];
+    h.frames.length = 0;
+    h.read(() => pending.promise);
+    await h.focus(false); await h.focus(true);
+    assert.equal(h.latest.report, previous); assert.equal(h.latest.initialLoading, false);
+    assert.equal(h.root.findAllByType('Podium' as any)[0], podium);
+    assert.ok(h.frames.length > 0 && h.frames.every((frame) => frame.report === previous), 'focus-readiness renders never remove a same-day report');
+    await h.app('background'); await h.time(new Date(2026, 10, 13, 12).getTime()); await h.app('active');
+    assert.equal(h.latest.range.until, '2026-11-14'); assert.equal(h.latest.report, undefined, 'a resolved new date must never reuse the previous window');
+    assert.ok(h.frames.filter((frame) => frame.range.until === '2026-11-14').every((frame) => frame.report !== previous), 'no new-date render is paired with yesterday\'s report');
+    assert.equal(h.root.findAllByType('Podium' as any).length, 0);
+    await h.action(() => pending.resolve(rankingReport(4))); await h.loaded();
   } finally { await h.close(); }
 });

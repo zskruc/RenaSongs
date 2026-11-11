@@ -16,6 +16,11 @@ function listeningVisit(visible: boolean, owns: () => boolean, epoch: number, na
   let active = visible;
   return { visible, owns, epoch, navigation, current: () => active, invalidate: () => { active = false; } };
 }
+type ListeningReportData = {
+  report: Awaited<ReturnType<typeof listeningReport>>;
+  preferences: Awaited<ReturnType<typeof listeningPreferences>>;
+  owns: () => boolean;
+};
 
 /** A local report belongs to the visible profile and one concrete calendar window. */
 export function useListeningReport() {
@@ -117,9 +122,18 @@ export function useListeningReport() {
     if (canAct() && Number.isInteger(value) && value >= 1970 && value <= new Date().getFullYear()) setSelectedYear({ profile, year: value });
   }, [canAct, profile]);
   const range = listeningRange(period, year, at);
-  const query = useQuery({
-    queryKey: ['listening-stats', profile, accountEpoch, kind, period, range.from, range.until, sort],
+  const reportScope = ['listening-stats', profile, accountEpoch, kind, period, range.from, range.until] as const;
+  const query = useQuery<ListeningReportData>({
+    queryKey: [...reportScope, sort],
     enabled: ready,
+    // Sorting changes order, not the report window or its totals. Keeping the
+    // same owner's existing report avoids unmounting the calendar/rankings and
+    // shortening a scrolled native view while the new SQL ranking is pending.
+    placeholderData: (previous, previousQuery) => {
+      const key = previousQuery?.queryKey;
+      return previous?.owns === owns && owns() && key?.length === reportScope.length + 1
+        && reportScope.every((part, index) => key[index] === part) && key[reportScope.length] !== sort ? previous : undefined;
+    },
     queryFn: async ({ signal }) => {
       const current = () => canAct() && !signal.aborted;
       if (!current()) throw new Error('Listening report owner changed');
@@ -147,7 +161,11 @@ export function useListeningReport() {
     return () => clearTimeout(timer);
   }, [ready, day]);
 
-  const result = (ready || !visible) && query.data?.owns === owns && owns() ? query.data : undefined;
+  // Readiness gates new work/actions, not the frozen same-owner presentation.
+  // On foreground the old calendar remains labelled with its old `at` until
+  // the clock resolves; a midnight range change then selects another key, so
+  // yesterday's values are never presented as today's report.
+  const result = query.data?.owns === owns && owns() ? query.data : undefined;
   const matchingPrefs = prefs.profile === profile && prefs.hydrated;
   const startedAt = result?.preferences.startedAt ?? (matchingPrefs && !prefs.error ? prefs.startedAt : undefined);
   const firstYear = startedAt && Number.isFinite(startedAt) ? new Date(startedAt).getFullYear() : currentYear;
@@ -189,7 +207,7 @@ export function useListeningReport() {
     profile, period, setPeriod, kind, setKind, year, setYear, sort, setSort, at, range,
     report: result?.report, startedAt, years,
     initialLoading: !result && !query.isError,
-    refreshing: query.isFetching,
+    refreshing: query.isFetching || visible && !ready,
     error: query.isError || matchingPrefs && !!prefs.error,
     refresh, recordingEnabled: matchingPrefs && prefs.enabled, recordingDisabled, toggleRecording, canAct,
   };

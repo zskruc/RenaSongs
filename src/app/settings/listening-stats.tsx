@@ -34,7 +34,7 @@ export default function ListeningStatsPage() {
   useEffect(() => { if (setting === 'Year') setPeriod('year'); }, [setting, setPeriod]);
   const rankTab = model.kind === 'music' ? tab : 'songs';
   const ranks = useMemo(() => listeningRankItems(model.report, rankTab, model.kind), [model.report, rankTab, model.kind]);
-  const scope = `${model.profile}|${model.kind}|${model.range.from}|${model.range.until}|${model.sort}|${rankTab}`;
+  const scope = `${model.profile}|${model.kind}|${model.range.from}|${model.range.until}|${rankTab}`;
   const full = expanded === scope;
   const podium = ranks.length >= 3 ? ranks.slice(0, 3) : [];
   const visible = ranks.slice(podium.length, full ? ranks.length : 10);
