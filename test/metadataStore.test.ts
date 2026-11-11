@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { createStore } from 'zustand/vanilla';
 import * as models from '../src/lib/metadata/models';
+import * as runLock from '../src/lib/metadata/runLock';
 import * as jobs from '../src/lib/metadata/jobs';
 import * as config from '../src/lib/metadata/config';
 import * as registry from '../src/lib/metadata/artworkRegistry';
@@ -30,7 +31,7 @@ function harness() {
     '@/lib/metadata/apply': { applyMetadataCandidate: async (...args: any[]) => { inside = true; if (applyGate) await applyGate; assert.equal(args[6], false); assert.ok(args[4].current()); writes.push(args); } },
     '@/lib/metadata/providers': { searchMetadata: async () => { calls++; return { candidates: [candidate], issues: [] }; }, resolveMetadataCandidateForFields: async () => candidate },
     '@/lib/metadata/artwork': { fetchMetadataArtwork: async () => {} }, '@/lib/metadata/repository': repository, '@/lib/metadata/models': models, '@/lib/metadata/config': config,
-    '@/lib/metadata/artworkRegistry': registry };
+    '@/lib/metadata/artworkRegistry': registry, '@/lib/metadata/runLock':runLock };
   const exports: Record<string, any> = {};
   runInNewContext(ts.transpileModule(readFileSync(new URL('../src/store/metadataScraping.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText,
     { exports, Date, Math, AbortController, require(name: string) { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; } });

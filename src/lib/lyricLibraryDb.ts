@@ -84,10 +84,16 @@ export async function indexSongLyrics(profile: string, song: Song, lyrics: SongL
   await serial(value, () => value.withExclusiveTransactionAsync(async (transaction) => { check(current); await indexWith(transaction, song, lyrics); check(current); }));
 }
 /** Choice + search document commit together. A failed save leaves the old choice. */
-export async function selectLyricCandidate(profile: string, song: Song, candidate: LyricCandidate | null, current = () => true): Promise<void> {
+export async function selectLyricCandidate(profile: string, song: Song, candidate: LyricCandidate | null, current = () => true, expectedSource?: string | null): Promise<void> {
   const value = await db(profile); check(current);
   await serial(value, () => value.withExclusiveTransactionAsync(async (transaction) => {
     check(current);
+    if (expectedSource !== undefined) {
+      const selected = await transaction.getFirstAsync<{ source: string }>('SELECT source FROM lyric_choices WHERE song_id=? AND recording=?', song.id, lyricRecordingKey(song));
+      const actual = selected?.source ?? null;
+      if (actual !== expectedSource && actual !== candidate?.id) throw new Error('Local metadata changed. Review again.');
+      check(current);
+    }
     if (candidate) {
       const saved = await transaction.getFirstAsync<{ data: string }>('SELECT data FROM lyric_documents WHERE song_id=? AND recording=? AND source=?',
         song.id, lyricRecordingKey(song), candidate.id);

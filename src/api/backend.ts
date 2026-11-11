@@ -141,6 +141,8 @@ export const getSongsByGenre = (
   dir?: SortDirection,
 ) => api(auth).getSongsByGenre(auth, genre, count, offset, musicFolderId, sort, dir);
 
+export const getSong = (auth: SubsonicAuth, id: string) => api(auth).getSong(auth, id);
+
 export const getAlbum = (auth: SubsonicAuth, id: string) => api(auth).getAlbum(auth, id);
 
 export const getArtists = (auth: SubsonicAuth, musicFolderId?: string) =>

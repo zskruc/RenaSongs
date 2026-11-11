@@ -20,7 +20,13 @@ export function metadataPatch(song: Song, current: LocalSongMetadata | undefined
     const value = candidate.fields[field];
     if (value === undefined || value === '' || Array.isArray(value) && !value.length) continue;
     const previous = patch[field] ?? raw[field];
-    if (!overwrite && previous !== undefined && previous !== '' && (!Array.isArray(previous) || previous.length)) continue;
+    const nonempty = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+    const present = field === 'genres' ? Array.isArray(previous) && previous.some((entry) => nonempty(entry?.name)) || nonempty(patch.genre ?? raw.genre)
+      : field === 'albumArtist' ? nonempty(previous) || !!raw.albumArtists?.some((artist) => nonempty(artist.name))
+      : typeof previous === 'string' ? previous.trim().length > 0
+      : field === 'year' || field === 'track' || field === 'discNumber' ? Number.isInteger(previous) && Number(previous) > 0
+        : Array.isArray(previous) ? previous.some((entry) => typeof entry === 'object' && entry && typeof entry.name === 'string' && entry.name.trim()) : previous !== undefined && previous !== null;
+    if (!overwrite && present) continue;
     Object.assign(patch, { [field]: value });
     if (field === 'genres' && Array.isArray(value) && value.length) patch.genre = value[0].name;
   }
@@ -48,7 +54,7 @@ export async function applyMetadataCandidate(song: Song, candidate: ScrapeCandid
   if (fields.includes('lyrics') && candidate.lyrics && validLyricDocument(candidate.lyrics) && intent.lyricAfter) {
     const entry = { id: intent.lyricAfter, kind: 'provider' as const, label: candidate.lyricsSource?.provider ?? candidate.provider, lyrics: candidate.lyrics };
     await saveLyricCandidate(hashKey(operation.scope.profile), raw, entry, operation.current); metadataCheck(operation);
-    await selectLyricCandidate(hashKey(operation.scope.profile), raw, entry, operation.current); metadataCheck(operation);
+    await selectLyricCandidate(hashKey(operation.scope.profile), raw, entry, operation.current, intent.lyricBefore ?? null); metadataCheck(operation);
     await queryClient.invalidateQueries({ queryKey: ['lyrics', raw.id] });
   }
   return intentId;
@@ -64,7 +70,7 @@ export async function undoMetadataCandidate(song: Song, intentId: string, operat
     const selected = await chosenLyricSource(hashKey(operation.scope.profile), raw, operation.current);
     if (selected === intent.lyricAfter) {
       const previous = intent.lyricBefore ? (await cachedLyricCandidates(hashKey(operation.scope.profile), raw, operation.current)).find((entry) => entry.id === intent.lyricBefore) ?? null : null;
-      await selectLyricCandidate(hashKey(operation.scope.profile), raw, previous, operation.current);
+      await selectLyricCandidate(hashKey(operation.scope.profile), raw, previous, operation.current, intent.lyricAfter);
       await queryClient.invalidateQueries({ queryKey: ['lyrics', raw.id] });
     }
   }

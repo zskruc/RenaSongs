@@ -167,3 +167,54 @@ test('old downloaded sidecars upgrade in bounded pages and stopped work cannot p
   await assert.rejects(h.api.indexDownloadedLyricsPage('B', 'dir', () => false), /profile changed/);
   assert.equal((await h.api.searchCachedLyrics('B', 'wonderful')).length, 0);
 });
+
+test('actual SQLite source CAS rejects stale null/string expectations and preserves the newer source plus lyric search atomically', async () => {
+  const h = harness(), first = { id: 'cas-first', kind: 'server', lyrics: { synced: false, lines: [{ value: 'oldinitialtoken' }] } },
+    scraped = { id: 'cas-scraped', kind: 'lrclib', lyrics: { synced: false, lines: [{ value: 'stalescrapetoken' }] } },
+    manual = { id: 'cas-manual', kind: 'local', lyrics: { synced: false, lines: [{ value: 'manualwinnertoken' }] } };
+  try {
+    for (const candidate of [first, scraped, manual]) await h.api.saveLyricCandidate('A', song(), candidate);
+    await h.api.selectLyricCandidate('A', song(), first, () => true, null);
+    await h.api.selectLyricCandidate('A', song(), manual, () => true, first.id);
+    for (const stale of [null, first.id]) await assert.rejects(h.api.selectLyricCandidate('A', song(), scraped, () => true, stale), /Local metadata changed/);
+    assert.equal(await h.api.chosenLyricSource('A', song()), manual.id);
+    assert.deepEqual(plain(await h.api.selectedLyrics('A', song())), manual.lyrics);
+    assert.equal((await h.api.searchCachedLyrics('A', 'manualwinnertoken')).length, 1);
+    assert.equal((await h.api.searchCachedLyrics('A', 'stalescrapetoken')).length, 0);
+    assert.equal((await h.api.searchCachedLyrics('A', 'oldinitialtoken')).length, 0);
+  } finally { for (const raw of h.databases.values()) raw.close(); }
+});
+
+test('retrying the same lyric candidate is idempotent even if its original expected source is now stale', async () => {
+  const h = harness(), chosen = { id: 'same-candidate', kind: 'lrclib', lyrics };
+  try {
+    await h.api.saveLyricCandidate('A', song(), chosen);
+    await h.api.selectLyricCandidate('A', song(), chosen, () => true, null);
+    await h.api.selectLyricCandidate('A', song(), chosen, () => true, null);
+    await h.api.selectLyricCandidate('A', song(), chosen, () => true, 'previous-before-retry');
+    assert.equal(await h.api.chosenLyricSource('A', song()), chosen.id);
+    assert.deepEqual(plain(await h.api.selectedLyrics('A', song())), lyrics);
+    assert.equal((await h.api.searchCachedLyrics('A', 'wonderful')).length, 1);
+    assert.equal(h.databases.get('A')!.prepare('SELECT COUNT(*) AS count FROM lyric_search').get()!.count, 1);
+  } finally { for (const raw of h.databases.values()) raw.close(); }
+});
+
+test('undo with a captured lyric source cannot overwrite a manual choice committed after the undo read', async () => {
+  for (const restoringOriginal of [false, true]) {
+    const h = harness(), original = { id: 'undo-original', kind: 'server', lyrics: { synced: false, lines: [{ value: 'originalrestorationtoken' }] } },
+      applied = { id: 'undo-applied', kind: 'lrclib', lyrics: { synced: false, lines: [{ value: 'appliedintenttoken' }] } },
+      manual = { id: 'undo-manual', kind: 'local', lyrics: { synced: false, lines: [{ value: 'manualafterundoreadtoken' }] } };
+    try {
+      for (const candidate of [original, applied, manual]) await h.api.saveLyricCandidate('A', song(), candidate);
+      await h.api.selectLyricCandidate('A', song(), applied, () => true, null);
+      const expectedAfter = await h.api.chosenLyricSource('A', song());
+      await h.api.selectLyricCandidate('A', song(), manual, () => true, applied.id);
+      await assert.rejects(h.api.selectLyricCandidate('A', song(), restoringOriginal ? original : null, () => true, expectedAfter), /Local metadata changed/);
+      assert.equal(await h.api.chosenLyricSource('A', song()), manual.id);
+      assert.deepEqual(plain(await h.api.selectedLyrics('A', song())), manual.lyrics);
+      assert.equal((await h.api.searchCachedLyrics('A', 'manualafterundoreadtoken')).length, 1);
+      assert.equal((await h.api.searchCachedLyrics('A', 'originalrestorationtoken')).length, 0);
+      assert.equal((await h.api.searchCachedLyrics('A', 'appliedintenttoken')).length, 0);
+    } finally { for (const raw of h.databases.values()) raw.close(); }
+  }
+});

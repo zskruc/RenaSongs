@@ -85,6 +85,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
   const actionClosing = useRef(false);
   const exiting = useRef(false);
   const gestureTicket = useRef<number | null>(null);
+  const [metadataOwner] = useState(() => captureCustomizationOwner());
   const [requests] = useState(() => new MenuRequestScope(() => {
     const current = useMediaMenu.getState();
     return current.session === session && current.item !== null ||
@@ -420,9 +421,20 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                 }}
               />
             ) : null}
-            {album ? <Action icon="search-outline" label={t('Metadata and local artwork')} onPress={() => { const current = captureCustomizationOwner(); void withSongs((songs) => {
-              if (!current()) return; openMetadataTarget({ kind: 'album', id: album.id, title: album.name, songs }); router.push('/metadata');
-            }); }} /> : null}
+            {album ? <Action icon="search-outline" label={t('Metadata and local artwork')} onPress={() => {
+              if (!metadataOwner()) return;
+              dismissAction(() => {
+                if (!metadataOwner()) return;
+                openMetadataTarget({ kind: 'album', id: album.id, title: album.name, songs: [] }); router.push('/metadata');
+              });
+            }} /> : null}
+            <Action icon="search-outline" label={t('Batch scrape metadata')} onPress={() => {
+              if (!metadataOwner()) return;
+              dismissAction(() => {
+                if (!metadataOwner()) return;
+                router.push({ pathname: '/metadata/bulk', params: { kind: item.kind, id: album ? album.id : playlist!.id, title: name } });
+              });
+            }} />
             {/* Albums only: a playlist is nobody's. The song menu has had this
                 since always and an album is the one thing on screen that names
                 an artist without offering a way to them. */}

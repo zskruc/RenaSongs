@@ -13,7 +13,7 @@ import type { SongLyrics } from '@/api/subsonic';
 type Json = Record<string, unknown>;
 async function endpoint(profile: ScraperProfile, key: 'search' | 'detail' | 'cover' | 'lyrics', variables: Record<string, string>, operation: ScrapeOperation): Promise<unknown> {
   const config = profile[key]; if (!config) return null;
-  const credentials = await scraperCredentials(profile.id, operation); metadataCheck(operation);
+  const credentials = await scraperCredentials(profile.id, operation, profile); metadataCheck(operation);
   const replacements = { ...credentials.secrets, ...variables };
   const location = new URL(expandMetadataTemplate(config.url, replacements));
   for (const [name, value] of Object.entries(config.params ?? {})) location.searchParams.set(name, expandMetadataTemplate(value, replacements, false));
@@ -78,7 +78,7 @@ export async function detailCustomMetadata(profile: ScraperProfile, candidate: S
 }
 async function customLyrics(profile: ScraperProfile, data: unknown, config: MetadataEndpoint, operation: ScrapeOperation): Promise<SongLyrics | null> {
   if (data && typeof data === 'object' && ((data as Json)._fetchEncryptedLyrics === true || (data as Json)._fetchLyrics === true)) {
-    const credentials = await scraperCredentials(profile.id, operation); metadataCheck(operation);
+    const credentials = await scraperCredentials(profile.id, operation, profile); metadataCheck(operation);
     const secrets = credentials.secrets ?? {}, variables = (data as Json).vars;
     const variants = (Array.isArray(variables) ? variables : [variables]).slice(0, 5);
     let best: SongLyrics | null = null, longest = 0;

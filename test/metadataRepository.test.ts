@@ -148,6 +148,47 @@ test('restoring a changed source recipe clears its old credentials while an unch
   } finally { h.close(); }
 });
 
+test('retained tasks can read credentials only for the exact saved source recipe, including queued source edits', async () => {
+  const h = harness(); try {
+    const original = { version: 1, id: 'recipe_bound', name: 'Private', capabilities: ['metadata'], search: { url: 'https://first.example/search', headers: { Authorization: 'Bearer first' } } };
+    const snapshot = await h.repository.saveScraperProfile(original), op = h.repository.metadataOperation();
+    assert.ok(JSON.stringify(await h.repository.scraperCredentials(snapshot.id, op, snapshot)).includes('Bearer first'));
+    let release!: () => void;
+    h.gate(() => new Promise<void>((resolve) => { release = resolve; }));
+    const change = h.repository.saveScraperProfile({ ...original, search: { url: 'https://second.example/search', headers: { Authorization: 'Bearer second' } } }, op);
+    while (!release) await new Promise((resolve) => setTimeout(resolve, 0));
+    const staleRead = h.repository.scraperCredentials(snapshot.id, op, snapshot);
+    release(); await change;
+    await assert.rejects(staleRead, /Scraping source changed/);
+    const current = await h.repository.exportScraperProfileSafe(original.id);
+    assert.ok(JSON.stringify(await h.repository.scraperCredentials(current.id, op, current)).includes('Bearer second'));
+    await h.repository.deleteScraperProfile(original.id);
+    await assert.rejects(h.repository.scraperCredentials(snapshot.id, op, snapshot), /Scraping source changed/);
+  } finally { h.close(); }
+});
+
+test('fill-missing applies positive numeric tags over zero and text over whitespace while preserving alternative tags', () => {
+  const h = harness(); try {
+    const raw = { id: 'missing', title: '   ', artist: '  ', album: 'Album', year: 0, track: 0, discNumber: 0, genre: 'Jazz', albumArtists: [{ id: 'a', name: 'Existing credited artist' }] };
+    const candidate = { fields: { title: 'Correct title', artist: 'Singer', album: 'Other album', year: 2020, track: 3, discNumber: 1, genres: [{ name: 'Pop' }], albumArtist: 'Other credit' } };
+    const patch = h.apply.metadataPatch(raw, undefined, candidate, ['title', 'artist', 'album', 'year', 'track', 'discNumber', 'genres', 'albumArtist'], false);
+    assert.deepEqual(JSON.parse(JSON.stringify(patch)), { title: 'Correct title', artist: 'Singer', year: 2020, track: 3, discNumber: 1 });
+  } finally { h.close(); }
+});
+
+test('metadata artwork compare-and-set cannot replace a newer manual choice or delete it on retry', async () => {
+  const h = harness(); try {
+    const op = h.repository.metadataOperation(), original = { uri: 'file:///app/old.png' }, manual = { uri: 'file:///app/manual.png' };
+    await h.repository.saveMetadataRecord('artwork', 'song:s', original, op);
+    await h.repository.saveMetadataRecord('artwork', 'song:s', manual, op);
+    await assert.rejects(h.repository.saveMetadataRecord('artwork', 'song:s', { uri: 'file:///app/provider.png' }, op, { expected: original }), /Local metadata changed/);
+    assert.deepEqual(JSON.parse(JSON.stringify(await h.repository.readMetadataRecord('artwork', 'song:s', op))), manual);
+    await assert.rejects(h.repository.saveMetadataRecord('artwork', 'song:s', undefined, op, { expected: undefined }), /Local metadata changed/);
+    await h.repository.saveMetadataRecord('artwork', 'song:s', original, op, { expected: manual });
+    assert.deepEqual(JSON.parse(JSON.stringify(await h.repository.readMetadataRecord('artwork', 'song:s', op))), original);
+  } finally { h.close(); }
+});
+
 test('a source commit followed immediately by an account handoff never restores old credentials onto its new recipe', async () => {
   const h = harness(); try {
     const config = { version: 1, id: 'private_source', name: 'Private', capabilities: ['metadata'], search: { url: 'https://old.example/search', headers: { Authorization: 'Bearer old' } }, secrets: { seed: 'old' } };

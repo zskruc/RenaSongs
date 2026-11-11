@@ -5,7 +5,7 @@
      `src/i18n/context.jsonc`, and where a string shows up is read off the
      code, so both are fixed at the source and this page follows. -->
 
-Every string the app can show, under the screen it shows up on. 1998 of them.
+Every string the app can show, under the screen it shows up on. 2055 of them.
 The second column is only filled in where the English is ambiguous on its own
 If one tripped you up and the column is empty, that is worth telling us, and
 the answer goes into `src/i18n/context.jsonc` where the next translator of the
@@ -236,6 +236,7 @@ you are actually typing into, which is easier than reading it here.
 | `No songs here yet` |  |
 | `Nothing to change` | Answer to favouriting a selection that already is one, or unfavouriting one that isn't |
 | `Release date` |  |
+| `Scrape selected songs` |  |
 | `Try exploring another artist.` |  |
 
 ## Audiobooks
@@ -289,6 +290,7 @@ you are actually typing into, which is easier than reading it here.
 | `No songs yet` | Empty state when the library has no songs |
 | `Nothing played yet` | Empty state: this phone has not played anything yet |
 | `Nothing to change` | Answer to favouriting a selection that already is one, or unfavouriting one that isn't |
+| `Scrape selected songs` |  |
 | `Your library looks empty.` | Empty state: the server answered, and had nothing |
 | `Your most played songs will show up here.` | Empty state, before anything has been played |
 | `Your recently played songs will show up here.` | Empty state, before anything has been played |
@@ -359,6 +361,7 @@ you are actually typing into, which is easier than reading it here.
 | `No albums in this genre` | Empty state heading |
 | `No songs in this genre` | Empty state heading |
 | `Nothing to change` | Answer to favouriting a selection that already is one, or unfavouriting one that isn't |
+| `Scrape selected songs` |  |
 | `Try exploring another genre.` | Empty state subtitle on a genre screen |
 
 ## Genres
@@ -699,24 +702,34 @@ you are actually typing into, which is easier than reading it here.
 | String | What it is |
 | --- | --- |
 | `{n} need review` |  |
+| `All music, missing fields, selected songs, albums, artists and playlists` |  |
 | `Apply policy` |  |
 | `Changes stay inside this app. NAS files, server tags, playback IDs and your glass settings are unchanged.` |  |
 | `Choose local artwork` |  |
+| `Choose songs first` |  |
 | `Could not complete this song` |  |
+| `Could not continue this task. Resume to retry.` |  |
+| `Could not load metadata tasks` |  |
 | `Could not save metadata settings` |  |
 | `Custom scraping sources` |  |
 | `Existing tag fields and manual corrections are kept. Turn off to review replacements.` |  |
 | `Find a sourced biography` |  |
 | `Import a JSON file or HTTPS configuration. Review domains and capabilities before enabling.` |  |
+| `Invalid catalogue song` |  |
+| `Invalid metadata catalogue page` |  |
+| `Invalid saved bulk task` |  |
+| `Invalid saved metadata item` |  |
 | `LRCLIB` |  |
 | `Metadata centre` |  |
+| `Metadata profile is being removed` |  |
+| `Metadata recording changed. Review again.` |  |
+| `Metadata task item not found` |  |
+| `Metadata task record is too large` |  |
 | `Metadata tasks` |  |
 | `Move down` |  |
 | `Move up` |  |
 | `Only fill missing tag fields` |  |
 | `Open a song, album or artist menu to choose what to edit.` |  |
-| `review` |  |
-| `skipped` |  |
 | `Sources in priority order` |  |
 | `Tasks start only after your action. Interrupted work can be resumed; paused tasks never restart automatically.` |  |
 
@@ -770,6 +783,97 @@ you are actually typing into, which is easier than reading it here.
 | `Start metadata task` |  |
 | `Unmatched or ambiguous tracks wait for review. A release track cannot be assigned twice.` |  |
 | `Year` | Label of a field in the song information sheet: the year of the release |
+
+## Metadata › Bulk
+
+| String | What it is |
+| --- | --- |
+| `{n} songs selected` |  |
+| `All music` | One of the values of “Music range” |
+| `Change selection` | The line under “Music range”, explaining it |
+| `Choose a playlist` |  |
+| `Choose a range once. The task reads and processes music in pages, including libraries larger than 1,000 songs.` |  |
+| `Choose an album` | One of the values of “Music range” |
+| `Choose an artist` |  |
+| `Choose at least one metadata field` |  |
+| `Choose metadata fields` |  |
+| `Choose songs first` |  |
+| `Clear selection` |  |
+| `Confident matches are saved inside this app. Ambiguous recordings wait for review. NAS metadata and audio files are unchanged.` |  |
+| `Could not continue this task. Resume to retry.` |  |
+| `Could not load metadata tasks` |  |
+| `Could not read this music range. Retry without changing your selection.` |  |
+| `Could not start this metadata task. Your selection has been kept.` |  |
+| `Download the audio or choose a local file first` |  |
+| `Find an album, artist or playlist` |  |
+| `Find songs to select` |  |
+| `Hide metadata fields` |  |
+| `Invalid catalogue song` |  |
+| `Invalid metadata catalogue page` |  |
+| `Invalid saved bulk task` |  |
+| `Invalid saved metadata item` |  |
+| `Load more` |  |
+| `Local audio is unavailable` |  |
+| `Local audio owner changed` |  |
+| `Metadata profile is being removed` |  |
+| `Metadata recording changed. Review again.` |  |
+| `Metadata task item not found` |  |
+| `Metadata task record is too large` |  |
+| `Music range` |  |
+| `No matches on this page. Continue loading or start the full task.` |  |
+| `No matching music in this range` |  |
+| `Off: only fill missing fields and keep existing artwork and lyrics.` |  |
+| `Only songs missing the selected fields enter the queue. Existing fields, artwork and lyrics are kept.` |  |
+| `Preparing metadata task…` |  |
+| `Range preview` |  |
+| `Replace selected existing fields` |  |
+| `Scrape {n} selected songs` |  |
+| `Select loaded songs` |  |
+| `Select songs manually` |  |
+| `Selected songs` |  |
+| `Showing up to seven songs. Starting processes the full chosen range; scrolling is not required.` |  |
+| `Songs with missing metadata` |  |
+| `Start scraping` |  |
+| `The local file identity could not be verified` |  |
+| `The music source changed. Reopen this page to choose songs again.` |  |
+| `The previous selection expired. Select songs again.` |  |
+
+## Metadata › Bulk task
+
+| String | What it is |
+| --- | --- |
+| `Bulk metadata task` |  |
+| `Cancel task` |  |
+| `Catalogue cursor did not advance` |  |
+| `Choose songs first` |  |
+| `Could not complete this action. Existing progress was kept.` |  |
+| `Could not complete this song` |  |
+| `Could not continue this task. Resume to retry.` |  |
+| `Could not load metadata tasks` |  |
+| `Could not load this metadata task. Tap retry.` |  |
+| `Could not resume this task` |  |
+| `Invalid catalogue song` |  |
+| `Invalid metadata catalogue page` |  |
+| `Invalid saved bulk task` |  |
+| `Invalid saved metadata item` |  |
+| `Leaving this page keeps an active task running with background protection. Paused tasks resume only when you choose. Cancelling keeps completed changes.` |  |
+| `Metadata profile is being removed` |  |
+| `Metadata recording changed. Review again.` |  |
+| `Metadata task item not found` |  |
+| `Metadata task not found` |  |
+| `Metadata task record is too large` |  |
+| `Next page` |  |
+| `No confident metadata match. Review this song.` |  |
+| `Pause task` |  |
+| `Previous page` |  |
+| `Processing queued songs` |  |
+| `Reading music in pages` |  |
+| `Resume task` |  |
+| `Retry failed songs` |  |
+| `Review this song` |  |
+| `Saved {applied} · Needs review {review} · Failed {failed} · Skipped {skipped}` |  |
+| `Scanned {scanned} · Queued {queued} · Processed {processed}` |  |
+| `The music source changed. Reopen this page to choose songs again.` |  |
 
 ## Metadata › Insight
 
@@ -860,9 +964,7 @@ you are actually typing into, which is easier than reading it here.
 | `Previous page` |  |
 | `Resume task` |  |
 | `Retry failed songs` |  |
-| `review` |  |
 | `Review this song` |  |
-| `skipped` |  |
 | `Some edits changed later and were kept for review.` |  |
 | `Undo applied tag and lyric changes` |  |
 
@@ -2750,6 +2852,8 @@ you are actually typing into, which is easier than reading it here.
 | `{songs} will be saved to this device (about {size}).` | The same line when the size is known. `{size}` is like "340 MB" |
 | `{songs} will be saved to this device.` | The line under that title. `{songs}` is already worded and inflected, "12 songs" |
 | `A CUE import or cleanup is in progress. Try again when it finishes.` |  |
+| `A metadata task is already running` |  |
+| `A metadata task is already starting` |  |
 | `Add missing songs or remove all matching entries from a selected playlist.` |  |
 | `Add podcast` |  |
 | `Add to a playlist` | Menu action: put this song, album or selection into a playlist |
@@ -2766,6 +2870,7 @@ you are actually typing into, which is easier than reading it here.
 | `Artwork` |  |
 | `Ascending` | Sort option: the order of a list |
 | `Back` | Screen reader label for the back arrow. A direction, not a verb |
+| `Batch scrape metadata` |  |
 | `Cancel` | The button that closes a dialog without doing anything, and the one beside a search box |
 | `Cancel request` |  |
 | `cancelled` |  |
@@ -2888,9 +2993,11 @@ you are actually typing into, which is easier than reading it here.
 | `Reorder` | Enter drag-to-reorder mode |
 | `Restore defaults` | Button at the end of the `Scrobbling` screen, putting both rules back to what they came as |
 | `Retry` | The button on an error message: try again. A verb |
+| `review` |  |
 | `running` |  |
 | `Save` | The confirm button of an edit sheet. A verb |
 | `Saving…` |  |
+| `Scraping source changed. Review the task before retrying.` |  |
 | `Search` | The search tab, and the action of searching |
 | `Search this library` |  |
 | `Select all` | Tick every song in the list at once |
@@ -2905,6 +3012,7 @@ you are actually typing into, which is easier than reading it here.
 | `Shuffle` | Play in random order |
 | `Skip intro` |  |
 | `Skip outro` |  |
+| `skipped` |  |
 | `Sleep timer` | Stop playing after a while, for falling asleep to |
 | `Song downloaded` | Toast: one song finished |
 | `Songs` | Always a heading, never a count, so it wants the plain plural your language uses for a list of them ("Songs", not "of songs"). Counting songs is a different thing and goes through the plural forms |

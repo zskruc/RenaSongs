@@ -90,7 +90,7 @@ test('the actual profile cleanup retires ownership and drains SQL before CUE cle
  const gate=deferred();h.holdWrite(gate.promise);const write=h.extras.writeListeningExtra('held-write',{safe:true},h.scope,h.owns());await tick();
  const noop=async()=>{},clear=()=>events.push('clear');
  const modules:Record<string,any>={
-  'expo-file-system/legacy':h.fs,'./downloadsDb':{closeCatalog:noop},'./localLibrary':h.local,'./mediaCacheDb':{...h.media,closeMediaCacheFor:async()=>{assert.ok(events.includes('drained'));events.push('close');}},
+  'expo-file-system/legacy':h.fs,'./downloadsDb':{closeCatalog:noop},'./localLibrary':h.local,'./mediaCacheDb':{...h.media,closeMediaCacheFor:async()=>{assert.ok(events.includes('drained'));assert.ok(events.includes('bulk-drained'));events.push('close');}},
   './mirrorDb':{closeMirrorFor:noop},'./mirrorCovers':{removeMirrorCovers:noop},'./podcastDb':{closePodcastDb:noop,podcastDbDir:()=> 'file:///app/podcast/'},
   './serverUrls':{primaryUrl:()=> 'scope'},'./songCacheDb':{closeCacheDb:noop},'./storage':{deleteItem:noop},'@/store/offlineQueue':{stopOfflineQueueProfile:noop},
   './cueLibrary':h.api,'./podcastStorage':{stopPodcastStorageProfile:noop},'./playbackCheckpoint':{clearPlaybackCheckpoint:noop},
@@ -99,6 +99,7 @@ test('the actual profile cleanup retires ownership and drains SQL before CUE cle
   '@/store/playlistRecovery':{clearPlaylistRecoveryProfile:noop},'./musicDiscoveryIndex':{clearMusicDiscoveryProfile:noop},'@/store/pendingSongMarks':{clearPendingSongMarksProfile:noop},
   '@/store/playlistRecoveryJournal':{clearRecoveryJournalsProfile:noop},'@/store/pins':{clearPinsProfile:noop},'./personalPlaybackBackup':{clearPersonalPlaybackProfile:noop},
   './metadata/repository':{clearMetadataProfile:clear},'./recentlyDeleted':{clearRecentlyDeletedProfile:clear},
+  '@/store/metadataBulk':{clearBulkMetadataProfile:async(profile:string)=>{assert.equal(profile,'scope|A');assert.ok(events.includes('retire'));events.push('bulk-drained');}},
   './lyricAlignmentService':{drainAlignmentCredentialWrites:noop},
   './listeningExtras':{drainListeningExtrasProfile:async(profile:string)=>{events.push('drain');await h.extras.drainListeningExtrasProfile(profile);events.push('drained');}},
  };

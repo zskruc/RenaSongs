@@ -8,19 +8,20 @@ export { metadataImageHeader } from './imageHeader';
 
 const MAX_BYTES = 20 * 1024 * 1024;
 const directory = (operation: ScrapeOperation) => `${FileSystem.documentDirectory}metadata-artwork/${hashKey(operation.scope.profile)}/${hashKey(operation.scope.source)}/`;
-async function finishArtwork(temporary: string, kind: MetadataKind, id: string, operation: ScrapeOperation): Promise<MetadataArtwork> {
+async function finishArtwork(temporary: string, kind: MetadataKind, id: string, operation: ScrapeOperation, comparison?: { expected: MetadataArtwork | undefined }, beforeCommit?: () => Promise<void>): Promise<MetadataArtwork> {
   metadataCheck(operation); const info = await FileSystem.getInfoAsync(temporary); metadataCheck(operation);
   if (!info.exists || info.isDirectory || !info.size || info.size > MAX_BYTES) throw new Error('Image must be smaller than 20 MiB');
   const prefix = await FileSystem.readAsStringAsync(temporary, { encoding: FileSystem.EncodingType.Base64, position: 0, length: Math.min(65536, info.size) }); metadataCheck(operation);
   const header = metadataImageHeader(Uint8Array.from(atob(prefix), (character) => character.charCodeAt(0)));
   if (!validMetadataImageBounds(header)) throw new Error('Unsupported or oversized artwork');
-  const previous = await readMetadataRecord<MetadataArtwork>('artwork', `${kind}:${id}`, operation);
+  const previous = comparison ? comparison.expected : await readMetadataRecord<MetadataArtwork>('artwork', `${kind}:${id}`, operation);
   const uri = `${directory(operation)}${kind}-${hashKey(id)}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}.${header!.extension}`;
   await FileSystem.makeDirectoryAsync(directory(operation), { intermediates: true }); metadataCheck(operation);
   await FileSystem.copyAsync({ from: temporary, to: uri });
   try {
     metadataCheck(operation); const value = { uri, bytes: info.size, mime: header!.mime, updatedAt: Date.now() };
-    await saveMetadataRecord('artwork', `${kind}:${id}`, value, operation);
+    if (beforeCommit) await beforeCommit(); metadataCheck(operation);
+    await saveMetadataRecord('artwork', `${kind}:${id}`, value, operation, { expected: previous });
     if (previous?.uri.startsWith(directory(operation))) void FileSystem.deleteAsync(previous.uri, { idempotent: true }).catch(() => {});
     return value;
   } catch (error) { void FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {}); throw error; }
@@ -28,8 +29,9 @@ async function finishArtwork(temporary: string, kind: MetadataKind, id: string, 
 export async function savePickedMetadataArtwork(uri: string, kind: MetadataKind, id: string, operation: ScrapeOperation): Promise<MetadataArtwork> {
   if (!/^(file|content):/i.test(uri)) throw new Error('Choose a local image'); return finishArtwork(uri, kind, id, operation);
 }
-export async function fetchMetadataArtwork(url: string, kind: MetadataKind, id: string, operation: ScrapeOperation): Promise<MetadataArtwork> {
+export async function fetchMetadataArtwork(url: string, kind: MetadataKind, id: string, operation: ScrapeOperation, beforeCommit?: () => Promise<void>): Promise<MetadataArtwork> {
   metadataCheck(operation); if (isManualOffline() || !metadataUrl(url)) throw new Error('Artwork is unavailable offline');
+  const expected = await readMetadataRecord<MetadataArtwork>('artwork', `${kind}:${id}`, operation); metadataCheck(operation);
   await FileSystem.makeDirectoryAsync(directory(operation), { intermediates: true }); metadataCheck(operation);
   const temporary = `${directory(operation)}part-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}.tmp`;
   let stop!: () => void, timeout: ReturnType<typeof setTimeout> | undefined;
@@ -42,7 +44,7 @@ export async function fetchMetadataArtwork(url: string, kind: MetadataKind, id: 
   try {
     const result = await Promise.race([native, cancelled]); metadataCheck(operation);
     if (!result || result.status < 200 || result.status >= 300) throw new Error('Could not load artwork');
-    return await finishArtwork(temporary, kind, id, operation);
+    return await finishArtwork(temporary, kind, id, operation, { expected }, beforeCommit);
   } finally {
     if (timeout) clearTimeout(timeout); operation.signal?.removeEventListener('abort', stop);
     void download.cancelAsync().catch(() => {});

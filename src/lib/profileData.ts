@@ -111,6 +111,8 @@ export async function deleteProfileData(auth: SubsonicAuth): Promise<void> {
     import('./metadata/repository'), import('./recentlyDeleted'), import('./listeningExtras'), import('./cueLibrary'),
   ]);
   await Promise.all([clearMetadataProfile(rawScope), clearRecentlyDeletedProfile(rawScope)]);
+  const { clearBulkMetadataProfile } = await import('@/store/metadataBulk');
+  await clearBulkMetadataProfile(rawScope);
   const { drainAlignmentCredentialWrites } = await import('./lyricAlignmentService');
   await drainAlignmentCredentialWrites(rawScope);
   await drainListeningExtrasProfile(rawScope);

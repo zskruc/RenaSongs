@@ -52,7 +52,7 @@ export async function listMetadataRecords<T>(kind: MetadataRecordKind, operation
   const rows = await db.getAllAsync<{ id: string; data: string }>('SELECT id,data FROM metadata_records WHERE source=? AND kind=? ORDER BY updated_at DESC LIMIT ?', operation.scope.source, kind, Math.max(1, Math.min(1000, limit)));
   metadataCheck(operation); return rows.map((row) => ({ id: row.id, value: JSON.parse(row.data) as T }));
 }
-export async function saveMetadataRecord(kind: MetadataRecordKind, id: string, value: unknown | undefined, operation = metadataOperation()): Promise<void> {
+export async function saveMetadataRecord(kind: MetadataRecordKind, id: string, value: unknown | undefined, operation = metadataOperation(), comparison?: { expected: unknown }): Promise<void> {
   checkIdentity(id); if (!kinds.includes(kind)) throw new Error('Invalid metadata kind');
   if (value !== undefined && (kind === 'settings' && !validMetadataSettings(value) || kind === 'insight' && !validMetadataInsight(value))) throw new Error('Invalid metadata document');
   const text = value === undefined ? undefined : JSON.stringify(value);
@@ -60,12 +60,17 @@ export async function saveMetadataRecord(kind: MetadataRecordKind, id: string, v
   metadataCheck(operation);
   await serial(operation.scope.profile, async () => {
     metadataCheck(operation); const db = await database(operation.scope); metadataCheck(operation);
-    await commitRecord(db, kind, id, text, operation); notify(kind);
+    await commitRecord(db, kind, id, text, operation, undefined, comparison); notify(kind);
   });
 }
-async function commitRecord(db: Awaited<ReturnType<typeof database>>, kind: MetadataRecordKind, id: string, text: string | undefined, operation: ScrapeOperation, didCommit?: () => void) {
+async function commitRecord(db: Awaited<ReturnType<typeof database>>, kind: MetadataRecordKind, id: string, text: string | undefined, operation: ScrapeOperation, didCommit?: () => void, comparison?: { expected: unknown }) {
   await db.withExclusiveTransactionAsync(async (transaction) => {
     metadataCheck(operation);
+    if (comparison) {
+      const previous = await transaction.getFirstAsync<{ data: string }>('SELECT data FROM metadata_records WHERE source=? AND kind=? AND id=?', operation.scope.source, kind, id);
+      if ((previous?.data ?? null) !== (comparison.expected === undefined ? null : JSON.stringify(comparison.expected))) throw new Error('Local metadata changed. Review again.');
+      metadataCheck(operation);
+    }
     if (text === undefined) await transaction.runAsync('DELETE FROM metadata_records WHERE source=? AND kind=? AND id=?', operation.scope.source, kind, id);
     else await transaction.runAsync('INSERT OR REPLACE INTO metadata_records(source,kind,id,data,updated_at) VALUES(?,?,?,?,?)', operation.scope.source, kind, id, text, Date.now());
     metadataCheck(operation);
@@ -73,9 +78,24 @@ async function commitRecord(db: Awaited<ReturnType<typeof database>>, kind: Meta
 }
 const scraperRecipe = (profile: ScraperProfile | undefined) => profile ? JSON.stringify([profile.search, profile.detail, profile.cover, profile.lyrics, profile.lyricsFallback]) : '';
 function credentialKey(scope: CustomizationScope, id: string) { return `metadata.${hashKey(scope.profile)}.${hashKey(scope.source)}.${id}`; }
-export async function scraperCredentials(id: string, operation = metadataOperation()): Promise<{ headers?: Record<string, Record<string, string>>; secrets?: Record<string, string> }> {
-  metadataCheck(operation); const text = await SecureStore.getItemAsync(credentialKey(operation.scope, id)); metadataCheck(operation);
-  try { return text ? JSON.parse(text) : {}; } catch { throw new Error('Invalid stored scraper credentials'); }
+export async function scraperCredentials(id: string, operation = metadataOperation(), expectedProfile?: ScraperProfile): Promise<{ headers?: Record<string, Record<string, string>>; secrets?: Record<string, string> }> {
+  metadataCheck(operation);
+  const read = async () => {
+    metadataCheck(operation);
+    if (expectedProfile) {
+      const db = await database(operation.scope); metadataCheck(operation);
+      const row = await db.getFirstAsync<{ data: string }>("SELECT data FROM metadata_records WHERE source=? AND kind='provider' AND id=?", operation.scope.source, id);
+      metadataCheck(operation);
+      if (expectedProfile.id !== id || !row || scraperRecipe(safeScraperProfile(JSON.parse(row.data))) !== scraperRecipe(safeScraperProfile(expectedProfile))) {
+        throw new Error('Scraping source changed. Review the task before retrying.');
+      }
+    }
+    const text = await SecureStore.getItemAsync(credentialKey(operation.scope, id)); metadataCheck(operation);
+    try { return text ? JSON.parse(text) : {}; } catch { throw new Error('Invalid stored scraper credentials'); }
+  };
+  // Source saves and credential reads share the same queue: a retained task
+  // cannot send a newly edited source's secrets to its previous endpoint.
+  return expectedProfile ? serial(operation.scope.profile, read) : read();
 }
 /** Secret-bearing headers are accepted only into SecureStore, not task/backup JSON. */
 export async function saveScraperProfile(raw: unknown, operation = metadataOperation()): Promise<ScraperProfile> {

@@ -88,6 +88,7 @@ const ITEM_COUNTS = 'ItemCounts';
 /** Subset of BaseItemDto that the app uses. */
 interface JfItem {
   Id: string;
+  Type?: string;
   Name?: string;
   Overview?: string;
   Album?: string;
@@ -567,6 +568,20 @@ export async function getSongsByGenre(
     ...(dir ? { SortOrder: dir === 'asc' ? 'Ascending' : 'Descending' } : {}),
   });
   return (res.Items ?? []).map(toSong);
+}
+
+/** Resolve one recording without walking every page of a Jellyfin library. */
+export async function getSong(auth: SubsonicAuth, id: string): Promise<Song | null> {
+  try {
+    const item = await request<JfItem>(auth, `/Users/${auth.jfUserId}/Items/${encodeURIComponent(id)}`, { Fields: SONG_FIELDS });
+    // A successful response must identify this exact audio item. Albums, video
+    // and incomplete/unexpected DTOs must not become recording metadata.
+    if (!item || item.Id !== id || item.Type !== 'Audio') throw new SubsonicRequestError(tg('Unexpected server response'), false);
+    return toSong(item);
+  } catch (error) {
+    if (error instanceof SubsonicRequestError && error.code === 404) return null;
+    throw error;
+  }
 }
 
 export async function getAlbum(

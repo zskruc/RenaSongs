@@ -20,6 +20,23 @@ and pending tasks are available even when no target is selected.
 设置 → 音乐工具与自定义 → 元数据中心。先在歌曲、专辑或艺人菜单选择目标，
 再搜索候选、检查版本与逐字段应用。来源配置和任务列表可直接从设置管理。
 
+Album, artist and playlist menus also offer **Batch scrape metadata**, which opens
+one shared chooser with the entity identity. Opening the chooser does not fetch
+an entire discography first. The separate **Metadata and local artwork** entry
+still opens the album/artist artwork and sourced description tools directly.
+Song-list multi-select menus offer **Scrape selected songs**. Their complete unique
+song IDs are handed to the chooser in app memory, rather than embedded in a long
+URL or truncated to the first 1,000. A replaced selection, account/source change
+or app restart retires the previous handoff; failed task creation can keep the
+current selection for retry.
+
+专辑、艺人和播放列表菜单新增“批量刮削元数据”，统一进入批量选择页面；
+打开页面时只传递目标身份，不先加载整套唱片目录。原有“元数据与本地封面”
+仍可直接进入专辑／艺人的本地封面和来源简介工具。歌曲列表的多选菜单新增
+“刮削所选歌曲”，完整去重后的歌曲编号通过本次 App 会话传递，不塞入长链接，
+也不截取前 1,000 首。重新选择、切换账号／来源或重启 App 后旧选择失效；
+任务创建失败时可保留当前选择重试。
+
 - iTunes and MusicBrainz: recording/release candidates, artwork and release reconciliation.
 - LRCLIB, AMLL TTML and custom endpoints: selectable lyric candidates.
 - MusicBrainz/Wikipedia: sourced artist/album text, with provenance.

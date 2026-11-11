@@ -16,7 +16,8 @@
  * is gone by the time it is asked, since choosing an action leaves selection
  * mode.
  */
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useIsFocused, useRouter } from 'expo-router';
 
 import { star, unstar } from '@/api/data';
 import { type Song } from '@/api/subsonic';
@@ -27,6 +28,8 @@ import { exportManyToFolder, totalBytes } from '@/lib/exportSong';
 import { applyStarChange, resyncFavorites } from '@/lib/favoritesCache';
 import { formatBytes } from '@/lib/format';
 import { pickFolder } from '@/lib/localLibrary';
+import { captureCustomizationOwner } from '@/lib/localCustomizations';
+import { clearSelectedMetadataSongs, createSelectedMetadataSongs } from '@/store/metadataBulkSelection';
 import { anyDownloads, useDownloads } from '@/store/downloads';
 import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
@@ -43,6 +46,14 @@ export function useSelectionMenu(
   },
 ): { actions: SelectionAction[]; dialogs: ReactNode } {
   const t = useT();
+  const router = useRouter(), focused = useIsFocused();
+  const openingMetadata = useRef(false), metadataReady = useRef(false);
+  const metadataOwner = captureCustomizationOwner();
+  useEffect(() => {
+    metadataReady.current = focused;
+    if (focused) openingMetadata.current = false;
+    return () => { metadataReady.current = false; };
+  }, [focused]);
   const lang = useSettings((s) => s.language);
   const toast = useToast((s) => s.show);
   const favIds = useFavoriteIds();
@@ -152,7 +163,26 @@ export function useSelectionMenu(
     : [];
 
   return {
-    actions: [...favorites, ...downloaded],
+    actions: [...favorites, {
+      icon: 'search-outline',
+      label: t('Scrape selected songs'),
+      onPress: () => {
+        if (!metadataReady.current || openingMetadata.current || !metadataOwner()) return;
+        run((songs) => {
+          if (!songs.length || !metadataReady.current || openingMetadata.current || !metadataOwner()) return;
+          openingMetadata.current = true;
+          let selection: string | undefined;
+          try {
+            selection = createSelectedMetadataSongs(songs);
+            router.push({ pathname: '/metadata/bulk', params: { kind: 'selected', selection } });
+          } catch {
+            if (selection) clearSelectedMetadataSongs(selection);
+            openingMetadata.current = false;
+            if (metadataOwner()) toast(t("Couldn't complete the action"));
+          }
+        });
+      },
+    }, ...downloaded],
     dialogs: (
       // Asked before the folder picker, not after: the size is the part worth
       // knowing while there is still nothing to undo.

@@ -1,3 +1,4 @@
+import { claimMetadataRun, metadataRunIsBusy } from '@/lib/metadata/runLock';
 import { create } from 'zustand';
 import type { Song } from '@/api/subsonic';
 import { getSong } from '@/api/data';
@@ -76,11 +77,12 @@ export const useMetadataScraping = create<MetadataScrapingState>((set, get) => (
     if (starting) throw new Error('A metadata task is already starting');
     starting = true;
     const controller = new AbortController(), operation = metadataOperation(undefined, controller.signal), key = scopeKey(operation.scope);
+    let releaseRun:()=>void;try{releaseRun=claimMetadataRun('single',id,operation.current);}catch(error){starting=false;throw error;}
     let value: MetadataJob | undefined;
     try { await get().hydrate(); metadataCheck(operation); value = await readMetadataRecord<MetadataJob>('job', id, operation); metadataCheck(operation); }
-    catch (error) { starting = false; throw error; }
+    catch (error) { starting = false; releaseRun(); throw error; }
     starting = false;
-    if (!value || !validMetadataJob(value)) throw new Error('Metadata task not found');
+    if (!value || !validMetadataJob(value)) { releaseRun(); throw new Error('Metadata task not found'); }
     let job = retryFailed ? { ...value, status: 'paused' as const, items: value.items.map((item) => item.status === 'failed' ? { ...item, status: 'pending' as const, issue: undefined } : item) } : value;
     const publish = (next: MetadataJob) => { if (!operation.current() || get().scope !== key) return; job = next; set((state) => ({ jobs: [next, ...state.jobs.filter((entry) => entry.id !== id)].slice(0, 5) })); };
     let lease: BackgroundWorkLease | undefined, interruptionStatus: 'paused' | 'cancelled' = 'paused', committed = 0, lastPublication = Date.now();
@@ -118,7 +120,7 @@ export const useMetadataScraping = create<MetadataScrapingState>((set, get) => (
         // A new owner must never receive an old task's final publication.
         const fresh = metadataOperation();
         if (operation.current() && scopeKey(fresh.scope) === key) { const paused = { ...job, status: interruptionStatus, updatedAt: Date.now() }; await saveMetadataRecord('job', id, paused, fresh); publish(paused); }
-      } finally { flush(); await lease?.release().catch(() => {}); if (running?.id === id && running.controller === controller) running = undefined; if (operation.current()) { await useLocalMetadata.getState().hydrate(operation.scope, true); await get().hydrate(true); } }
+      } finally { releaseRun(); flush(); await lease?.release().catch(() => {}); if (running?.id === id && running.controller === controller) running = undefined; if (operation.current()) { await useLocalMetadata.getState().hydrate(operation.scope, true); await get().hydrate(true); } }
     })();
     running = { id, key, controller, current: operation.current, task }; await task;
   },
@@ -133,4 +135,4 @@ export const useMetadataScraping = create<MetadataScrapingState>((set, get) => (
 
 export function openMetadataTarget(target: Omit<MetadataTarget, 'scope'>) { useMetadataScraping.getState().open(target); }
 export function metadataTargetIsCurrent(target: MetadataTarget | null): target is MetadataTarget { return !!target && (!target.current || target.current()) && scopeKey(target.scope) === scopeKey(customizationScope()); }
-export function metadataJobRunning() { return !!running?.current(); }
+export function metadataJobRunning() { return metadataRunIsBusy(); }

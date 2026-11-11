@@ -476,6 +476,8 @@ export default function RootLayout() {
                 <Stack.Screen name="metadata/index" />
                 <Stack.Screen name="metadata/song" />
                 <Stack.Screen name="metadata/batch" />
+                <Stack.Screen name="metadata/bulk" />
+                <Stack.Screen name="metadata/bulk-task" />
                 <Stack.Screen name="metadata/sources" />
                 <Stack.Screen name="metadata/artwork" />
                 <Stack.Screen name="metadata/insight" />

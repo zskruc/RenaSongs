@@ -144,6 +144,14 @@ export default function ArtistScreen() {
   const aboutRef = useRef<() => void>(() => {});
   // ⋯ menu (imperative: opening/closing doesn't re-render the screen).
   const menuRef = useRef<() => void>(() => {});
+  const [metadataOwner] = useState(() => captureCustomizationOwner());
+  const metadataOpening = useRef(false);
+  const metadataPage = useRef({ id, focused });
+  useLayoutEffect(() => {
+    metadataPage.current = { id, focused };
+    if (focused) metadataOpening.current = false;
+    return () => { metadataPage.current = { id, focused: false }; };
+  }, [id, focused]);
   // The stars take over the sheet rather than sitting among the actions, the
   // same way the song menu does it: five targets in a row need the width, and
   // a rating is a thing you set, not an action you fire and dismiss.
@@ -583,6 +591,7 @@ export default function ArtistScreen() {
                 // Always on the actions: a sheet reopening on the stars because
                 // that is where it was left reads as the wrong menu.
                 setMenuMode('actions');
+                metadataOpening.current = false;
                 menuRef.current();
               }}
             >
@@ -827,7 +836,7 @@ export default function ArtistScreen() {
         {appleMusic && albums.length > 0 ? (
           <GlassPressable style={[voltaStyles.roundAction, { backgroundColor: colors.scrim }]} accessibilityRole="button"
             accessibilityLabel={t('More options')}
-            onPress={() => { setMenuMode('actions'); menuRef.current(); }}>
+            onPress={() => { setMenuMode('actions'); metadataOpening.current = false; menuRef.current(); }}>
             <Icon name="ellipsis-horizontal" size={24} color={colors.onArtwork} />
           </GlassPressable>
         ) : null}
@@ -940,11 +949,25 @@ export default function ArtistScreen() {
                 <Icon name="play" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Play discography')}</Text>
               </Pressable>
-              <Pressable style={styles.action} onPress={() => { const current = captureCustomizationOwner(); close(() => { void fetchAlbumSongs().then((songs) => {
-                if (!current() || !songs) return;
-                openMetadataTarget({ kind: 'artist', id: data.artist.id, title: data.artist.name, songs }); router.push('/metadata');
-              }).catch(() => useToast.getState().show(t("Couldn't complete the action"))); }); }}>
+              <Pressable style={styles.action} onPress={() => {
+                if (!metadataOwner() || metadataOpening.current || !metadataPage.current.focused || metadataPage.current.id !== id) return;
+                metadataOpening.current = true;
+                close(() => {
+                  if (!metadataOwner() || !metadataPage.current.focused || metadataPage.current.id !== id) return;
+                  openMetadataTarget({ kind: 'artist', id: data.artist.id, title: data.artist.name, songs: [] }); router.push('/metadata');
+                });
+              }}>
                 <Icon name="search-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Metadata and local artwork')}</Text>
+              </Pressable>
+              <Pressable style={styles.action} onPress={() => {
+                if (!metadataOwner() || metadataOpening.current || !metadataPage.current.focused || metadataPage.current.id !== id) return;
+                metadataOpening.current = true;
+                close(() => {
+                  if (!metadataOwner() || !metadataPage.current.focused || metadataPage.current.id !== id) return;
+                  router.push({ pathname: '/metadata/bulk', params: { kind: 'artist', id: data.artist.id, title: data.artist.name } });
+                });
+              }}>
+                <Icon name="search-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Batch scrape metadata')}</Text>
               </Pressable>
               {/* The way back to the one undivided list the discography was
                   before it was split into shelves (#138): the same screen the
