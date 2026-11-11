@@ -134,6 +134,124 @@ export async function listeningSummary(profile: string, from: string, until: str
     top: top.flatMap((row) => { try { return [{ ...row, song: JSON.parse(row.song) as Song }]; } catch { return []; } }), artists };
   });
 }
+
+export type ListeningRankSort = 'seconds' | 'plays';
+export interface ListeningArtistRank {
+  key: string;
+  id?: string;
+  name: string;
+  song: Song;
+  seconds: number;
+  plays: number;
+}
+export interface ListeningAlbumRank extends ListeningArtistRank {
+  artist: string;
+}
+export interface ListeningReport extends ListeningSummary {
+  /** Earliest actual ledger day for this profile/content kind, even outside
+   * the selected window. Imported history can predate the device preference. */
+  firstRecordedDay?: string;
+  days: { day: string; seconds: number; plays: number }[];
+  activeDays: number;
+  artistCount: number;
+  albumCount: number;
+  artistRanks: ListeningArtistRank[];
+  albumRanks: ListeningAlbumRank[];
+}
+
+function reportSong(raw: string, id: string): Song | undefined {
+  try {
+    const value = JSON.parse(raw) as Record<string, unknown> | null;
+    if (!value || Array.isArray(value) || value.id !== id || typeof value.title !== 'string') return;
+    const text = (key: string) => typeof value[key] === 'string' ? value[key] as string : undefined;
+    const number = (key: string) => typeof value[key] === 'number' && Number.isFinite(value[key]) && value[key] >= 0 ? value[key] as number : undefined;
+    return safeSong({ id, title: value.title, artist: text('artist'), album: text('album'),
+      albumId: text('albumId'), artistId: text('artistId'), coverArt: text('coverArt'),
+      duration: number('duration'), year: number('year'), podcastChannelId: text('podcastChannelId'),
+      mediaKind: value.mediaKind === 'music' || value.mediaKind === 'podcast' || value.mediaKind === 'audiobook' ? value.mediaKind : undefined });
+  } catch { return; }
+}
+
+/** A detailed report is opt-in. Widgets keep using the inexpensive summary.
+ * All ranking and distinct counts run in native SQLite before the bounded
+ * result reaches JS; no library scan or per-item metadata request is needed. */
+export async function listeningReport(
+  profile: string, from: string, until: string, kind: ListeningContentKind = 'music',
+  sort: ListeningRankSort = 'seconds', current: () => boolean = () => true,
+): Promise<ListeningReport> {
+  const version = profileVersions.get(profile) ?? 0;
+  const check = () => {
+    if (!current() || version !== (profileVersions.get(profile) ?? 0)) throw new Error('Listening report changed');
+  };
+  check(); await flushListeningCredits(); check();
+  return serialized(async () => {
+    check(); const db = await database(); check();
+    const spoken = kind === 'podcast' || kind === 'audiobook';
+    const table = spoken ? 'listening_spoken_days' : 'listening_days';
+    const args: (string | number)[] = [profile, from, until];
+    const where = 'profile=? AND day>=? AND day<?' + (spoken ? ' AND kind=?' : '');
+    if (spoken) args.push(kind);
+    const firstDay = await db.getFirstAsync<{ day: string | null }>(
+      `SELECT MIN(day) day FROM ${table} WHERE profile=?${spoken ? ' AND kind=?' : ''}
+        AND (seconds>0 OR plays>0) AND day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+        AND date(day,'+0 days')=day`, spoken ? [profile, kind] : [profile]);
+    check();
+    // Legacy or damaged metadata must not make real numeric listening totals
+    // disappear. JSON fields are only used after json_valid has succeeded.
+    const textField = (key: string) => `CASE WHEN json_valid(song) THEN CASE WHEN json_type(song,'$.${key}')='text' THEN NULLIF(TRIM(json_extract(song,'$.${key}')),'') END END`;
+    const tagged = `WITH fields AS (
+      SELECT day,song_id,song,TRIM(artist) artist,seconds,plays,
+        ${textField('artistId')} artist_id,${textField('albumId')} album_id,
+        ${textField('album')} album_name,${textField('albumArtist')} album_artist
+      FROM ${table} WHERE ${where}
+    ), entries AS (
+      SELECT *,CASE WHEN artist_id IS NOT NULL THEN 'id:'||artist_id WHEN artist<>'' THEN 'name:'||artist END artist_key,
+        CASE WHEN album_id IS NOT NULL THEN 'id:'||album_id
+          WHEN album_name IS NOT NULL THEN 'name:'||album_name||char(0)||COALESCE(album_artist,artist,'') END album_key
+      FROM fields WHERE seconds>0 OR plays>0
+    )`;
+    const order = sort === 'plays' ? 'plays DESC,seconds DESC' : 'seconds DESC,plays DESC';
+    const totals = await db.getFirstAsync<{
+      seconds: number; plays: number; songs: number; activeDays: number; artistCount: number; albumCount: number;
+    }>(`${tagged} SELECT COALESCE(SUM(seconds),0) seconds,COALESCE(SUM(plays),0) plays,
+      COUNT(DISTINCT song_id) songs,COUNT(DISTINCT day) activeDays,
+      COUNT(DISTINCT artist_key) artistCount,COUNT(DISTINCT album_key) albumCount FROM entries`, args);
+    check();
+    const days = await db.getAllAsync<{ day: string; seconds: number; plays: number }>(
+      `SELECT day,SUM(seconds) seconds,SUM(plays) plays FROM ${table} WHERE ${where} GROUP BY day ORDER BY day`, args);
+    check();
+    // SQLite's single MAX aggregate binds the representative bare columns to
+    // the most recent recorded day, so renamed tracks do not show stale titles.
+    const top = await db.getAllAsync<{ song_id: string; song: string; seconds: number; plays: number }>(
+      `${tagged} SELECT song_id,song,SUM(seconds) seconds,SUM(plays) plays,MAX(day) latest_day
+        FROM entries GROUP BY song_id ORDER BY ${order},song_id LIMIT 30`, args);
+    check();
+    const artists = await db.getAllAsync<{ key: string; id: string | null; name: string; song_id: string; song: string; seconds: number; plays: number }>(
+      `${tagged} SELECT artist_key key,artist_id id,artist name,song_id,song,SUM(seconds) seconds,SUM(plays) plays,MAX(day) latest_day
+        FROM entries WHERE artist_key IS NOT NULL GROUP BY artist_key ORDER BY ${order},artist_key LIMIT 30`, args);
+    check();
+    const albums = await db.getAllAsync<{ key: string; id: string | null; name: string | null; artist: string; song_id: string; song: string; seconds: number; plays: number }>(
+      `${tagged} SELECT album_key key,album_id id,album_name name,COALESCE(album_artist,artist,'') artist,song_id,song,
+        SUM(seconds) seconds,SUM(plays) plays,MAX(day) latest_day
+        FROM entries WHERE album_key IS NOT NULL GROUP BY album_key ORDER BY ${order},album_key LIMIT 30`, args);
+    check();
+    const artistRanks = artists.flatMap((row): ListeningArtistRank[] => {
+      const song = reportSong(row.song, row.song_id);
+      return song ? [{ key: row.key, id: row.id ?? undefined, name: row.name, song, seconds: row.seconds, plays: row.plays }] : [];
+    });
+    const albumRanks = albums.flatMap((row): ListeningAlbumRank[] => {
+      const song = reportSong(row.song, row.song_id);
+      return song ? [{ key: row.key, id: row.id ?? undefined, name: row.name ?? '', artist: row.artist, song, seconds: row.seconds, plays: row.plays }] : [];
+    });
+    return { seconds: totals?.seconds ?? 0, plays: totals?.plays ?? 0, songs: totals?.songs ?? 0,
+      firstRecordedDay: firstDay?.day ?? undefined,
+      activeDays: totals?.activeDays ?? 0, artistCount: totals?.artistCount ?? 0, albumCount: totals?.albumCount ?? 0,
+      days, top: top.flatMap((row) => {
+        const song = reportSong(row.song, row.song_id);
+        return song ? [{ song, seconds: row.seconds, plays: row.plays }] : [];
+      }), artists: artists.slice(0, 10).map((row) => ({ name: row.name, seconds: row.seconds })), artistRanks, albumRanks };
+  });
+}
 export async function savedSmartRules(profile: string): Promise<SmartRule[]> {
   await writing.catch(() => {});
   const rows = await (await database()).getAllAsync<{ data: string }>('SELECT data FROM smart_rules WHERE profile=? ORDER BY id', profile);

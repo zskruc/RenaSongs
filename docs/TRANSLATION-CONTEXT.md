@@ -5,7 +5,7 @@
      `src/i18n/context.jsonc`, and where a string shows up is read off the
      code, so both are fixed at the source and this page follows. -->
 
-Every string the app can show, under the screen it shows up on. 2116 of them.
+Every string the app can show, under the screen it shows up on. 2153 of them.
 The second column is only filled in where the English is ambiguous on its own
 If one tripped you up and the column is empty, that is worth telling us, and
 the answer goes into `src/i18n/context.jsonc` where the next translator of the
@@ -68,7 +68,6 @@ you are actually typing into, which is easier than reading it here.
 | `Align lyric words` |  |
 | `Allow downloads` | Whether whoever gets the link can download the music, not only listen to it |
 | `Android may stop playback in the background, interrupt downloads or delay the sleep timer. Allowing unrestricted battery use fixes it.` |  |
-| `Artists` | A heading over a list of them, never a count |
 | `Back online` | The toast shown when the server answers again and the app comes out of offline mode |
 | `Battery optimization is on` | Title of the card warning that Android may cut playback off |
 | `BPM` | A property of the audio: beats per minute |
@@ -264,7 +263,6 @@ you are actually typing into, which is easier than reading it here.
 | String | What it is |
 | --- | --- |
 | `A-Z` | Sort option: the order of a list |
-| `Artists` | A heading over a list of them, never a count |
 | `Couldn't load artists.` | Error on the screen, with a Retry button |
 | `Filter artists` | Search box that narrows the list as you type, rather than a filter you set |
 | `No artists yet` | Empty state heading |
@@ -1359,7 +1357,6 @@ you are actually typing into, which is easier than reading it here.
 | `A short break` |  |
 | `Acoustic and ambient genre tags, or a slower tagged tempo.` |  |
 | `Ambient, classical and instrumental genre tags, or a moderate tagged tempo.` |  |
-| `Artists` | A heading over a list of them, never a count |
 | `Back to the nineties` |  |
 | `Could not search cached lyrics. Try again.` |  |
 | `Dance, electronic and rock genre tags, or a faster tagged tempo.` |  |
@@ -1900,37 +1897,73 @@ you are actually typing into, which is easier than reading it here.
 
 | String | What it is |
 | --- | --- |
-| `{n} hours` |  |
+| `{date}: {time}, {n} plays` |  |
+| `{n} days` |  |
+| `{n} plays` |  |
+| `30 days` |  |
+| `7 days` | One of the values of “Report period” |
 | `A session counts after 30 seconds, or half of a shorter song.` |  |
+| `Active days` |  |
+| `All recorded listening` |  |
+| `All time` |  |
 | `All-time most played` |  |
 | `Audiobooks` | Shelf heading: a book read aloud by one narrator, no music |
+| `Average per active day` |  |
+| `By listening time` | One of the values of “Ranking order” |
+| `By play count` |  |
+| `Calendar month` |  |
+| `Calendar year` |  |
+| `Chart metric` |  |
 | `Content statistics` |  |
+| `Could not refresh the report. Your saved statistics are kept.` |  |
 | `Couldn't play` |  |
+| `Days` |  |
 | `Different episodes or chapters` |  |
 | `Different songs` |  |
-| `Last 30 days` |  |
-| `Last 7 days` | One of the values of “Report period” |
+| `Hours` |  |
+| `How listening is counted` |  |
+| `Less` |  |
+| `Listening calendar` |  |
+| `Listening rankings` |  |
 | `Listening statistics` |  |
 | `Listening statistics are unavailable` |  |
 | `Listening time` |  |
 | `Listening time chart` |  |
-| `Most listened artists` |  |
-| `Most listened episodes or chapters` |  |
-| `Most listened songs` |  |
+| `Listening trend` |  |
+| `Loading listening report` |  |
+| `Longest listening streak` |  |
+| `Minutes` |  |
 | `Music` | The name given to the server's folder when it does not have one of its own, browsing by folder |
 | `Music, podcasts and audiobooks are recorded separately from this version. Earlier totals are preserved without guessing their content type.` |  |
-| `No listening recorded in this period` |  |
-| `Only actual advancing playback is counted. Seeking and buffering are excluded.` | The line under “Record listening on this device”, explaining it |
-| `Qualified listening sessions` |  |
+| `Next month` |  |
+| `No items available for this ranking` |  |
+| `No listening recorded` |  |
+| `No listening recorded in this period. Try another range or play something to start your report.` |  |
+| `On this device` |  |
+| `Only actual advancing playback is counted. Seeking and buffering are excluded.` |  |
+| `Play count` |  |
+| `Previous month` |  |
+| `Qualified plays` |  |
+| `Rank {n}: {title}` |  |
+| `Ranking category` |  |
+| `Ranking order` |  |
 | `Record listening on this device` |  |
+| `Recording & privacy` |  |
 | `Recording since {date}. Older listening time is not reconstructed.` |  |
 | `Refresh report` |  |
 | `Report period` |  |
 | `Reports start when music plays in this version. No past listening time is invented.` |  |
+| `Seconds` |  |
 | `Seeking does not add a session. Continuous repeats of the same song count as one session.` |  |
-| `Uses the existing server or local play counter.` |  |
+| `Show all {n}` |  |
+| `Showing top {n} of {total}` |  |
+| `Tap a day to see listening details` |  |
+| `Tap the chart to see details` |  |
+| `Uses the existing server or local play counter.` | The line under “All-time most played”, explaining it |
 | `Year` | Label of a field in the song information sheet: the year of the release |
-| `Yearly review` |  |
+| `Your listening` |  |
+| `Your listening in {year}` |  |
+| `Your next listen starts the story` |  |
 
 ## Settings › Listening tools
 
@@ -2730,7 +2763,7 @@ you are actually typing into, which is easier than reading it here.
 | `Genre contains` |  |
 | `Last 30 days` |  |
 | `Last 365 days` |  |
-| `Last 7 days` | One of the values of “Report period” |
+| `Last 7 days` |  |
 | `Last 90 days` |  |
 | `Matches` |  |
 | `Matching songs: {n}` |  |
@@ -2893,6 +2926,7 @@ you are actually typing into, which is easier than reading it here.
 | `All episodes marked as played.` |  |
 | `Alphabetical` | Sort option: the order of a list |
 | `Artist` | In search results, the little word under a result saying what kind of thing it is |
+| `Artists` | A heading over a list of them, never a count |
 | `Artwork` |  |
 | `Ascending` | Sort option: the order of a list |
 | `Audio quality, equalizer and playback behavior` |  |

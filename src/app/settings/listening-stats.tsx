@@ -1,157 +1,122 @@
-/** On-device daily/monthly/yearly listening reports, starting with real recorded samples. */
-import { useQuery } from '@tanstack/react-query';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
-
+/** Local listening dashboard: recorded facts, calendar, trends and bounded rankings. */
+import { router, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import { getSong } from '@/api/data';
-import type { Song } from '@/api/subsonic';
-import { GlassPressable } from '@/components/glass';
+import { DockScrollView } from '@/components/DockScrollView';
+import Icon from '@/components/Icon';
 import { SelectList, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
-import { TrackRow } from '@/components/TrackRow';
-import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
-import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
+import { ListeningDashboardHeader, ListeningSegments } from '@/components/stats/ListeningDashboard';
+import { ListeningPodium, ListeningRankRow } from '@/components/stats/ListeningRankings';
+import { useListeningReport } from '@/hooks/useListeningReport';
 import { useT } from '@/i18n';
-import { listeningPreferences, listeningSummary, type ListeningSummary } from '@/lib/listeningDb';
-import { listeningBars, listeningRange, type ListeningPeriod } from '@/lib/listeningMath';
 import type { ListeningContentKind } from '@/lib/contentKind';
-import { profileScopeId, useAuthStore } from '@/store/auth';
-import { useListeningStats } from '@/store/listeningStats';
+import type { ListeningPeriod } from '@/lib/listeningMath';
+import type { ListeningRankSort } from '@/lib/listeningDb';
+import { listeningRankItems, type ListeningRankItem, type ListeningRankTab } from '@/lib/listeningPresentation';
 import { currentSong, usePlayerStore } from '@/store/player';
-import { useToast } from '@/store/toast';
 import { useSettings } from '@/store/settings';
-import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
-
-const StatsList = Animated.createAnimatedComponent(FlatList<ListeningSummary['top'][number]>);
+import { useToast } from '@/store/toast';
+import { themed, useTheme } from '@/theme';
 
 export default function ListeningStatsPage() {
-  useTheme();
-  useAuthStore((state) => state.auth); useAuthStore((state) => state.offline);
-  const profile = profileScopeId();
-  const t = useT(), dockScroll = useLiquidDockScrollHandler(), bottom = useScreenBottomPadding();
-  const toast = useToast((state) => state.show);
+  const theme = useTheme(), t = useT();
+  const model = useListeningReport();
   const language = useSettings((state) => state.language);
-  const prefs = useListeningStats();
-  const [period, setPeriod] = useState<ListeningPeriod>('week');
-  const [kind, setKind] = useState<ListeningContentKind>('music');
-  const [year, setYear] = useState(new Date().getFullYear());
-  const [refresh, setRefresh] = useState(0);
-  const [switching, setSwitching] = useState(false);
   const playing = usePlayerStore(currentSong);
-  useEffect(() => { void useListeningStats.getState().load(); }, [profile]);
-  const range = listeningRange(period, year);
-  const query = useQuery({
-    queryKey: ['listening-stats', profile, kind, period, year, refresh],
-    queryFn: async () => {
-      const summary = await listeningSummary(profile, range.from, range.until, kind);
-      const preferences = await listeningPreferences(profile);
-      return { summary, preferences, profile };
-    },
-  });
-  const result = query.data?.profile === profile ? query.data : undefined;
-  const data = result?.summary;
-  const first = result?.preferences.startedAt;
-  const currentYear = new Date().getFullYear();
-  const startYear = first ? new Date(first).getFullYear() : currentYear;
-  const years = Array.from({ length: Math.max(1, currentYear - startYear + 1) }, (_, index) => ({ value: currentYear - index, label: String(currentYear - index) }));
-  const bars = listeningBars(data?.days ?? [], period, year);
-  const peak = Math.max(1, ...bars.map((bar) => bar.seconds));
-  const duration = (seconds: number) => seconds < 60 ? t('{n} seconds', { n: Math.round(seconds) })
-    : seconds < 3600 ? t('{n} minutes', { n: Math.round(seconds / 60) }) : t('{n} hours', { n: (seconds / 3600).toFixed(1) });
-
-  async function toggle(enabled: boolean) {
-    if (switching) return;
-    setSwitching(true);
-    try { await useListeningStats.getState().setEnabled(enabled); }
-    catch { toast(t('Listening statistics are unavailable')); }
-    finally { setSwitching(false); }
-  }
-
-  async function play(entry: Song) {
-    const owner = profileScopeId();
-    if (entry.podcastChannelId) { router.push({ pathname: '/podcast-episode/[id]', params: { id: entry.id, channelId: entry.podcastChannelId } }); return; }
+  const toast = useToast((state) => state.show);
+  const latestOpen = useRef(0);
+  const [tab, setTab] = useState<ListeningRankTab>('songs');
+  const [expanded, setExpanded] = useState('');
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const { setting } = useLocalSearchParams<{ setting?: string }>();
+  const { setPeriod } = model;
+  useEffect(() => { if (setting === 'Year') setPeriod('year'); }, [setting, setPeriod]);
+  const rankTab = model.kind === 'music' ? tab : 'songs';
+  const ranks = useMemo(() => listeningRankItems(model.report, rankTab, model.kind), [model.report, rankTab, model.kind]);
+  const scope = `${model.profile}|${model.kind}|${model.range.from}|${model.range.until}|${model.sort}|${rankTab}`;
+  const full = expanded === scope;
+  const podium = ranks.length >= 3 ? ranks.slice(0, 3) : [];
+  const visible = ranks.slice(podium.length, full ? ranks.length : 10);
+  const peak = Math.max(1, ...ranks.map((item) => model.sort === 'plays' ? item.plays : item.seconds));
+  const onOpen = useCallback(async (item: ListeningRankItem) => {
+    if (!model.canAct() || !item.id) return;
+    const token = ++latestOpen.current;
+    const owns = () => latestOpen.current === token && model.canAct();
+    if (item.kind === 'artists') { router.push({ pathname: '/artist/[id]', params: { id: item.id } }); return; }
+    if (item.kind === 'albums') { router.push({ pathname: '/album/[id]', params: { id: item.id } }); return; }
+    if (item.song.podcastChannelId) {
+      router.push({ pathname: '/podcast-episode/[id]', params: { id: item.song.id, channelId: item.song.podcastChannelId } }); return;
+    }
     try {
-      const song = await getSong(entry.id);
+      const song = await getSong(item.song.id);
       if (!song) throw new Error('Song not found');
-      if (profileScopeId() === owner) await usePlayerStore.getState().playQueue([song], 0, 'listening-stats', '/settings/listening-stats');
-    } catch { if (profileScopeId() === owner) toast(t("Couldn't play")); }
-  }
+      if (owns()) await usePlayerStore.getState().playQueue([song], 0, 'listening-stats', '/settings/listening-stats');
+    } catch { if (owns()) toast(t("Couldn't play")); }
+  }, [model.canAct, toast, t]);
 
+  const controls = <>
+    <ListeningSegments<ListeningContentKind> label={t('Content statistics')} value={model.kind} onChange={model.setKind} options={[
+      { value: 'music', label: t('Music') }, { value: 'podcast', label: t('Podcasts') }, { value: 'audiobook', label: t('Audiobooks') },
+    ]} />
+    <ListeningSegments<ListeningPeriod> label={t('Report period')} value={model.period} onChange={model.setPeriod} options={[
+      { value: 'week', label: t('7 days') }, { value: 'month', label: t('30 days') }, { value: 'year', label: t('Year') }, { value: 'all', label: t('All time') },
+    ]} />
+    {model.period === 'year' ? <SelectList label={t('Year')} value={model.year} onChange={model.setYear} options={model.years} /> : null}
+  </>;
+  const rankingControls = <>
+    {model.kind === 'music' ? <ListeningSegments<ListeningRankTab> label={t('Ranking category')} value={rankTab} onChange={setTab} options={[
+      { value: 'songs', label: t('Songs') }, { value: 'artists', label: t('Artists') }, { value: 'albums', label: t('Albums') },
+    ]} /> : <Text style={styles.rankSubtitle}>{t(model.kind === 'podcast' ? 'Most listened episodes' : 'Most listened chapters')}</Text>}
+    <ListeningSegments<ListeningRankSort> label={t('Ranking order')} value={model.sort} onChange={model.setSort} options={[
+      { value: 'seconds', label: t('By listening time') }, { value: 'plays', label: t('By play count') },
+    ]} />
+    <Text style={styles.rankNote}>{t('Showing top {n} of {total}', { n: ranks.length, total: rankTab === 'artists' ? model.report?.artistCount ?? 0 : rankTab === 'albums' ? model.report?.albumCount ?? 0 : model.report?.songs ?? 0 })}</Text>
+  </>;
   return <SettingsPage title={t('Listening statistics')}>
-    <StatsList data={data?.top ?? []} keyExtractor={(item) => item.song.id}
-      initialNumToRender={8} maxToRenderPerBatch={6} windowSize={5}
-      onScroll={dockScroll} scrollEventThrottle={16}
-      contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: bottom }}
-      ListHeaderComponent={<>
-        <SettingsGroup><SwitchList options={[{ label: t('Record listening on this device'),
-          description: t('Only actual advancing playback is counted. Seeking and buffering are excluded.'),
-          value: prefs.profile === profile && prefs.hydrated && prefs.enabled,
-          onChange: (value) => { void toggle(value); } }]} /></SettingsGroup>
-        <Text style={settingsStyles.sectionDescription}>{first
-          ? t('Recording since {date}. Older listening time is not reconstructed.', { date: new Date(first).toLocaleDateString(language) })
+    <DockScrollView contentContainerStyle={[settingsStyles.content, styles.content]}>
+      <ListeningDashboardHeader report={model.report} period={model.period} year={model.year} at={model.at} range={model.range}
+        language={language} kind={model.kind} pending={model.initialLoading} refreshing={model.refreshing} error={model.error}
+        controls={controls} rankingControls={rankingControls} onRefresh={model.refresh}
+        podium={podium.length ? <ListeningPodium items={podium} sort={model.sort} language={language} onOpen={onOpen} /> : null} />
+      {model.report && (model.report.seconds > 0 || model.report.plays > 0) ? <View style={styles.rankingPanel}>
+        {visible.map((item, index) => <ListeningRankRow key={item.key} item={item} position={index + podium.length + 1} language={language}
+          sort={model.sort} peak={peak} current={item.kind === 'songs' && playing?.id === item.id} onOpen={onOpen} />)}
+        {!ranks.length ? <Text style={styles.note}>{t('No items available for this ranking')}</Text> : null}
+        {ranks.length > 10 ? <Pressable accessibilityRole="button" onPress={() => setExpanded(full ? '' : scope)} style={styles.more}>
+          <Text style={styles.moreText}>{full ? t('Show less') : t('Show all {n}', { n: ranks.length })}</Text><Icon name={full ? 'chevron-up' : 'chevron-down'} size={16} color={theme.accent} />
+        </Pressable> : null}
+      </View> : null}
+      <View style={styles.footer}>
+        {model.kind === 'music' ? <SettingsGroup><SettingRow icon="stats-chart-outline" label={t('All-time most played')}
+          description={t('Uses the existing server or local play counter.')} chevron onPress={() => { if (model.canAct()) router.push('/browse/songs?sort=frequent'); }} /></SettingsGroup> : null}
+        <SettingsGroup title={t('Recording & privacy')}>
+          <SwitchList options={[{ label: t('Record listening on this device'), description: t('Only actual advancing playback is counted. Seeking and buffering are excluded.'),
+            value: model.recordingEnabled, disabled: model.recordingDisabled, onChange: model.toggleRecording }]} />
+        </SettingsGroup>
+        <Text style={styles.note}>{model.startedAt ? t('Recording since {date}. Older listening time is not reconstructed.', { date: new Date(model.startedAt).toLocaleDateString(language) })
           : t('Reports start when music plays in this version. No past listening time is invented.')}</Text>
-        <SelectList<ListeningContentKind> label={t('Content statistics')} value={kind} onChange={setKind} options={[
-          { value: 'music', label: t('Music') }, { value: 'podcast', label: t('Podcasts') }, { value: 'audiobook', label: t('Audiobooks') },
-        ]} />
-        <Text style={settingsStyles.sectionDescription}>{t('Music, podcasts and audiobooks are recorded separately from this version. Earlier totals are preserved without guessing their content type.')}</Text>
-        <SelectList<ListeningPeriod> label={t('Report period')} value={period} onChange={setPeriod} options={[
-          { value: 'week', label: t('Last 7 days') }, { value: 'month', label: t('Last 30 days') }, { value: 'year', label: t('Yearly review') },
-        ]} />
-        {period === 'year' ? <SelectList label={t('Year')} value={year} onChange={setYear} options={years} /> : null}
-        <View style={styles.metrics}>
-          <View style={styles.metric}><Text style={styles.big}>{duration(data?.seconds ?? 0)}</Text><Text style={styles.muted}>{t('Listening time')}</Text></View>
-          <View style={styles.metric}><Text style={styles.big}>{data?.songs ?? 0}</Text><Text style={styles.muted}>{t(kind === 'music' ? 'Different songs' : 'Different episodes or chapters')}</Text></View>
-          <View style={styles.metric}><Text style={styles.big}>{data?.plays ?? 0}</Text><Text style={styles.muted}>{t('Qualified listening sessions')}</Text></View>
-        </View>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: detailsOpen }} onPress={() => setDetailsOpen(!detailsOpen)} style={styles.notesToggle}><Text style={styles.notesTitle}>{t('How listening is counted')}</Text><Icon name={detailsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={theme.textSecondary} /></Pressable>
+        {detailsOpen ? <>
         <Text style={styles.note}>{t('A session counts after 30 seconds, or half of a shorter song.')}</Text>
         <Text style={styles.note}>{t('Seeking does not add a session. Continuous repeats of the same song count as one session.')}</Text>
-        <View style={styles.chart} accessibilityLabel={t('Listening time chart')}>
-          {bars.map((bar) => <View key={bar.key} style={styles.chartColumn}>
-            <View style={[styles.bar, { height: 2 + 86 * bar.seconds / peak }]} />
-            {(period === 'year' || period === 'week') ? <Text style={styles.barLabel}>{bar.label}</Text> : null}
-          </View>)}
-        </View>
-        {data?.artists.length ? <>
-          <Text style={settingsStyles.sectionTitle}>{t('Most listened artists')}</Text>
-          {data.artists.slice(0, 5).map((artist) => <View key={artist.name} style={styles.artist}>
-            <Text style={styles.artistName} numberOfLines={1}>{artist.name || t('Unknown artist')}</Text><Text style={styles.muted}>{duration(artist.seconds)}</Text>
-          </View>)}
+        <Text style={styles.note}>{t('Music, podcasts and audiobooks are recorded separately from this version. Earlier totals are preserved without guessing their content type.')}</Text>
         </> : null}
-        {kind === 'music' ? <SettingRow icon="stats-chart-outline" label={t('All-time most played')} description={t('Uses the existing server or local play counter.')} chevron onPress={() => router.push('/browse/songs?sort=frequent')} /> : null}
-        <GlassPressable buttonMaterial={false} style={styles.refresh} onPress={() => {
-          setRefresh((value) => value + 1);
-          if (useListeningStats.getState().error) void useListeningStats.getState().load(true);
-        }}>
-          <Text style={styles.action}>{t('Refresh report')}</Text>
-        </GlassPressable>
-        {query.isFetching ? <ActivityIndicator color={colors.accent} style={{ padding: spacing.md }} /> : null}
-        {(query.error || prefs.error) ? <Text style={styles.error}>{t('Listening statistics are unavailable')}</Text> : null}
-        <Text style={settingsStyles.sectionTitle}>{t(kind === 'music' ? 'Most listened songs' : 'Most listened episodes or chapters')}</Text>
-      </>}
-      ListEmptyComponent={!query.isFetching ? <Text style={styles.empty}>{t('No listening recorded in this period')}</Text> : null}
-      renderItem={({ item }) => <View>
-        <TrackRow song={item.song} isCurrent={playing?.id === item.song.id} onPress={() => { void play(item.song); }} />
-        <Text style={styles.songTime}>{duration(item.seconds)}</Text>
-      </View>} />
+        {model.error && model.report ? <Text accessibilityRole="alert" style={styles.error}>{t('Could not refresh the report. Your saved statistics are kept.')}</Text> : null}
+      </View>
+    </DockScrollView>
   </SettingsPage>;
 }
-
-const styles = themed((theme) => ({
-  metrics: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.lg },
-  metric: { flexGrow: 1, flexBasis: 95, backgroundColor: theme.surface, borderRadius: radius.lg, padding: spacing.md },
-  big: { color: theme.text, fontSize: fontSize.lg, fontWeight: '600' },
-  muted: { color: theme.textSecondary, fontSize: fontSize.xs },
-  note: { color: theme.textMuted, fontSize: fontSize.xs, marginTop: spacing.sm },
-  chart: { flexDirection: 'row', alignItems: 'flex-end', height: 125, gap: 3, marginTop: spacing.md },
-  chartColumn: { flex: 1, justifyContent: 'flex-end', alignItems: 'center' },
-  bar: { width: '80%', minWidth: 2, borderRadius: 3, backgroundColor: theme.accent },
-  barLabel: { color: theme.textMuted, fontSize: 9, marginTop: 4 },
-  artist: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', minHeight: 44 },
-  artistName: { color: theme.text, fontSize: fontSize.sm, flex: 1 },
-  refresh: { alignItems: 'center', padding: spacing.md, minHeight: 44 },
-  action: { color: theme.accent, fontWeight: '600' },
-  error: { color: theme.danger, paddingVertical: spacing.sm },
-  empty: { color: theme.textSecondary, paddingVertical: spacing.lg },
-  songTime: { color: theme.textMuted, fontSize: fontSize.xs, marginLeft: 68, marginBottom: spacing.sm },
+const styles = themed((c) => ({
+  content: { gap: 0 },
+  rankingPanel: { backgroundColor: c.surface, borderRadius: 18, overflow: 'hidden', marginTop: 10 },
+  rankSubtitle: { color: c.textSecondary, fontSize: 14, lineHeight: 21 },
+  rankNote: { color: c.textSecondary, fontSize: 12, lineHeight: 19, marginLeft: 4 },
+  more: { minHeight: 50, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, borderTopWidth: 0.5, borderTopColor: c.border },
+  moreText: { color: c.accent, fontSize: 14, fontWeight: '600' },
+  footer: { gap: 8, marginTop: 26 },
+  note: { color: c.textSecondary, fontSize: 12, lineHeight: 20, paddingHorizontal: 4 },
+  notesToggle: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 4 },
+  notesTitle: { color: c.textSecondary, fontSize: 13, lineHeight: 20, fontWeight: '500' },
+  error: { color: c.danger, fontSize: 13, lineHeight: 20, paddingHorizontal: 4 },
 }));

@@ -1741,22 +1741,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ]
   },
   {
-    "id": "/settings/listening-stats#Record listening on this device",
-    "route": "/settings/listening-stats",
-    "title": "Record listening on this device",
-    "chinese": "记录本机收听",
-    "section": "Listening statistics",
-    "breadcrumbs": [
-      "Library & metadata",
-      "Listening statistics"
-    ],
-    "aliases": [
-      "曲库与元数据",
-      "听歌统计"
-    ],
-    "anchor": "Record listening on this device"
-  },
-  {
     "id": "/settings/listening-stats#Content statistics",
     "route": "/settings/listening-stats",
     "title": "Content statistics",
@@ -1791,12 +1775,14 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "aliases": [
       "曲库与元数据",
       "听歌统计",
-      "Last 7 days",
-      "最近 7 天",
-      "Last 30 days",
-      "最近 30 天",
-      "Yearly review",
-      "年度回顾"
+      "7 days",
+      "近7天",
+      "30 days",
+      "近30天",
+      "Year",
+      "年份",
+      "All time",
+      "全部"
     ],
     "anchor": "Report period"
   },
@@ -1817,6 +1803,48 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Year"
   },
   {
+    "id": "/settings/listening-stats#Ranking category",
+    "route": "/settings/listening-stats",
+    "title": "Ranking category",
+    "chinese": "排行分类",
+    "section": "Listening statistics",
+    "breadcrumbs": [
+      "Library & metadata",
+      "Listening statistics"
+    ],
+    "aliases": [
+      "曲库与元数据",
+      "听歌统计",
+      "Songs",
+      "歌曲",
+      "Artists",
+      "艺术家",
+      "Albums",
+      "专辑"
+    ],
+    "anchor": "Ranking category"
+  },
+  {
+    "id": "/settings/listening-stats#Ranking order",
+    "route": "/settings/listening-stats",
+    "title": "Ranking order",
+    "chinese": "排行排序",
+    "section": "Listening statistics",
+    "breadcrumbs": [
+      "Library & metadata",
+      "Listening statistics"
+    ],
+    "aliases": [
+      "曲库与元数据",
+      "听歌统计",
+      "By listening time",
+      "按收听时长",
+      "By play count",
+      "按播放次数"
+    ],
+    "anchor": "Ranking order"
+  },
+  {
     "id": "/settings/listening-stats#All-time most played",
     "route": "/settings/listening-stats",
     "title": "All-time most played",
@@ -1831,6 +1859,22 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "听歌统计"
     ],
     "anchor": "All-time most played"
+  },
+  {
+    "id": "/settings/listening-stats#Record listening on this device",
+    "route": "/settings/listening-stats",
+    "title": "Record listening on this device",
+    "chinese": "记录本机收听",
+    "section": "Listening statistics",
+    "breadcrumbs": [
+      "Library & metadata",
+      "Listening statistics"
+    ],
+    "aliases": [
+      "曲库与元数据",
+      "听歌统计"
+    ],
+    "anchor": "Record listening on this device"
   },
   {
     "id": "/settings/listening-tools",

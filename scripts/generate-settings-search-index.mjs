@@ -93,14 +93,14 @@ for (const { file, route, category } of [...pages, ...externalPages]) {
       if (['SettingsPage', 'ScreenHeader'].includes(name)) {
         const title = attr(node, 'title'); if (title && ts.isJsxExpression(title) && title.expression) heading ??= translated(title.expression);
       }
-      if (['SettingRow', 'Field', 'SliderRow', 'TextRow', 'SelectList'].includes(name)) {
+      if (['SettingRow', 'Field', 'SliderRow', 'TextRow', 'SelectList', 'ListeningSegments'].includes(name)) {
         const label = attr(node, 'label');
         if (label && ts.isJsxExpression(label) && label.expression) {
           const key = translated(label.expression);
           if (key) recordLabel(key, name === 'SettingRow' ? navigationTarget(attr(node, 'onPress'), source) : undefined);
         }
       }
-      if (name === 'SelectList') {
+      if (name === 'SelectList' || name === 'ListeningSegments') {
         const label = attr(node, 'label'), options = attr(node, 'options');
         const key = label && ts.isJsxExpression(label) && label.expression ? translated(label.expression) : undefined;
         if (key && options) {
