@@ -18,6 +18,7 @@ import { AppStartupTab } from '@/components/AppStartupTab';
 import { ArtistPickerSheet } from '@/components/ArtistPickerSheet';
 import { BarBlurTarget } from '@/components/BarBlur';
 import { BatteryWarning } from '@/components/BatteryWarning';
+import { LocalPodcastTracker } from '@/components/LocalPodcastTracker';
 import { CarAutoSync } from '@/components/CarAutoSync';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { FrameMeter } from '@/components/FrameMeter';
@@ -472,6 +473,21 @@ export default function RootLayout() {
                 <Stack.Screen name="media-collections" />
                 <Stack.Screen name="lyric-editor" />
                 <Stack.Screen name="song-metadata" />
+                <Stack.Screen name="metadata/index" />
+                <Stack.Screen name="metadata/song" />
+                <Stack.Screen name="metadata/batch" />
+                <Stack.Screen name="metadata/sources" />
+                <Stack.Screen name="metadata/artwork" />
+                <Stack.Screen name="metadata/insight" />
+                <Stack.Screen name="metadata/task" />
+                <Stack.Screen name="cue-import" />
+                <Stack.Screen name="local-podcasts" />
+                <Stack.Screen name="lyric-translate" />
+                <Stack.Screen name="lyric-align" />
+                <Stack.Screen name="playback-range" />
+                <Stack.Screen name="publisher-transcript" />
+                <Stack.Screen name="settings/loudness-analysis" />
+                <Stack.Screen name="settings/recently-deleted" />
                 <Stack.Screen name="settings/equalizer" />
                 <Stack.Screen name="settings/scrobbling" />
                 <Stack.Screen name="settings/theme" />
@@ -544,7 +560,7 @@ export default function RootLayout() {
             {auth || offline ? <ListeningStatsTracker /> : null}
             {auth || offline ? <LongAudioTracker /> : null}
             <WidgetExtrasBridge />
-            {auth || offline ? <CarAutoSync /> : null}
+            {auth || offline ? <><CarAutoSync /><LocalPodcastTracker /></> : null}
             {auth || offline ? <BatteryWarning /> : null}
             {/* Not behind the profile guard on a whim: the check reaches
                 GitHub, not the music server, and somebody stuck on the login

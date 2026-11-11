@@ -1,3 +1,4 @@
+import { useMetadataArtwork } from '@/lib/metadata/hooks';
 /**
  * Artist card for grids and carousels: round photo with the name below,
  * centered. The twin of `AlbumCard`, which already existed; artists were
@@ -22,6 +23,7 @@ interface Props {
 
 export const ArtistCard = memo(function ArtistCard({ artist, width = 150 }: Props) {
   const displayed = useDisplayArtist(artist);
+  const selectedArtwork = useMetadataArtwork('artist',artist.id,coverArtUrl(artist.coverArt ?? artist.id, COVER.card));
   bump('render · ArtistCard');
   // Memoised, so it has to ask for a repaint on a theme change itself.
   useTheme();

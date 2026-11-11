@@ -7,6 +7,7 @@
  * An episode plays as a `Song` whose `url` is the enclosure, like radio.
  */
 import { fetch } from 'expo/fetch';
+import { readDiscoveryEndpoint } from '@/lib/httpCooldown';
 
 import { assertCanRequest, isManualOffline, OfflineError } from './netGate';
 import { profileScopeId, useAuthStore } from '@/store/auth';
@@ -145,7 +146,7 @@ async function get(url: string, accept: string, since?: FeedValidators, existing
   const work = async (): Promise<FeedRead> => {
     check();
     assertCanRequest(!isManualOffline());
-    const res = await fetch(url, {
+    const res = await readDiscoveryEndpoint(url, () => fetch(url, {
       headers: {
         accept,
         'user-agent': 'Resonus',
@@ -155,7 +156,7 @@ async function get(url: string, accept: string, since?: FeedValidators, existing
         ...(since && !since.etag && since.lastModified ? { 'if-modified-since': since.lastModified } : {}),
       },
       signal: ctl.signal,
-    });
+    }), { scope: profileScopeId(), signal: ctl.signal, current: () => owner.current() });
     check();
     // Before `ok`: 304 is not a success code, and it is exactly the cheap
     // answer a conditional read exists to get — no body, nothing to parse.
@@ -819,10 +820,10 @@ async function directoryRead(url: string, options: PodcastDirectoryRequestOption
   const work = async () => {
     if (options.signal?.aborted || owner.signal.aborted) throw new PodcastDirectoryError('stopped');
     check(); assertCanRequest(!isManualOffline());
-    const response = await fetch(url, {
+    const response = await readDiscoveryEndpoint(url, () => fetch(url, {
       credentials: 'omit', signal: controller.signal,
       headers: { accept: 'application/json' },
-    });
+    }), { scope: profileScopeId(), signal: controller.signal, current: owner.current });
     check();
     if (!response.ok) throw new PodcastDirectoryError('http');
     const announced = Number(response.headers.get('content-length'));

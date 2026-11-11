@@ -45,6 +45,8 @@ export default function LyricsToolsSettings() {
           <SettingRow label={t('Edit and export lyrics')} chevron onPress={() => {
             useLyricToolTarget.getState().open(song); router.push('/lyric-editor');
           }} />
+          <SettingRow label={t('Offline lyric translation')} chevron onPress={() => { useLyricToolTarget.getState().open(song); router.push('/lyric-translate'); }} />
+          <SettingRow label={t('Align lyric words')} chevron onPress={() => { useLyricToolTarget.getState().open(song); router.push('/lyric-align'); }} />
           <SettingRow label={t('Lyric fonts')} chevron onPress={() => router.push('/settings/lyric-fonts')} />
           <SettingRow label={t('Lyric sources')} chevron onPress={() => {
             useLyricToolTarget.getState().open(song); router.push('/settings/lyric-sources');

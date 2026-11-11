@@ -25,6 +25,8 @@ import type { PodcastChannel, PodcastEpisode } from '@/api/subsonic';
 const SCHEMA = `
 PRAGMA journal_mode = WAL;
 PRAGMA journal_size_limit = 524288;
+CREATE TABLE IF NOT EXISTS podcast_transcript_cache(episode_id TEXT PRIMARY KEY NOT NULL,channel_id TEXT NOT NULL,url TEXT NOT NULL,data TEXT NOT NULL,updated_at INTEGER NOT NULL);
+CREATE INDEX IF NOT EXISTS podcast_transcript_channel ON podcast_transcript_cache(channel_id);
 CREATE TABLE IF NOT EXISTS podcast_channels (
   id TEXT PRIMARY KEY NOT NULL,
   feed_url TEXT NOT NULL,
@@ -921,7 +923,8 @@ export async function removeChannel(scope: string, id: string): Promise<void> {
       await db.runAsync(`DELETE FROM podcast_manual_downloads WHERE episode_id IN
         (SELECT id FROM podcast_episodes WHERE channel_id=? UNION SELECT episode_id FROM podcast_downloads WHERE channel_id=?)`, [id, id]);
       await db.runAsync('DELETE FROM podcast_channels WHERE id = ?', [id]);
-      await db.runAsync('DELETE FROM podcast_episodes WHERE channel_id = ?', [id]);
+      await db.runAsync('DELETE FROM podcast_transcript_cache WHERE channel_id=?', [id]);
+    await db.runAsync('DELETE FROM podcast_episodes WHERE channel_id = ?', [id]);
       await db.runAsync('DELETE FROM podcast_favorites WHERE channel_id = ?', [id]);
       await db.runAsync('DELETE FROM podcast_added WHERE channel_id = ?', [id]);
       await db.runAsync('DELETE FROM podcast_auto_download WHERE channel_id = ?', [id]);
@@ -1269,6 +1272,7 @@ export async function prunePreviewCatalog(scope: string, olderThan: number, prot
         EXISTS(SELECT 1 FROM podcast_progress WHERE channel_id=?) OR
         EXISTS(SELECT 1 FROM podcast_downloads WHERE channel_id=?) OR
         EXISTS(SELECT 1 FROM podcast_auto_download WHERE channel_id=?)) AS keep`, [row.id, row.id, row.id, row.id, row.id, row.id]);
+      await db.runAsync('DELETE FROM podcast_transcript_cache WHERE channel_id=?', [row.id]);
       if (retained?.keep) {
         await db.runAsync(`UPDATE podcast_episodes SET data=json_remove(data,'$.description','$.descriptionHtml','$.chapters','$.chaptersUrl','$.chaptersType','$.transcripts')
           WHERE channel_id=?
@@ -1338,4 +1342,15 @@ export async function compactPodcastCatalog(scope: string, current: () => boolea
     await db.execAsync('VACUUM'); checkMaintenanceOwner(current);
     await checkpoint();
   });
+}
+
+/** Publisher text belongs to disposable catalog data; progress/favorites live elsewhere. */
+export async function readPodcastTranscript(scope: string, id: string, url: string, current: () => boolean): Promise<string | undefined> {
+  checkMaintenanceOwner(current); const value = await podcastDb(scope);
+  return serialized(async () => { checkMaintenanceOwner(current); const row = await value.getFirstAsync<{ data: string }>('SELECT data FROM podcast_transcript_cache WHERE episode_id=? AND url=?', [id, url]); checkMaintenanceOwner(current); return row?.data; });
+}
+export async function savePodcastTranscript(scope: string, id: string, channel: string, url: string, data: string, current: () => boolean): Promise<void> {
+  if (data.length > 1_500_000) throw new Error('Publisher transcript is too large');
+  checkMaintenanceOwner(current); const value = await podcastDb(scope);
+  await serialized(() => value.withTransactionAsync(async () => { checkMaintenanceOwner(current); await value.runAsync('INSERT OR REPLACE INTO podcast_transcript_cache(episode_id,channel_id,url,data,updated_at) VALUES(?,?,?,?,?)', [id,channel,url,data,Date.now()]); checkMaintenanceOwner(current); }));
 }

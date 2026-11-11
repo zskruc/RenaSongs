@@ -1,3 +1,4 @@
+import { createEndpointReader } from '../src/lib/httpCooldown';
 import * as podcastStorageLease from '../src/lib/podcastStorageLease';
 /** Production RSS + SQLite boundaries used by the discovery preview and Subscribe. */
 import assert from 'node:assert/strict';
@@ -57,6 +58,7 @@ function harness() {
   let xml = '<rss><channel><title>Preview Show</title><item><guid>first</guid><title>Episode</title>'
     + '<enclosure url="https://audio.test/one.mp3" type="audio/mpeg"/></item></channel></rss>';
   const Api = compile('../src/api/podcasts.ts', {
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     'expo/fetch': { fetch: async (url: string, options: any) => {
       requests.push({ url, signal: options.signal });
       return { status: 200, ok: true, headers: { get: () => null }, text: async () => { await bodyGate; return xml; } };

@@ -1,3 +1,4 @@
+import { useMetadataArtwork } from '@/lib/metadata/hooks';
 /** Album card for home and search grids/carousels. */
 import { DetailLink } from '@/components/DetailLink';
 import { memo } from 'react';
@@ -31,7 +32,7 @@ export const AlbumCard = memo(function AlbumCard({ album, width = 150, onPress }
   useTheme();
   const appleMusic = useAppleMusicStyle();
   const pagePalette = useArtistPagePalette();
-  const cover = coverArtUrl(album.coverArt ?? album.id, COVER.card);
+  const cover = useMetadataArtwork('album',album.id,coverArtUrl(album.coverArt ?? album.id, COVER.card));
   const openMenu = useMediaMenu((s) => s.open);
   const explicit = useExplicitBadge(album.explicitStatus);
 

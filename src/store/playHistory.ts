@@ -4,6 +4,8 @@ import type { Song, SubsonicAuth } from '@/api/subsonic';
 import { primaryUrl } from '@/lib/serverUrls';
 import { deleteItem, getItem, setItemStrict } from '@/lib/storage';
 import { captureLyricOwner } from '@/lib/lyricOwner';
+import { songContentKind } from '@/lib/contentKind';
+import { isSpokenContent } from '@/lib/currentContentKind';
 import { profileScopeId, useAuthStore } from './auth';
 const LEGACY_KEY = 'resonus.playHistory', MAX = 100;
 const safe = (s: string) => s.replace(/[^A-Za-z0-9._-]/g, '_');
@@ -22,6 +24,7 @@ export function mergeHistoryEntries(...groups: readonly HistoryEntry[][]): Histo
   for (const entries of groups) for (const entry of entries) {
     if (!entry?.song || typeof entry.song.id !== 'string' || !entry.song.id || typeof entry.song.title !== 'string'
       || !Number.isFinite(entry.playedAt) || entry.playedAt < 0) throw new Error('Invalid play history');
+    if (songContentKind(entry.song) !== 'music') continue;
     const previous = result.get(entry.song.id); if (!previous || entry.playedAt > previous.playedAt) result.set(entry.song.id, entry);
   }
   return [...result.values()].sort((a, b) => b.playedAt - a.playedAt).slice(0, MAX);
@@ -53,7 +56,7 @@ export function flushPlayHistory(): Promise<void> {
 export const usePlayHistory = create<PlayHistoryState>((set, get) => ({
   entries: [], hydrated: false,
   record(song) {
-    if (!song?.id) return;
+    if (!song?.id || isSpokenContent(song)) return;
     const key = storageKey();
     if (currentKey !== key) { currentKey = key; ready = false; set({ entries: [], hydrated: false }); }
     const fresh = { song, playedAt: Date.now() }, entries = mergeHistoryEntries([fresh], get().entries);

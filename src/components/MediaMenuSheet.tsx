@@ -25,6 +25,8 @@ import { queryClient } from '@/lib/query';
 import { useArtistPicker } from '@/store/artistPicker';
 import { useAuthStore } from '@/store/auth';
 import { anyDownloads, useDownloads } from '@/store/downloads';
+import { captureCustomizationOwner } from '@/lib/localCustomizations';
+import { openMetadataTarget } from '@/store/metadataScraping';
 import { useMediaMenu, type MediaMenuItem } from '@/store/mediaMenu';
 import { MAX_PINS, usePins } from '@/store/pins';
 import { usePlayerStore } from '@/store/player';
@@ -418,6 +420,9 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                 }}
               />
             ) : null}
+            {album ? <Action icon="search-outline" label={t('Metadata and local artwork')} onPress={() => { const current = captureCustomizationOwner(); void withSongs((songs) => {
+              if (!current()) return; openMetadataTarget({ kind: 'album', id: album.id, title: album.name, songs }); router.push('/metadata');
+            }); }} /> : null}
             {/* Albums only: a playlist is nobody's. The song menu has had this
                 since always and an album is the one thing on screen that names
                 an artist without offering a way to them. */}

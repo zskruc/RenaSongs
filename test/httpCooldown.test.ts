@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createEndpointReader, EndpointCooldownError,retryAfterMs } from '../src/lib/httpCooldown';
+const response=(status:number,delay?:string)=>({status,headers:{get:()=>delay}});
+test('different discovery paths share a host cooldown without replaying the first request',async()=>{let now=1000,calls=0;const read=createEndpointReader({now:()=>now});await read('https://feed.test/rss',async()=>{calls++;return response(429,'90');},{scope:'alice'});await assert.rejects(read('https://feed.test/chapters',async()=>{calls++;return response(200);},{scope:'alice'}),EndpointCooldownError);assert.equal(calls,1);now+=90001;await read('https://feed.test/chapters',async()=>{calls++;return response(200);},{scope:'alice'});assert.equal(calls,2);});
+test('accounts and unrelated hosts do not block each other',async()=>{const read=createEndpointReader();await read('https://a.test/rss',async()=>response(503,'60'),{scope:'one'});await read('https://a.test/rss',async()=>response(200),{scope:'two'});await read('https://b.test/rss',async()=>response(200),{scope:'one'});});
+test('HTTP-date Retry-After and malformed values are handled explicitly',()=>{assert.equal(retryAfterMs('Wed, 11 Nov 2026 00:01:00 GMT',Date.parse('2026-11-11T00:00:00Z')),60000);assert.equal(retryAfterMs('garbage'),undefined);assert.equal(retryAfterMs('1.5',0),1500);});
+test('authentication errors are not reclassified as rate limiting',async()=>{const read=createEndpointReader();await read('https://a.test',async()=>response(403,'600'));await read('https://a.test',async()=>response(200));});
+test('canceled and stale requests are rejected before invoking transport',async()=>{const read=createEndpointReader();let calls=0;await assert.rejects(read('https://a.test',async()=>{calls++;return response(200);},{current:()=>false}));assert.equal(calls,0);});

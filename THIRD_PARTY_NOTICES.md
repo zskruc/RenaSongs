@@ -358,3 +358,29 @@ built in explicit background metadata-index batches, not in list-row drawing.
 Online radio discovery reads [Radio Browser's public API](https://api.radio-browser.info/).
 Directory metadata and station streams remain provided by their respective
 operators; discovery does not bundle or redistribute radio audio.
+
+## Optional metadata and audio tools (2026-11-11)
+
+The metadata/source/job and listening tools reference Primuse revision
+`a7bcb332d3a7bc5ab66d92819c11f483b17c7ccd` and are independently adapted to
+Android and this application's local, source-partitioned data. Metadata edits,
+artwork, lyric corrections, CUE copies and analysis results are stored inside
+the application. No remote music files or server tags are rewritten.
+
+Custom response parsers use **Mozilla Rhino 1.8.0**, distributed under MPL-2.0,
+inside an Android isolated process without network or filesystem bridge access.
+Its source is available from [Mozilla Rhino](https://github.com/mozilla/rhino/tree/Rhino1_8_0_Release);
+the license is reproduced in [licenses/MOZILLA-RHINO-MPL-2.0.txt](./licenses/MOZILLA-RHINO-MPL-2.0.txt).
+
+Optional on-device lyric translation uses **Google ML Kit Translate 17.0.3**.
+Translation is powered by Google Translate. Models are downloaded only after an
+explicit action; lyric text is processed locally. See the [ML Kit usage guidelines](https://developers.google.com/ml-kit/language/translation/translation-terms),
+[Translation attribution requirements](https://docs.cloud.google.com/translate/attribution)
+and [Google Translate](https://translate.google.com).
+The unmodified attribution badge files under `assets/google-translate/` are the
+files provided in Google's official attribution archive. Google Translate marks
+remain Google's trademarks; their inclusion does not imply endorsement.
+
+Word alignment uses only a compatible endpoint configured by the user. Primuse's
+private relay, account authentication, paid service or App Attest identity is not
+bundled or reused.

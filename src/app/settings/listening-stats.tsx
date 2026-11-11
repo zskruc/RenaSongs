@@ -6,6 +6,7 @@ import { ActivityIndicator, FlatList, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { getSong } from '@/api/data';
+import type { Song } from '@/api/subsonic';
 import { GlassPressable } from '@/components/glass';
 import { SelectList, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { TrackRow } from '@/components/TrackRow';
@@ -14,6 +15,7 @@ import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
 import { useT } from '@/i18n';
 import { listeningPreferences, listeningSummary, type ListeningSummary } from '@/lib/listeningDb';
 import { listeningBars, listeningRange, type ListeningPeriod } from '@/lib/listeningMath';
+import type { ListeningContentKind } from '@/lib/contentKind';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { useListeningStats } from '@/store/listeningStats';
 import { currentSong, usePlayerStore } from '@/store/player';
@@ -32,6 +34,7 @@ export default function ListeningStatsPage() {
   const language = useSettings((state) => state.language);
   const prefs = useListeningStats();
   const [period, setPeriod] = useState<ListeningPeriod>('week');
+  const [kind, setKind] = useState<ListeningContentKind>('music');
   const [year, setYear] = useState(new Date().getFullYear());
   const [refresh, setRefresh] = useState(0);
   const [switching, setSwitching] = useState(false);
@@ -39,9 +42,9 @@ export default function ListeningStatsPage() {
   useEffect(() => { void useListeningStats.getState().load(); }, [profile]);
   const range = listeningRange(period, year);
   const query = useQuery({
-    queryKey: ['listening-stats', profile, period, year, refresh],
+    queryKey: ['listening-stats', profile, kind, period, year, refresh],
     queryFn: async () => {
-      const summary = await listeningSummary(profile, range.from, range.until);
+      const summary = await listeningSummary(profile, range.from, range.until, kind);
       const preferences = await listeningPreferences(profile);
       return { summary, preferences, profile };
     },
@@ -65,10 +68,11 @@ export default function ListeningStatsPage() {
     finally { setSwitching(false); }
   }
 
-  async function play(id: string) {
+  async function play(entry: Song) {
     const owner = profileScopeId();
+    if (entry.podcastChannelId) { router.push({ pathname: '/podcast-episode/[id]', params: { id: entry.id, channelId: entry.podcastChannelId } }); return; }
     try {
-      const song = await getSong(id);
+      const song = await getSong(entry.id);
       if (!song) throw new Error('Song not found');
       if (profileScopeId() === owner) await usePlayerStore.getState().playQueue([song], 0, 'listening-stats', '/settings/listening-stats');
     } catch { if (profileScopeId() === owner) toast(t("Couldn't play")); }
@@ -87,13 +91,17 @@ export default function ListeningStatsPage() {
         <Text style={settingsStyles.sectionDescription}>{first
           ? t('Recording since {date}. Older listening time is not reconstructed.', { date: new Date(first).toLocaleDateString(language) })
           : t('Reports start when music plays in this version. No past listening time is invented.')}</Text>
+        <SelectList<ListeningContentKind> label={t('Content statistics')} value={kind} onChange={setKind} options={[
+          { value: 'music', label: t('Music') }, { value: 'podcast', label: t('Podcasts') }, { value: 'audiobook', label: t('Audiobooks') },
+        ]} />
+        <Text style={settingsStyles.sectionDescription}>{t('Music, podcasts and audiobooks are recorded separately from this version. Earlier totals are preserved without guessing their content type.')}</Text>
         <SelectList<ListeningPeriod> label={t('Report period')} value={period} onChange={setPeriod} options={[
           { value: 'week', label: t('Last 7 days') }, { value: 'month', label: t('Last 30 days') }, { value: 'year', label: t('Yearly review') },
         ]} />
         {period === 'year' ? <SelectList label={t('Year')} value={year} onChange={setYear} options={years} /> : null}
         <View style={styles.metrics}>
           <View style={styles.metric}><Text style={styles.big}>{duration(data?.seconds ?? 0)}</Text><Text style={styles.muted}>{t('Listening time')}</Text></View>
-          <View style={styles.metric}><Text style={styles.big}>{data?.songs ?? 0}</Text><Text style={styles.muted}>{t('Different songs')}</Text></View>
+          <View style={styles.metric}><Text style={styles.big}>{data?.songs ?? 0}</Text><Text style={styles.muted}>{t(kind === 'music' ? 'Different songs' : 'Different episodes or chapters')}</Text></View>
           <View style={styles.metric}><Text style={styles.big}>{data?.plays ?? 0}</Text><Text style={styles.muted}>{t('Qualified listening sessions')}</Text></View>
         </View>
         <Text style={styles.note}>{t('A session counts after 30 seconds, or half of a shorter song.')}</Text>
@@ -110,7 +118,7 @@ export default function ListeningStatsPage() {
             <Text style={styles.artistName} numberOfLines={1}>{artist.name || t('Unknown artist')}</Text><Text style={styles.muted}>{duration(artist.seconds)}</Text>
           </View>)}
         </> : null}
-        <SettingRow icon="stats-chart-outline" label={t('All-time most played')} description={t('Uses the existing server or local play counter.')} chevron onPress={() => router.push('/browse/songs?sort=frequent')} />
+        {kind === 'music' ? <SettingRow icon="stats-chart-outline" label={t('All-time most played')} description={t('Uses the existing server or local play counter.')} chevron onPress={() => router.push('/browse/songs?sort=frequent')} /> : null}
         <GlassPressable buttonMaterial={false} style={styles.refresh} onPress={() => {
           setRefresh((value) => value + 1);
           if (useListeningStats.getState().error) void useListeningStats.getState().load(true);
@@ -119,11 +127,11 @@ export default function ListeningStatsPage() {
         </GlassPressable>
         {query.isFetching ? <ActivityIndicator color={colors.accent} style={{ padding: spacing.md }} /> : null}
         {(query.error || prefs.error) ? <Text style={styles.error}>{t('Listening statistics are unavailable')}</Text> : null}
-        <Text style={settingsStyles.sectionTitle}>{t('Most listened songs')}</Text>
+        <Text style={settingsStyles.sectionTitle}>{t(kind === 'music' ? 'Most listened songs' : 'Most listened episodes or chapters')}</Text>
       </>}
       ListEmptyComponent={!query.isFetching ? <Text style={styles.empty}>{t('No listening recorded in this period')}</Text> : null}
       renderItem={({ item }) => <View>
-        <TrackRow song={item.song} isCurrent={playing?.id === item.song.id} onPress={() => { void play(item.song.id); }} />
+        <TrackRow song={item.song} isCurrent={playing?.id === item.song.id} onPress={() => { void play(item.song); }} />
         <Text style={styles.songTime}>{duration(item.seconds)}</Text>
       </View>} />
   </SettingsPage>;

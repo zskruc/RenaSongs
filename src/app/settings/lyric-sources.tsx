@@ -22,7 +22,7 @@ import { useToast } from '@/store/toast';
 import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
 
 const LABELS: Record<LyricCandidateKind, string> = { automatic: 'Cached automatic lyrics', server: 'Server lyrics',
-  'sidecar-ttml': 'Local TTML file', 'sidecar-lrc': 'Local LRC file', embedded: 'Embedded lyrics', lrclib: 'LRCLIB' };
+  'sidecar-ttml': 'Local TTML file', 'sidecar-lrc': 'Local LRC file', embedded: 'Embedded lyrics', lrclib: 'LRCLIB', provider: 'Metadata provider' };
 const MODES: Record<LyricDisplayMode, string> = { original: 'Original only', translation: 'Original and translation',
   romanization: 'Original and romanization', both: 'Original, translation and romanization' };
 

@@ -14,6 +14,8 @@ import { CACHED_COVER, COVER, songCoverUrl, type Song } from '@/api/data';
 import {
   carAutoAvailable,
   onCarConnected,
+  onCarBrowse,
+  notifyCarBrowseChanged,
   onPlay,
   onTransport,
   setNodes,
@@ -29,6 +31,8 @@ import { useAuthStore } from '@/store/auth';
 import { useLastPlayed } from '@/store/lastPlayed';
 import { favoriteLabel, favoriteState, onFavoritesChange, toggleFavorite } from '@/lib/remoteFavorite';
 import { currentSong, playbackUserSeekVersion, usePlayerStore, type StreamInfo } from '@/store/player';
+import { requestPodcastCarPage, resetPodcastCarTree } from '@/lib/carPodcastTree';
+import { queryClient } from '@/lib/query';
 
 const REBUILD_DEBOUNCE_MS = 600;
 /** How long after opening before the tree is filled in. Long enough that the
@@ -114,7 +118,8 @@ export function CarAutoSync() {
     // The session or the mode, not every write to the store: it also holds the
     // profiles and the hydration flag, and each of those restarted the build.
     const unsubAuth = useAuthStore.subscribe((s, prev) => {
-      if (s.auth === prev.auth && s.offline === prev.offline) return;
+      if (s.auth === prev.auth && s.offline === prev.offline && s.offlineSource === prev.offlineSource && s.autoOffline === prev.autoOffline) return;
+      resetPodcastCarTree();
       rebuild(false);
       scheduleDeep();
     });
@@ -149,6 +154,17 @@ export function CarAutoSync() {
         void setItem(CAR_SEEN_KEY, String(Date.now())).catch(() => {});
       }
       if (Date.now() - lastDeepAt > DEEP_MIN_INTERVAL_MS) scheduleDeep(0);
+    });
+    const browseSub = onCarBrowse(({ parentId }) => {
+      void requestPodcastCarPage(parentId).then((result) => {
+        if (!cancelled && result?.current()) { setNodes(result.tree); notifyCarBrowseChanged(parentId); }
+      }).catch(() => {});
+    });
+    const unsubPodcastChanges = queryClient.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated' || event.action.type !== 'invalidate') return;
+      const key = event.query.queryKey[0];
+      if (key !== 'podcastChannels' && key !== 'podcastLibrary' && key !== 'podcastFavorites') return;
+      resetPodcastCarTree(); if (carSeen) rebuild(false);
     });
 
     // ── Mirror playback state ──
@@ -289,6 +305,8 @@ export function CarAutoSync() {
       unsubPlayer();
       unsubFavorites();
       connectSub?.remove();
+      browseSub?.remove();
+      unsubPodcastChanges();
       playSub?.remove();
       transportSub?.remove();
     };

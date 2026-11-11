@@ -1,3 +1,4 @@
+import { readDiscoveryEndpoint } from './httpCooldown';
 /**
  * Optional metadata from Apple's public artist pages. No MusicKit token,
  * account API, script evaluation or change to the displayed photograph.
@@ -181,7 +182,7 @@ export function parseAppleArtistArtwork(html: string, artistId: string, currentI
 }
 
 export function createAppleArtistArtworkResolver(options: ResolverOptions = {}) {
-  const fetcher: Fetcher = options.fetch ?? ((url, init) => fetch(url, init));
+  const fetcher: Fetcher = options.fetch ?? ((url, init) => readDiscoveryEndpoint(url, () => fetch(url, init), { signal: init.signal ?? undefined }));
   const now = options.now ?? Date.now;
   const limit = (value: number | undefined, maximum: number) =>
     value !== undefined && Number.isFinite(value) ? Math.max(1, Math.min(maximum, Math.floor(value))) : maximum;

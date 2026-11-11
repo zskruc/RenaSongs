@@ -1,6 +1,6 @@
 /** Saved local AND rules; catalogue and results are prepared outside scrolling. */
 /* eslint-disable react-hooks/set-state-in-effect -- Source-bound async work must discard stale account/results before it starts. */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { getStarred } from '@/api/data';
@@ -9,12 +9,15 @@ import { Dialog } from '@/components/Dialog';
 import { GlassPressable, GlassTextInput } from '@/components/glass';
 import { SelectList, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { TrackRow } from '@/components/TrackRow';
+import { SmartRuleGroups } from '@/components/SmartRuleGroups';
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
 import { useMusicToolsCatalog } from '@/hooks/useMusicToolsCatalog';
 import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
 import { useT } from '@/i18n';
 import { deleteSmartRule, savedSmartRules, saveSmartRule } from '@/lib/listeningDb';
-import { EMPTY_RULE, evaluateSmartRule, normalizeSmartRule, type SmartRule } from '@/lib/smartRules';
+import { EMPTY_RULE, evaluateSmartRule, normalizeSmartRule, smartRuleNeedsFavorites, type SmartRule } from '@/lib/smartRules';
+import { commitRecentlyDeleted, prepareRecentlyDeleted, recentlyDeletedOwner } from '@/lib/recentlyDeleted';
+import { captureLyricOwner } from '@/lib/lyricOwner';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { usePlayCounts } from '@/store/playCounts';
 import { currentSong, usePlayerStore } from '@/store/player';
@@ -31,7 +34,7 @@ export default function SmartPlaylistsPage() {
 
 function SmartPlaylistsBody() {
   useTheme();
-  const auth = useAuthStore((state) => state.auth), offline = useAuthStore((state) => state.offline);
+  const auth = useAuthStore((state) => state.auth), offline = useAuthStore((state) => state.offline), autoOffline = useAuthStore((state) => state.autoOffline);
   const catalog = useMusicToolsCatalog();
   const t = useT(), dockScroll = useLiquidDockScrollHandler(), bottom = useScreenBottomPadding();
   const toast = useToast((state) => state.show);
@@ -46,6 +49,7 @@ function SmartPlaylistsBody() {
   const alive = useRef(true);
   const generation = useRef(0);
   const profile = catalog.scope;
+  const owns = useMemo(() => { const epoch = captureLyricOwner(profile); return () => epoch() && useAuthStore.getState().auth === auth && useAuthStore.getState().offline === offline && useAuthStore.getState().autoOffline === autoOffline; }, [profile, auth, offline, autoOffline]);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useEffect(() => {
     let active = true;
@@ -69,9 +73,9 @@ function SmartPlaylistsBody() {
   useEffect(() => {
     let active = true;
     const token = ++generation.current;
-    const valid = () => active && alive.current && generation.current === token && profileScopeId() === profile;
+    const valid = () => active && alive.current && owns() && generation.current === token && profileScopeId() === profile;
     const rule = normalizeSmartRule({ ...draft, id: draft.id || 'preview', name: draft.name || 'preview' });
-    if (!catalog.catalog || !rule || (rule.favorites && favorite.profile !== profile)) {
+    if (!catalog.catalog || !rule || (smartRuleNeedsFavorites(rule) && favorite.profile !== profile)) {
       setResult(undefined); setAnalyzing(false); return;
     }
     setAnalyzing(true);
@@ -80,19 +84,21 @@ function SmartPlaylistsBody() {
       if (valid()) { setResult({ profile, songs, draft, catalog: catalog.catalog, favorite, counts }); setAnalyzing(false); }
     }, () => { if (valid()) { setResult(undefined); setAnalyzing(false); } });
     return () => { active = false; };
-  }, [draft, catalog.catalog, profile, counts, auth, favorite]);
+  }, [draft, catalog.catalog, profile, counts, auth, favorite, owns]);
   const rules = saved.profile === profile ? saved.rules : [];
   const songs = result?.profile === profile && catalog.catalog && result.catalog === catalog.catalog
     && result.draft === draft && result.favorite === favorite && result.counts === counts ? result.songs : [];
   const change = <K extends keyof SmartRule>(key: K, value: SmartRule[K]) => setDraft((current) => ({ ...current, [key]: value }));
-  const current = () => alive.current && profileScopeId() === profile && useAuthStore.getState().auth === auth;
+  const current = () => alive.current && owns() && profileScopeId() === profile && useAuthStore.getState().auth === auth;
+  const latest = useRef({ songs, name: draft.name, current });
+  useLayoutEffect(() => { latest.current = { songs, name: draft.name, current }; });
   async function save() {
     const value = normalizeSmartRule({ ...draft, id: draft.id || `smart_${Date.now()}_${Math.random().toString(36).slice(2, 8)}` });
     if (!value) { toast(t('Enter a name and valid year range')); return; }
     if (busy) return;
     setBusy(true);
     try {
-      await saveSmartRule(profile, value);
+      await saveSmartRule(profile, value, current);
       if (!current()) return;
       setDraft(value); setSaved({ profile, rules: [...rules.filter((rule) => rule.id !== value.id), value] });
       toast(t('Smart playlist saved'));
@@ -105,15 +111,12 @@ function SmartPlaylistsBody() {
     if (!previous || busy) return;
     setBusy(true);
     try {
-      await deleteSmartRule(profile, previous.id);
+      const owner = recentlyDeletedOwner();
+      const ticket = await prepareRecentlyDeleted({ kind: 'smart-playlist', title: previous.name, payload: previous }, owner);
+      owner.check(); await deleteSmartRule(profile, previous.id, owner.current); owner.check(); await commitRecentlyDeleted(ticket);
       if (!current()) return;
       setSaved({ profile, rules: rules.filter((rule) => rule.id !== previous.id) }); setDraft(blank());
-      toast(t('Smart playlist removed'), { label: t('Undo'), run: () => {
-        if (!current()) return;
-        void saveSmartRule(profile, previous).then(() => {
-          if (current()) setSaved((value) => ({ profile, rules: [...value.rules.filter((rule) => rule.id !== previous.id), previous] }));
-        }, () => { if (current()) toast(t('Could not save smart playlist')); });
-      } });
+      toast(t('Moved to recently deleted'));
     } catch { if (current()) toast(t('Could not save smart playlist')); }
     finally { if (alive.current) setBusy(false); }
   }
@@ -122,7 +125,7 @@ function SmartPlaylistsBody() {
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" initialNumToRender={8} maxToRenderPerBatch={6} windowSize={5}
       contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: bottom }}
       ListHeaderComponent={<>
-        <Text style={settingsStyles.sectionDescription}>{t('Rules are combined with AND and saved only for this profile. They do not alter server playlists.')}</Text>
+        <Text style={settingsStyles.sectionDescription}>{t('Basic filters use AND. Advanced groups support AND and OR. Rules are saved only for this profile and do not alter server playlists.')}</Text>
         <SelectList label={t('Saved smart playlists')} value={draft.id} onChange={(id) => setDraft(rules.find((rule) => rule.id === id) ?? blank())}
           options={[{ value: '', label: t('New smart playlist') }, ...rules.map((rule) => ({ value: rule.id, label: rule.name }))]} />
         <Text style={styles.label}>{t('Playlist name')}</Text>
@@ -144,6 +147,7 @@ function SmartPlaylistsBody() {
         <SelectList label={t('Added within')} value={draft.addedDays} onChange={(value) => change('addedDays', value)} options={[
           { value: 0, label: t('Any time') }, { value: 7, label: t('Last 7 days') }, { value: 30, label: t('Last 30 days') }, { value: 90, label: t('Last 90 days') }, { value: 365, label: t('Last 365 days') },
         ]} />
+        <SmartRuleGroups rule={draft} onChange={(groups, groupMatch) => setDraft((value) => ({ ...value, groups, groupMatch }))} />
         <SelectList<SmartRule['sort']> label={t('Sort by')} value={draft.sort} onChange={(value) => change('sort', value)} options={[
           { value: 'title', label: t('Title') }, { value: 'newest', label: t('Recently added') }, { value: 'most-played', label: t('Most played') },
         ]} />
@@ -155,7 +159,7 @@ function SmartPlaylistsBody() {
         </View>
         {catalog.loading || analyzing ? <View style={styles.progress}><ActivityIndicator color={colors.accent} /><Text style={styles.muted}>{t('Reading library: {n} songs', { n: catalog.count })}</Text></View> : null}
         {catalog.error ? <Text style={styles.danger}>{t('Could not read the music catalogue. Try refreshing.')}</Text> : null}
-        {draft.favorites && favorite.profile !== profile ? <Text style={styles.muted}>{t('Waiting for favorites')}</Text> : null}
+        {smartRuleNeedsFavorites(draft) && favorite.profile !== profile ? <Text style={styles.muted}>{t('Waiting for favorites')}</Text> : null}
         <Text style={styles.muted}>{catalog.catalog?.offline ? t('Offline rules use the music available in this profile.') : t('Missing year or added-date tags cannot match those filters.')}</Text>
         <Text style={settingsStyles.sectionTitle}>{t('Matching songs: {n}', { n: songs.length })}</Text>
         <View style={styles.actions}>
@@ -164,7 +168,7 @@ function SmartPlaylistsBody() {
         </View>
       </>}
       ListEmptyComponent={!catalog.loading && !analyzing ? <Text style={styles.empty}>{t('No songs match these rules')}</Text> : null}
-      renderItem={({ item, index }) => <TrackRow song={item} isCurrent={playing?.id === item.id} onPress={() => { void usePlayerStore.getState().playQueue(songs, index, draft.name || 'smart-playlist', '/settings/smart-playlists'); }} />} />
+      renderItem={({ item }) => <TrackRow song={item} isCurrent={playing?.id === item.id} onPress={() => { const value = latest.current; if (!value.current()) return; const index = value.songs.findIndex((song) => song.id === item.id); if (index >= 0) void usePlayerStore.getState().playQueue(value.songs, index, value.name || 'smart-playlist', '/settings/smart-playlists'); }} />} />
     <Dialog visible={remove} title={t('Delete rule')} message={draft.name} destructive confirmLabel={t('Delete')} onCancel={() => setRemove(false)} onConfirm={() => { void erase(); }} />
   </SettingsPage>;
 }

@@ -1,3 +1,4 @@
+import { useMetadataArtwork, useMetadataInsight } from '@/lib/metadata/hooks';
 /** Album detail with its songs. */
 import { useQuery } from '@tanstack/react-query';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
@@ -191,7 +192,8 @@ export default function AlbumScreen() {
   const resumeSongs = useMemo(() => data?.songs ?? [], [data?.songs]);
   const { resumeAction } = useAudiobookResume(data?.album, resumeSongs, `/album/${id}`);
   const displayedAlbum = useDisplayAlbum(data?.album);
-  const displayedCover = data ? coverArtUrl(data.album.coverArt ?? data.album.id, appleMusic || artistLayout || primuse ? COVER.full : COVER.card) : undefined;
+  const displayedCover = useMetadataArtwork('album',id,data ? coverArtUrl(data.album.coverArt ?? data.album.id, appleMusic || artistLayout || primuse ? COVER.full : COVER.card) : undefined);
+  const localInsight = useMetadataInsight('album',id);
   const albumPalette = useMinidiscAlbumPalette(minidisc ? displayedCover : undefined, offline);
 
   const discHeaders = useMemo(
@@ -332,6 +334,7 @@ export default function AlbumScreen() {
                 style={{ marginTop: spacing.xl }} />
               {minidisc ? <Text style={{ color: albumPalette.textSecondary, fontSize: fontSize.xs,
                 lineHeight: 19, marginTop: spacing.lg }}>{metaParts.join(' · ')}</Text> : null}
+              {localInsight ? <View style={{ paddingHorizontal: spacing.lg, paddingVertical: spacing.md }}><Text style={{ color: colors.text, fontSize: fontSize.md }}>{localInsight.text}</Text><Text style={{ color: colors.textSecondary, marginTop: spacing.sm }}>{localInsight.source}</Text></View> : null}
               {data.album.artistId ? (
                 <MoreFromArtist
                   artistId={data.album.artistId}
@@ -360,7 +363,7 @@ export default function AlbumScreen() {
       <PlaylistPickerSheet songs={addingSongs} onClose={() => setAddingSongs(null)} />
       <CoverViewer
         visible={coverOpen}
-        uri={coverArtUrl(data.album.coverArt ?? data.album.id, COVER.full)}
+        uri={displayedCover}
         onClose={() => setCoverOpen(false)}
       />
       <Dialog

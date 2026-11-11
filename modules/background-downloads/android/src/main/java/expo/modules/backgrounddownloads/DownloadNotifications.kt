@@ -29,7 +29,7 @@ internal class DownloadNotifications(context: Context) : ContextWrapper(context)
     }
     val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CHANNEL_ID) else Notification.Builder(this)
     val lines = jobs.map { job ->
-      val format = if (job.owner == "music") R.string.resonus_download_music else R.string.resonus_download_cache
+      val format = when (job.owner) { "music" -> R.string.resonus_download_music; "metadata" -> R.string.resonus_download_metadata; else -> R.string.resonus_download_cache }
       strings.getString(format, job.progress.completed, job.progress.total)
     }
     val failures = jobs.sumOf { it.progress.failed.toLong() }

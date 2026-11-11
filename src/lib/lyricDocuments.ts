@@ -5,7 +5,7 @@ import { sourceSong } from './sourceSongMetadata';
 
 export type LyricDisplayMode = 'original' | 'translation' | 'romanization' | 'both';
 export const LYRIC_DISPLAY_MODES: LyricDisplayMode[] = ['original', 'translation', 'romanization', 'both'];
-export type LyricCandidateKind = 'automatic' | 'server' | 'sidecar-ttml' | 'sidecar-lrc' | 'embedded' | 'lrclib';
+export type LyricCandidateKind = 'automatic' | 'server' | 'sidecar-ttml' | 'sidecar-lrc' | 'embedded' | 'lrclib' | 'provider';
 export interface LyricCandidate { id: string; kind: LyricCandidateKind; label?: string; lyrics: SongLyrics; }
 export interface CachedLyricMatch { song: Song; excerpt: string; }
 
@@ -26,7 +26,7 @@ export function validLyricDocument(value: unknown): value is SongLyrics {
   const data = value as SongLyrics | undefined;
   let wordCount = 0;
   const time = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
-  return !!data && typeof data.synced === 'boolean' && Array.isArray(data.lines) && data.lines.length > 0
+  return !!data && (data.translationProvider === undefined || data.translationProvider === 'google-mlkit') && typeof data.synced === 'boolean' && Array.isArray(data.lines) && data.lines.length > 0
     && data.lines.length <= 5000 && data.lines.every((line) => !!line && typeof line === 'object'
       && typeof line.value === 'string' && line.value.length <= 16000
       && (line.start === undefined || time(line.start))

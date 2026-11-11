@@ -1,3 +1,4 @@
+import { createEndpointReader } from '../src/lib/httpCooldown';
 import * as podcastStorageLease from '../src/lib/podcastStorageLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -86,6 +87,7 @@ test('the actual feed refresh cancels while parsing a large response without wri
   const xml = largeFeed(); let writes = 0, previousEpisodeReads = 0;
   const exports: Record<string, any> = {};
   const imports: Record<string, unknown> = {
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     'expo/fetch': { fetch: async () => ({ ok: true, status: 200, headers: { get: () => 'new-etag' }, text: async () => xml }) },
     './netGate': { isManualOffline: () => false, assertCanRequest() {} },
     '@/store/auth': { profileScopeId: () => auth.getState().auth.username, useAuthStore: auth },

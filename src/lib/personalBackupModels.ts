@@ -1,6 +1,7 @@
 /** Portable user data. Allowlisted metadata only: no audio paths, credentials or stream URLs. */
 import type { Song } from '@/api/subsonic';
 import { matchPlaylistAsync, type PortableTrack } from './playlistExchange';
+import { validateMetadataBackupSnapshot, type MetadataBackupSnapshot } from './metadata/archiveModels';
 export interface BackupTrack extends PortableTrack { id?: string; }
 export interface CarriedMarks { favorite?: boolean; rating?: number; }
 export interface PendingPlaylistEntry { key: string; track: BackupTrack; songId?: string; marks?: CarriedMarks; }
@@ -15,6 +16,7 @@ export interface PersonalBackup {
   playlists: { key: string; name: string; entries: PendingPlaylistEntry[] }[];
   extras: Record<string, unknown>;
   font?: { name: string; base64: string };
+  metadata?: MetadataBackupSnapshot;
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const str = (v: unknown, n = 500): string => typeof v === 'string' ? v.replace(/[\0\r\n]/g, ' ').trim().slice(0, n) : '';
@@ -67,11 +69,12 @@ export function validatePersonalBackup(v: unknown, settingsKeys: readonly string
     font = { name: str(v.font.name, 100).replace(/[^\p{L}\p{N}._ -]/gu, '_') || 'restored.ttf', base64: v.font.base64 };
   }
   // Feature-specific validators process these before the first write.
-  const allowed = ['discovery', 'customizations', 'listeningTools', 'longAudio', 'lyricOffsets', 'lyricDisplay', 'smartRules', 'recovery', 'pins', 'albumProgress', 'listeningLedger', 'glass', 'pendingSongMarks', 'personalPlayback'];
+  const allowed = ['localPodcasts', 'discovery', 'customizations', 'listeningTools', 'longAudio', 'lyricOffsets', 'lyricDisplay', 'smartRules', 'recovery', 'pins', 'albumProgress', 'listeningLedger', 'glass', 'pendingSongMarks', 'personalPlayback'];
   const extras = Object.fromEntries(allowed.filter((k) => Object.hasOwn(v.extras as object, k)).map((k) => [k, (v.extras as Record<string, unknown>)[k]]));
   if (JSON.stringify(extras).length > 20_000_000) throw new Error('Invalid backup limits');
+  const metadata = v.metadata === undefined ? undefined : validateMetadataBackupSnapshot(v.metadata);
   return { format: 'resonus-personal-backup', version: 1, createdAt: str(v.createdAt, 40), library: str(v.library, 100), settings,
-    favorites: { songs: array(v.favorites.songs, 50000).map(portableBackupTrack), albums, artists }, ratings, playlists, extras, font };
+    favorites: { songs: array(v.favorites.songs, 50000).map(portableBackupTrack), albums, artists }, ratings, playlists, extras, font, ...(metadata ? { metadata } : {}) };
 }
 export interface BackupMatch { track: BackupTrack; selected?: Song; candidates: Song[]; }
 export async function matchBackupTracks(tracks: BackupTrack[], songs: Song[], sameLibrary: boolean, current: () => boolean): Promise<BackupMatch[]> {

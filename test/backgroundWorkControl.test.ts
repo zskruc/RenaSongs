@@ -11,7 +11,7 @@ function deferred<T>() {
 function harness() {
   type Event = Parameters<Parameters<BackgroundWorkDriver['addInterruptionListener']>[0]>[0];
   const listeners = new Set<(event: Event) => void>();
-  const starts: { owner: 'music' | 'media-cache'; runId: string; token: string; progress: unknown }[] = [];
+  const starts: { owner: 'music' | 'media-cache' | 'metadata'; runId: string; token: string; progress: unknown }[] = [];
   const stops: string[] = [], pendingStops: { owner: string; runId: string }[] = [],
     updates: { token: string; progress: any }[] = [], waits: number[] = [];
   let begin = async (token: string): ReturnType<BackgroundWorkDriver['startJob']> => ({ ok: true, token, headlessActive: true });

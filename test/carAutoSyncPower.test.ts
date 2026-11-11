@@ -28,9 +28,10 @@ async function harness(available = true) {
   const imports: Record<string, unknown> = {
     react: React, 'react-native': { AppState: app },
     '@/api/data': { CACHED_COVER: 'cached-cover:', COVER: { card: 600 }, songCoverUrl: () => undefined },
-    '@/lib/carAuto': { carAutoAvailable: available, onCarConnected: subscribe('connect'), onPlay: subscribe('play'), onTransport: subscribe('transport'),
+    '@/lib/carAuto': { carAutoAvailable: available, onCarConnected: subscribe('connect'), onCarBrowse: subscribe('browse'), notifyCarBrowseChanged() {}, onPlay: subscribe('play'), onTransport: subscribe('transport'),
       setNodes() {}, setNowPlaying: (value: any) => metadata.push(value), setQueue: (...value: any[]) => queues.push(value),
       setPlaybackState: (value: any) => pushed.push(value) },
+    '@/lib/carPodcastTree': { requestPodcastCarPage: async () => undefined, resetPodcastCarTree() {} }, '@/lib/query': { queryClient: { getQueryCache: () => ({ subscribe: () => () => {} }) } },
     '@/lib/carAutoTree': { buildBrowseTree: async () => ({ nodes: {} }), buildLatestRecent: async () => null, handleBrowsePlay: async () => {} },
     '@/lib/perfLog': { bump() {} }, '@/lib/storage': { getItem: async () => null, setItem: async () => {} },
     '@/store/auth': { useAuthStore: auth }, '@/store/lastPlayed': { useLastPlayed: lastPlayed },

@@ -59,7 +59,7 @@ export default function PersonalBackupScreen() {
         <Text style={styles.note}>{t('Back up favorites, ratings, your playlists, bookmarks, lyric edits, listening history and appearance. Music files and account passwords are excluded.')}</Text>
         <SettingRow label={t('Export personal backup')} onPress={busy ? undefined : () => void run(async (id) => {
           const file = await buildPersonalBackup(operationOwner(id), updateStatus);
-          if (!current()) return; await sharePersonalBackup(file); if (current()) setStatus(t('Backup exported'));
+          if (!current()) return; await sharePersonalBackup(file); if (current()) setStatus(t('Backup exported') + (file.metadata?.omitted.length ? ' · ' + t('{n} artwork files omitted from backup', { n: file.metadata.omitted.length }) : ''));
         })} />
         <SettingRow label={t('Choose backup and preview')} onPress={busy ? undefined : () => void run(async (id) => {
           const file = await pickPersonalBackup(); if (!file || !current()) return;
@@ -75,6 +75,7 @@ export default function PersonalBackupScreen() {
           <Text style={styles.title}>{t('Restore preview')}</Text>
           <Text style={styles.note}>{t('{matched} matched, {unmatched} need review', { matched, unmatched: preview.tracks.length - matched })}</Text>
           <Text style={styles.note}>{t('{n} playlists', { n: preview.backup.playlists.length })} · {t('{n} rating conflicts', { n: preview.conflicts })}</Text>
+          {preview.backup.metadata?.omitted.length ? <Text style={styles.note}>{t('{n} artwork files omitted from backup', { n: preview.backup.metadata.omitted.length })} · {t('Large or unavailable images can be selected again after restore.')}</Text> : null}
           {preview.albums.some((a) => !a.id) || preview.artists.some((a) => !a.id) ? <Text style={styles.note}>{t('Unmatched album and artist favorites are skipped. Songs can be matched below.')}</Text> : null}
           {!preview.sameLibrary ? <Text style={styles.note}>{t('This is a different library. ID-based local edits, sessions and bookmarks will not be applied. Songs are matched by metadata.')}</Text> : null}
           {toggle('Restore appearance and glass settings', appearance, setAppearance)}

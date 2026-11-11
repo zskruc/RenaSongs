@@ -43,7 +43,7 @@ internal object BackgroundDownloads {
 
   fun start(context: ReactContext, client: String, owner: String, runId: String,
     progress: Progress, reply: (Map<String, Any?>) -> Unit) {
-    if (owner !in setOf("music", "media-cache") || runId.isBlank() || runId.length > 160) {
+    if (owner !in setOf("music", "media-cache", "metadata") || runId.isBlank() || runId.length > 160) {
       reply(mapOf("ok" to false, "reason" to "invalid-job")); return
     }
     val previous = jobs[owner]

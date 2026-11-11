@@ -1,3 +1,4 @@
+import { createEndpointReader } from '../src/lib/httpCooldown';
 import * as podcastStorageLease from '../src/lib/podcastStorageLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -211,6 +212,7 @@ function apiHarness() {
   const downloaded: { channel: any; episodes: any[]; automatic: boolean }[] = [];
   const invalidations: string[] = [];
   const imports = {
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     'expo/fetch': { fetch: async (url: string, options: any) => {
       requests.push({ url, ...options });
       return { status, ok: status >= 200 && status < 300, headers: { get: (name: string) => name === 'etag' ? 'test-etag' : null },

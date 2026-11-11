@@ -32,6 +32,9 @@ import { exportGlassBackup, importGlassBackup, validateGlassBackup } from '@/sto
 import { getItem } from './storage';
 import { hashKey } from './localLibrary';
 import { queryClient } from './query';
+import { exportMetadataBackup, restoreMetadataBackup } from './metadata/backup';
+import { exportLocalPodcastBackup, validateLocalPodcastBackup, restoreLocalPodcastBackup } from './localPodcastBackup';
+import { validateMetadataBackupSnapshot } from './metadata/archiveModels';
 
 export type BackupOwner = ReturnType<typeof personalOwner>;
 const MAX_BYTES = 40_000_000;
@@ -61,7 +64,7 @@ export async function buildPersonalBackup(owner: BackupOwner, progress: (message
   }
   owner.check(); progress('Reading personal settings', 0);
   const extras: Record<string, unknown> = {
-    personalPlayback: await exportPersonalPlaybackBackup(owner), pendingSongMarks: await exportPendingSongMarks(owner), glass: await exportGlassBackup(), pins: await exportPins(owner.profile), albumProgress: await exportAlbumProgress(),
+    localPodcasts: await exportLocalPodcastBackup(owner), personalPlayback: await exportPersonalPlaybackBackup(owner), pendingSongMarks: await exportPendingSongMarks(owner), glass: await exportGlassBackup(), pins: await exportPins(owner.profile), albumProgress: await exportAlbumProgress(),
     discovery: await exportDiscoveryPreferences(owner.profile), customizations: await exportLocalCustomizations(owner.profile, owner.current),
     listeningTools: await exportListeningTools(), longAudio: await exportLongAudio(), recovery,
     lyricOffsets: savedLyricOffsets(JSON.parse(await getItem(`resonus.lyricOffsets.${hashKey(owner.profile)}`) ?? '{}')),
@@ -76,11 +79,14 @@ export async function buildPersonalBackup(owner: BackupOwner, progress: (message
     if (info.exists && info.size <= 8_000_000) font = { name: custom.customFontUri.split('/').pop() ?? 'font.ttf', base64: await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 }) };
   }
   owner.check();
-  return validatePersonalBackup({ format: 'resonus-personal-backup', version: 1, createdAt: new Date().toISOString(), library: owner.library,
+  const basic = validatePersonalBackup({ format: 'resonus-personal-backup', version: 1, createdAt: new Date().toISOString(), library: owner.library,
     settings: exportedSettings(), favorites: { songs: favorites.songs.map(portableBackupTrack),
       albums: favorites.albums.map((a) => ({ id: a.id, title: a.name, artist: a.artist })), artists: favorites.artists.map((a) => ({ id: a.id, name: a.name })) },
     ratings: catalog.songs.filter((s) => s.userRating && s.userRating >= 1).map((s) => ({ track: portableBackupTrack(s), value: s.userRating! })), playlists, extras, font,
   }, Object.keys(exportedSettings()));
+  owner.check(); progress('Reading local metadata and artwork', 0);
+  const metadata = await exportMetadataBackup(owner.profile, owner.current, Math.max(0, MAX_BYTES - JSON.stringify(basic).length - 1024)); owner.check();
+  return { ...basic, metadata };
 }
 export async function sharePersonalBackup(backup: PersonalBackup) {
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is unavailable');
@@ -98,6 +104,7 @@ export async function pickPersonalBackup(): Promise<PersonalBackup | null> {
   const backup = validatePersonalBackup(JSON.parse(await file.text()), Object.keys(exportedSettings())); validateExtras(backup.extras); return backup;
 }
 function validateExtras(e: Record<string, unknown>) {
+  if (e.localPodcasts !== undefined) validateLocalPodcastBackup(e.localPodcasts);
   if (e.personalPlayback !== undefined) validatePersonalPlaybackBackup(e.personalPlayback);
   if (e.pendingSongMarks !== undefined) validatePendingSongMarks(e.pendingSongMarks);
   if (e.glass !== undefined) validateGlassBackup(e.glass);
@@ -159,6 +166,7 @@ export async function applyPersonalRestore(p: PersonalRestorePreview, options: {
   const { owner, backup } = p; let done = 0;
   const step = () => { owner.check(); progress(++done); };
   owner.check(); validateExtras(backup.extras);
+  if (backup.metadata !== undefined) validateMetadataBackupSnapshot(backup.metadata);
   if (options.personal) {
     const unresolved = p.favoriteIndices.flatMap((index) => !p.tracks[index].selected ? [{ track: p.tracks[index].track, marks: { favorite: true } }] : []);
     const unrated = p.ratingIndices.flatMap((index, n) => !p.tracks[index].selected ? [{ track: p.tracks[index].track, marks: { rating: backup.ratings[n].value } }] : []);
@@ -215,7 +223,9 @@ export async function applyPersonalRestore(p: PersonalRestorePreview, options: {
     }
   }
   if (options.local && p.sameLibrary) {
+    if (backup.metadata !== undefined) { owner.check(); await restoreMetadataBackup(owner.profile, backup.metadata, owner.current); step(); }
     const e = backup.extras;
+    if (e.localPodcasts !== undefined) { owner.check(); await restoreLocalPodcastBackup(e.localPodcasts,owner); }
     if (e.personalPlayback !== undefined) { owner.check(); await restorePersonalPlaybackBackup(e.personalPlayback, owner); }
     if (e.pins !== undefined) { owner.check(); await importPins(owner.profile, e.pins, owner.current); }
     if (e.albumProgress !== undefined) { owner.check(); await importAlbumProgress(e.albumProgress, owner.current); }

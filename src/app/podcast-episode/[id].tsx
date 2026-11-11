@@ -30,6 +30,7 @@ import { queryClient } from '@/lib/query';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { currentSong, playbackUserSeekVersion, usePlayerStore } from '@/store/player';
 import { podcastFile } from '@/store/podcastDownloads';
+import { useLyricToolTarget } from '@/store/lyricToolTarget';
 import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
@@ -145,9 +146,9 @@ export default function PodcastEpisodeScreen() {
       initialNumToRender={12} maxToRenderPerBatch={12} windowSize={5} ListHeaderComponent={header} onScroll={scroll} scrollEventThrottle={16}
       ListEmptyComponent={!details.isPending && episode ? <Text style={styles.empty}>{t(tab === 'notes' ? 'No show notes available.' : 'No chapters supplied for this episode.')}</Text> : null}
       renderItem={({ item }) => item.kind === 'note' ? <PodcastShowNote block={item.block} onLink={openLink} onTimestamp={(at) => { void play(at); }} disabled={busy} />
-        : item.kind === 'transcript' ? <GlassPressable variant="subtle" style={styles.chapter} onPress={() => openLink(item.transcript.url)} accessibilityRole="link">
+        : item.kind === 'transcript' ? <GlassPressable variant="subtle" style={styles.chapter} onPress={() => { if(current() && episode && channel) { useLyricToolTarget.getState().open(episodeToSong(episode,channel)); router.push('/publisher-transcript'); } }} accessibilityRole="button">
           <Icon name="document-text-outline" size={22} color={colors.accent} /><View style={styles.rowText}>
-            <Text style={styles.link}>{t('Open transcript')}</Text><Text style={styles.metadata}>{[item.transcript.language, item.transcript.type].filter(Boolean).join(' · ')}</Text>
+            <Text style={styles.link}>{t('Read transcript in app')}</Text><Text style={styles.metadata}>{[item.transcript.language, item.transcript.type].filter(Boolean).join(' · ')}</Text>
           </View><Icon name="open-outline" size={18} color={colors.textMuted} />
         </GlassPressable> : <View style={styles.chapter}>
           <GlassPressable variant="subtle" disabled={busy} style={styles.chapterMain} onPress={() => { void play(item.chapter.startSec); }} accessibilityRole="button">

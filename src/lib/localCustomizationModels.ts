@@ -5,7 +5,9 @@ import type { CustomizationKind } from './localCustomizations';
 export interface LocalLyricEdit { version: 1; recording: string; base: SongLyrics; lyrics: SongLyrics; updatedAt: number; }
 export const METADATA_FIELDS = ['title', 'artist', 'album', 'year', 'genre', 'track', 'discNumber'] as const;
 export type MetadataField = typeof METADATA_FIELDS[number];
-export type SongMetadataPatch = Partial<Pick<Song, MetadataField>>;
+/** The small legacy editor keeps its fields; the metadata centre adds structured genres/album artist. */
+export const METADATA_PATCH_FIELDS = [...METADATA_FIELDS, 'albumArtist', 'genres', 'mediaKind'] as const;
+export type SongMetadataPatch = Partial<Pick<Song, MetadataField | 'albumArtist' | 'genres' | 'mediaKind'>>;
 export interface LocalSongMetadata { version: 1; patch: SongMetadataPatch; original: SongMetadataPatch; albumId?: string; artistId?: string; }
 export interface LocalArtistAlias { version: 1; artistId: string; canonical: string; aliases: string[]; }
 export const LYRIC_SCRIPTS = ['chinese', 'latin', 'japanese', 'korean'] as const;
@@ -15,8 +17,10 @@ export interface LocalLyricFonts { version: 1; fonts: Partial<Record<LyricScript
 const text = (value: unknown, max = 1024): value is string => typeof value === 'string' && value.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value);
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export function validMetadataPatch(raw: unknown): raw is SongMetadataPatch {
-  return object(raw) && Object.keys(raw).every((key) => METADATA_FIELDS.includes(key as MetadataField)
-    && (['year', 'track', 'discNumber'].includes(key) ? Number.isInteger(raw[key]) && Number(raw[key]) >= 0 && Number(raw[key]) <= 99999 : text(raw[key])));
+  return object(raw) && Object.keys(raw).every((key) => METADATA_PATCH_FIELDS.includes(key as typeof METADATA_PATCH_FIELDS[number])
+    && (key === 'mediaKind' ? ['music', 'podcast', 'audiobook'].includes(String(raw[key]))
+      : key === 'genres' ? Array.isArray(raw[key]) && raw[key].length <= 30 && raw[key].every((genre) => object(genre) && Object.keys(genre).length === 1 && text(genre.name, 100) && !!genre.name.trim())
+      : ['year', 'track', 'discNumber'].includes(key) ? Number.isInteger(raw[key]) && Number(raw[key]) >= 0 && Number(raw[key]) <= 99999 : text(raw[key])));
 }
 export function validCustomizationValue(kind: CustomizationKind, raw: unknown): boolean {
   if (!object(raw) || raw.version !== 1) return false;

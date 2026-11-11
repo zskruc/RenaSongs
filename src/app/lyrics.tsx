@@ -74,7 +74,7 @@ export default function LyricsScreen() {
       {isLoading ? (
         <ActivityIndicator style={{ marginTop: spacing.xxl }} color={colors.text} />
       ) : data?.synced ? (
-        <SyncedLyricsView lines={data.lines} large fadeColor={fadeColor} />
+        <SyncedLyricsView translationProvider={data.translationProvider} lines={data.lines} large fadeColor={fadeColor} />
       ) : data ? (
         <ScrollView contentContainerStyle={styles.plainContent} showsVerticalScrollIndicator={false}>
           <PlainLyrics style={plainLineStyle} lyrics={data} />

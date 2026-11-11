@@ -17,8 +17,11 @@ const owners = new Map<string, object | null>(), retired = new Map<string, objec
 const listeners = new Set<() => void>();
 let revision = 0;
 let metadataRevision = 0;
+let committedRevision = 0;
+const deferredMetadataProfiles = new Set<string>();
 export const customizationRevision = () => revision;
 export const metadataCustomizationRevision = () => metadataRevision;
+export const localCustomizationWriteRevision = () => committedRevision;
 export function subscribeCustomizations(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
 function changed(kind?: CustomizationKind) {
   revision++;
@@ -61,7 +64,7 @@ export async function listLocalCustomizations<T>(scope: CustomizationScope, kind
   return rows.map((row) => ({ id: row.id, value: JSON.parse(row.value) as T }));
 }
 export async function writeLocalCustomization(scope: CustomizationScope, kind: CustomizationKind, id: string, value: unknown | undefined,
-  current = captureCustomizationOwner(scope)): Promise<void> {
+  current = captureCustomizationOwner(scope), options: { notify?: boolean; expected?: unknown } = {}): Promise<void> {
   if (!validIdentity(id) || !kinds.includes(kind) || value !== undefined && !validCustomizationValue(kind, value)) throw new Error('Invalid local customization');
   if (kind === 'artist-alias' && value !== undefined && (value as { artistId?: string }).artistId !== id) throw new Error('Invalid artist alias identity');
   const text = value === undefined ? undefined : JSON.stringify(value);
@@ -71,12 +74,24 @@ export async function writeLocalCustomization(scope: CustomizationScope, kind: C
     check(current); const db = await database(scope.profile); check(current);
     await db.withExclusiveTransactionAsync(async (transaction) => {
       check(current);
+      if (Object.hasOwn(options, 'expected')) {
+        const existing = await transaction.getFirstAsync<{ value: string }>('SELECT value FROM local_customizations WHERE source=? AND kind=? AND id=?', scope.source, kind, id);
+        if (JSON.stringify(existing ? JSON.parse(existing.value) : null) !== JSON.stringify(options.expected ?? null)) throw new Error('Local metadata changed. Review again.');
+        check(current);
+      }
       if (text === undefined) await transaction.runAsync('DELETE FROM local_customizations WHERE source=? AND kind=? AND id=?', scope.source, kind, id);
       else await transaction.runAsync('INSERT OR REPLACE INTO local_customizations(source,kind,id,value) VALUES(?,?,?,?)', scope.source, kind, id, text);
       check(current);
     });
-    check(current); changed(kind);
+    committedRevision++;
+    check(current); if (options.notify !== false) changed(kind);
+    else if (kind === 'song-metadata' || kind === 'artist-alias') deferredMetadataProfiles.add(scope.profile);
   });
+}
+/** A batch publishes committed local metadata at a bounded cadence. */
+export function publishLocalCustomizationChanges(current: () => boolean): void {
+  check(current); const profile = customizationScope().profile;
+  if (deferredMetadataProfiles.delete(profile)) changed('song-metadata');
 }
 /** All source namespaces are included; account URLs and credentials are absent. */
 export async function exportLocalCustomizations(profile: string, current = () => true): Promise<LocalCustomizationArchive> {
@@ -123,7 +138,7 @@ export async function restoreLocalCustomizations(profile: string, raw: unknown, 
       if (options.replace) await transaction.runAsync('DELETE FROM local_customizations');
       for (const entry of data.entries) { check(current); await transaction.runAsync('INSERT OR REPLACE INTO local_customizations(source,kind,id,value) VALUES(?,?,?,?)', entry.source, entry.kind, entry.id, JSON.stringify(entry.value)); }
       check(current);
-    }); check(current); changed();
+    }); committedRevision++; check(current); changed();
   });
 }
 /** Tombstone first, then drain accepted work so removed profiles cannot revive. */
@@ -133,4 +148,5 @@ export async function clearLocalCustomizationsProfile(profile: string): Promise<
   else if (profile === profileScopeId()) retired.set(profile, useAuthStore.getState().auth);
   changed();
   await serial(profile, async () => { const db = await database(profile); await db.runAsync('DELETE FROM local_customizations'); });
+  committedRevision++; deferredMetadataProfiles.delete(profile);
 }

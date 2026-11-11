@@ -1,3 +1,4 @@
+import { TranslationAttribution } from './TranslationAttribution';
 /**
  * Spotify/Apple Music style lyrics for the player: card below the controls
  * with the cover's dominant color. Inside, karaoke with auto-scroll if the
@@ -75,7 +76,7 @@ export function LyricsCard() {
       <Text style={styles.title}>{t('Lyrics')}</Text>
       <View style={styles.body}>
         {data.synced ? (
-          <SyncedLyricsView lines={data.lines} nested fadeColor={bg} />
+          <SyncedLyricsView translationProvider={data.translationProvider} lines={data.lines} nested fadeColor={bg} />
         ) : (
           <ScrollView
             nestedScrollEnabled
@@ -124,7 +125,7 @@ export function CoverLyrics({ size, onClose }: { size: number; onClose: () => vo
             <ActivityIndicator color={colors.text} />
           </View>
         ) : data?.synced ? (
-          <SyncedLyricsView lines={data.lines} nested />
+          <SyncedLyricsView translationProvider={data.translationProvider} lines={data.lines} nested />
         ) : data ? (
           <ScrollView
             nestedScrollEnabled
@@ -161,6 +162,7 @@ export function CoverLyrics({ size, onClose }: { size: number; onClose: () => vo
  */
 export function SyncedLyricsView({
   lines,
+  translationProvider,
   large,
   nested,
   fadeColor,
@@ -170,6 +172,7 @@ export function SyncedLyricsView({
   onLinePress,
 }: {
   lines: LyricLine[];
+  translationProvider?: 'google-mlkit';
   /** Large typography (full screen). */
   large?: boolean;
   /** Inside another scroll (the player card). */
@@ -440,6 +443,7 @@ export function SyncedLyricsView({
 
   return (
     <View style={styles.wrap}>
+      <TranslationAttribution provider={translationProvider} />
       {amll && Platform.OS !== 'web' ? (
         <MaskedView
           style={styles.wrap}

@@ -7,6 +7,8 @@ import { queryClient } from '@/lib/query';
 import { primaryUrl } from '@/lib/serverUrls';
 import { getItem, setItemStrict } from '@/lib/storage';
 import { useAuthStore } from './auth';
+import { scopeKey, useLocalMetadata } from './localMetadata';
+import { customizationScope } from '@/lib/localCustomizations';
 
 export { audiobookAlbum, isAudiobookAlbum, isAudiobookSong } from '@/lib/audiobook';
 export type { AlbumProgressEntry } from '@/lib/audiobook';
@@ -35,6 +37,10 @@ export function isAudiobookAlbumId(albumId: string | undefined): boolean {
   return !!cached && audiobookAlbum(cached.album, cached.songs ?? []);
 }
 export function isAudiobookTrack(song: Song | null | undefined): boolean {
+  if (!song || song.podcastChannelId) return false;
+  const metadata = useLocalMetadata.getState();
+  const kind = metadata.ready && metadata.scope === scopeKey(customizationScope()) ? metadata.songs[song.id]?.patch.mediaKind ?? song.mediaKind : song.mediaKind;
+  if (kind !== undefined) return kind === 'audiobook';
   // Podcast streams never inherit an audiobook tag from an old cached album ID.
   return !!song && !song.url && !song.vod && !(song as Song & { podcastChannelId?: string }).podcastChannelId
     && (isAudiobookSong(song) || isAudiobookAlbumId(song.albumId));

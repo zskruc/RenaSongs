@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as Directory from '../src/lib/podcastDirectory';
+import { createEndpointReader } from '../src/lib/httpCooldown';
 
 const { decodePodcastDirectoryChart: chart, decodePodcastDirectorySearch: search,
   podcastAppleDirectoryId: appleId, podcastDirectoryArtwork: artwork,
@@ -92,6 +93,7 @@ function apiHarness() {
     '@/lib/podcastDirectory': Directory,
     '@/lib/podcastStorageLease': podcastStorageLease,
     '@/lib/podcastFeedStream': { createPodcastFeedPreview },
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
   };
   const exports: Record<string, any> = {};
   runInNewContext(ts.transpileModule(readFileSync(new URL('../src/api/podcasts.ts', import.meta.url), 'utf8'), {

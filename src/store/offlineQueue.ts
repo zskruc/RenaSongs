@@ -38,6 +38,9 @@ interface FavOp {
 interface QueuePlaylist {
   /** Playlist created offline (key is a temporary id). */
   created?: boolean;
+  /** Real id already allocated; verify new-list identity before retrying fill. */
+  needsInitialVerification?: boolean;
+  createdName?: string;
   /** Marked for deletion. */
   deleted?: boolean;
   name?: string;
@@ -69,6 +72,9 @@ interface QueueData {
   songMeta?: Record<string, Song>;
   /** Listens to scrobble on reconnect, oldest first. */
   plays?: PlayOp[];
+  /** Retained intent for confirmed missing server objects; not automatically retried. */
+  blockedFavs?: Record<string, FavOp>;
+  blockedRatings?: Record<string, number>;
 }
 
 export type { PlayOp, QueuePlaylist };
@@ -120,189 +126,125 @@ interface QueueState {
   removePlays: (done: PlayOp[]) => void;
   /** Is there anything pending to sync? */
   isEmpty: () => boolean;
+  error?: string;
+  flushPersistence: () => Promise<void>;
+  checkpointPlaylistCreated: (temporary: string, real: string, fallback: QueuePlaylist, owner?: SubsonicAuth) => Promise<QueuePlaylist>;
+  acknowledgePlaylist: (id: string, expected: QueuePlaylist) => void;
+  settleFavs: (original: Record<string, FavOp>, failed: [string, FavOp][], blocked: [string, FavOp][]) => void;
+  settleRatings: (original: Record<string, number>, failed: [string, number][], blocked: [string, number][]) => void;
 }
 
-let loadingFile: string | null = null;
-let loadPromise: Promise<void> | null = null;
+type PendingMutation = (data: QueueData) => QueueData;
+interface FileEntry { file: string; data: QueueData; loaded: boolean; pending: PendingMutation[]; reading?: Promise<void> }
+const entries = new Map<string, FileEntry>();
+const retired = new Map<string, object | null>();
 let writeLock: Promise<unknown> = Promise.resolve();
 
-/**
- * What was read off disk, plus anything that happened while it was being read.
- *
- * Reading the file used to replace whatever was in memory, which is right for
- * an empty queue and wrong for a queue somebody had already added to: a listen
- * recorded in those first seconds was overwritten by the file that did not know
- * about it yet. Newer wins for the keyed ones, since memory holds the later
- * intention; listens are a list, so both are kept, oldest first, and a repeat
- * of the very same second is dropped.
- */
-function mergePending(fromDisk: QueueData, pending: QueueData): QueueData {
-  const seen = new Set<string>();
-  const plays = [...(fromDisk.plays ?? []), ...(pending.plays ?? [])]
-    .sort((a, b) => a.at - b.at)
-    .filter((p) => {
-      const key = `${p.at}|${p.id}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(-PLAYS_MAX);
-  return {
-    favs: { ...fromDisk.favs, ...pending.favs },
-    ratings: { ...fromDisk.ratings, ...pending.ratings },
-    playlists: { ...fromDisk.playlists, ...pending.playlists },
-    songMeta: { ...fromDisk.songMeta, ...pending.songMeta },
-    plays,
-  };
+/** Waits before profile-directory deletion; an already-admitted native write
+ * cannot subsequently recreate that profile's file. */
+export async function stopOfflineQueueProfile(auth: SubsonicAuth): Promise<void> {
+  const file = outboxFileFor(auth); retired.set(file, auth); entries.delete(file);
+  await writeLock.catch(() => {});
 }
 
-export const useOfflineQueue = create<QueueState>((set, get) => {
-  function persist() {
-    // `activeFile()` and not only what has been loaded: a listen can cross its
-    // threshold before the queue has been read off disk — the file is read a
-    // few seconds after launch, and a queue restored mid-song can pass the
-    // halfway mark straight away — and this used to answer that by writing
-    // nothing at all, silently (#126).
-    const file = get().loadedFile ?? activeFile();
-    if (!file) return;
-    const data = get().data;
-    writeLock = writeLock.then(async () => {
-      try {
-        await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }).catch(() => {});
-        await FileSystem.writeAsStringAsync(file, JSON.stringify(data));
-      } catch {
-        // If it can't be persisted, this session's queue is lost on exit.
-      }
-    });
-  }
-
-  return {
-    data: {},
-    loadedFile: null,
-
-    load: async () => {
-      const file = activeFile();
-      if (!file) {
-        if (get().loadedFile !== null) set({ data: {}, loadedFile: null });
-        return;
-      }
-      if (get().loadedFile === file) return;
-      if (loadPromise && loadingFile === file) return loadPromise;
-      loadingFile = file;
-      loadPromise = (async () => {
-        let data: QueueData = {};
-        try {
-          const info = await FileSystem.getInfoAsync(file);
-          if (info.exists) data = JSON.parse(await FileSystem.readAsStringAsync(file)) as QueueData;
-        } catch {
-          // Corrupt or missing file: empty queue.
-        }
-        // Memory holds another profile's queue once one was loaded (it is
-        // already in that file); only before the first load is it this one's.
-        const pending = get().loadedFile === null ? get().data : {};
-        set({ data: mergePending(data, pending), loadedFile: file });
-      })().finally(() => {
-        loadPromise = null;
-        loadingFile = null;
+export const useOfflineQueue = create<QueueState>((set) => {
+  let watching = false;
+  const selected = (entry: FileEntry) => activeFile() === entry.file && entries.get(entry.file) === entry;
+  const publish = (entry: FileEntry) => { if (selected(entry)) set({ data: entry.data, loadedFile: entry.loaded ? entry.file : null, error: undefined }); };
+  function active(): FileEntry | null {
+    if (!watching) {
+      watching = true;
+      useAuthStore.subscribe((next, before) => {
+        if (next.auth === before.auth) return;
+        const file = activeFile(), entry = file ? entries.get(file) : undefined;
+        set({ data: entry?.data ?? {}, loadedFile: entry?.loaded ? file : null, error: undefined });
       });
-      return loadPromise;
+    }
+    const file = activeFile(); if (!file) return null;
+    const auth = useAuthStore.getState().auth;
+    if (retired.get(file) === auth) throw new Error('Offline queue profile was deleted');
+    retired.delete(file);
+    let entry = entries.get(file);
+    if (!entry) { entry = { file, data: {}, loaded: false, pending: [] }; entries.set(file, entry); }
+    return entry;
+  }
+  const alive = (entry: FileEntry) => { if (entries.get(entry.file) !== entry) throw new Error('Offline queue profile was deleted'); };
+  async function read(entry: FileEntry): Promise<void> {
+    alive(entry); if (entry.loaded) return; if (entry.reading) return entry.reading;
+    entry.reading = (async () => {
+      const info = await FileSystem.getInfoAsync(entry.file); alive(entry);
+      let disk: QueueData = {};
+      if (info.exists) {
+        const parsed: unknown = JSON.parse(await FileSystem.readAsStringAsync(entry.file)); alive(entry);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid offline queue file');
+        disk = parsed as QueueData;
+      }
+      for (const apply of entry.pending) disk = apply(disk);
+      entry.data = disk; entry.pending = []; entry.loaded = true; publish(entry);
+    })().finally(() => { entry.reading = undefined; });
+    return entry.reading;
+  }
+  function persist(entry: FileEntry): Promise<void> {
+    const work = writeLock.catch(() => {}).then(async () => {
+      await read(entry); alive(entry);
+      // Take the merged value after hydration, not the empty pre-read snapshot.
+      const text = JSON.stringify(entry.data);
+      await FileSystem.makeDirectoryAsync(DIR, { intermediates: true }); alive(entry);
+      await FileSystem.writeAsStringAsync(entry.file, text); alive(entry);
+    });
+    writeLock = work;
+    void work.catch(() => { if (selected(entry)) set({ error: 'Could not save pending changes' }); });
+    return work;
+  }
+  function updateEntry(entry: FileEntry, apply: PendingMutation): FileEntry {
+    alive(entry);
+    entry.data = apply(entry.data); if (!entry.loaded) entry.pending.push(apply);
+    publish(entry); void persist(entry); return entry;
+  }
+  function update(apply: PendingMutation): FileEntry | null { const entry = active(); return entry ? updateEntry(entry, apply) : null; }
+  return {
+    data: {}, loadedFile: null,
+    load: async () => { const entry = active(); if (!entry) { set({ data: {}, loadedFile: null }); return; } await read(entry); publish(entry); },
+    flushPersistence: async () => { const entry = active(); if (entry) await persist(entry); },
+    setFav: (id, type, starred) => { update((data) => { const blockedFavs = { ...data.blockedFavs }; delete blockedFavs[id]; return { ...data, blockedFavs, favs: { ...data.favs, [id]: { type, starred } } }; }); },
+    clearFavs: () => { update((data) => ({ ...data, favs: {} })); },
+    setRating: (id, rating) => { update((data) => { const blockedRatings = { ...data.blockedRatings }; delete blockedRatings[id]; return { ...data, blockedRatings, ratings: { ...data.ratings, [id]: rating } }; }); },
+    clearRatings: () => { update((data) => ({ ...data, ratings: {} })); },
+    setPlaylist: (id, patch) => { const value = { ...patch }; update((data) => ({ ...data, playlists: { ...data.playlists, [id]: { ...data.playlists?.[id], ...value } } })); },
+    removePlaylistEntry: (id) => { update((data) => { const playlists = { ...data.playlists }; delete playlists[id]; return { ...data, playlists }; }); },
+    rememberSongs: (songs) => { const copied = songs.map((song) => ({ ...song })); update((data) => ({ ...data, songMeta: { ...data.songMeta, ...Object.fromEntries(copied.map((song) => [song.id, song])) } })); },
+    clearPlaylists: () => { update((data) => ({ ...data, playlists: {}, songMeta: {} })); },
+    addPlay: (id, at) => { update((data) => { const plays = [...(data.plays ?? []), { id, at }]; const seen = new Set<string>(); return { ...data, plays: plays.sort((a,b) => a.at-b.at).filter((play) => { const key = `${play.at}|${play.id}`; if (seen.has(key)) return false; seen.add(key); return true; }).slice(-PLAYS_MAX) }; }); },
+    removePlays: (done) => { const sent = new Set(done.map((p) => `${p.at}|${p.id}`)); update((data) => ({ ...data, plays: (data.plays ?? []).filter((p) => !sent.has(`${p.at}|${p.id}`)) })); },
+    remapIds: (f) => { update((data) => remapOutbox(data, f)); },
+    checkpointPlaylistCreated: async (temporary, real, fallback, owner) => {
+      if (!real || real === temporary) throw new Error('Invalid created playlist identity');
+      // The create request may finish after an account switch. Its returned ID
+      // belongs to the already-read original outbox, never the newly active one.
+      const target = owner ? entries.get(outboxFileFor(owner)) : active();
+      if (!target || owner && retired.get(target.file) === owner) throw new Error('Offline queue profile changed');
+      let value!: QueuePlaylist;
+      const entry = updateEntry(target, (data) => {
+        const previous = data.playlists?.[temporary];
+        value = { ...(previous ?? fallback), created: false, needsInitialVerification: true,
+          createdName: fallback.name ?? '', ...(!previous ? { deleted: true } : {}) };
+        const playlists = { ...data.playlists }; delete playlists[temporary]; playlists[real] = value;
+        return { ...data, playlists };
+      });
+      if (!entry) throw new Error('Offline queue profile changed');
+      await persist(entry); return value;
     },
-
-    setFav: (id, type, starred) => {
-      set({ data: { ...get().data, favs: { ...get().data.favs, [id]: { type, starred } } } });
-      persist();
-    },
-
-    clearFavs: () => {
-      const { favs, ...rest } = get().data;
-      void favs;
-      set({ data: rest });
-      persist();
-    },
-
-    setRating: (id, rating) => {
-      set({ data: { ...get().data, ratings: { ...get().data.ratings, [id]: rating } } });
-      persist();
-    },
-
-    clearRatings: () => {
-      const { ratings, ...rest } = get().data;
-      void ratings;
-      set({ data: rest });
-      persist();
-    },
-
-    setPlaylist: (id, patch) => {
-      const cur = get().data.playlists?.[id] ?? {};
-      set({ data: { ...get().data, playlists: { ...get().data.playlists, [id]: { ...cur, ...patch } } } });
-      persist();
-    },
-
-    removePlaylistEntry: (id) => {
-      const playlists = { ...get().data.playlists };
-      delete playlists[id];
-      set({ data: { ...get().data, playlists } });
-      persist();
-    },
-
-    rememberSongs: (songs) => {
-      const songMeta = { ...get().data.songMeta };
-      for (const s of songs) songMeta[s.id] = s;
-      set({ data: { ...get().data, songMeta } });
-      persist();
-    },
-
-    clearPlaylists: () => {
-      const { playlists, songMeta, ...rest } = get().data;
-      void playlists;
-      void songMeta;
-      set({ data: rest });
-      persist();
-    },
-
-    addPlay: (id, at) => {
-      const plays = [...(get().data.plays ?? []), { id, at }];
-      set({ data: { ...get().data, plays: plays.slice(-PLAYS_MAX) } });
-      persist();
-    },
-
-    // By value and not by clearing the list: the music doesn't stop while the
-    // queue is being uploaded, so a listen can be recorded mid-flush and
-    // clearing would swallow it.
-    removePlays: (done) => {
-      const sent = new Set(done.map((p) => `${p.at}|${p.id}`));
-      const plays = (get().data.plays ?? []).filter((p) => !sent.has(`${p.at}|${p.id}`));
-      set({ data: { ...get().data, plays } });
-      persist();
-    },
-
-    /**
-     * Rewrites every id after the server has renamed them all.
-     *
-     * Done in memory and persisted, rather than over the file: a listen can be
-     * recorded before the file has been read (#126), so the file is not always
-     * the whole of what is queued.
-     *
-     * This is the one part of a repair whose absence loses data instead of
-     * breaking a screen. A favourite or a listen sent against an id the server
-     * has forgotten is not an error anybody sees: the request is accepted,
-     * nothing matches, and nothing is said.
-     */
-    remapIds: (f) => {
-      const before = get().data;
-      const after = remapOutbox(before, f);
-      set({ data: after });
-      persist();
-    },
-
-    isEmpty: () => {
-      const d = get().data;
-      return (
-        (!d.favs || Object.keys(d.favs).length === 0) &&
-        (!d.ratings || Object.keys(d.ratings).length === 0) &&
-        (!d.playlists || Object.keys(d.playlists).length === 0) &&
-        (!d.plays || d.plays.length === 0)
-      );
-    },
+    acknowledgePlaylist: (id, expected) => { update((data) => { if (data.playlists?.[id] !== expected) return data; const playlists = { ...data.playlists }; delete playlists[id]; return { ...data, playlists }; }); },
+    settleFavs: (original, failed, blocked) => { update((data) => {
+      const favs = { ...data.favs }, blockedFavs = { ...data.blockedFavs }, retries = new Map(failed), missing = new Map(blocked);
+      for (const [id, expected] of Object.entries(original)) if (favs[id] === expected) { delete favs[id]; if (retries.has(id)) favs[id] = retries.get(id)!; if (missing.has(id)) blockedFavs[id] = missing.get(id)!; }
+      return { ...data, favs, blockedFavs };
+    }); },
+    settleRatings: (original, failed, blocked) => { update((data) => {
+      const ratings = { ...data.ratings }, blockedRatings = { ...data.blockedRatings }, retries = new Map(failed), missing = new Map(blocked);
+      for (const [id, expected] of Object.entries(original)) if (ratings[id] === expected) { delete ratings[id]; if (retries.has(id)) ratings[id] = retries.get(id)!; if (missing.has(id)) blockedRatings[id] = missing.get(id)!; }
+      return { ...data, ratings, blockedRatings };
+    }); },
+    isEmpty: () => { const entry = active(); const d = entry?.data ?? {}; return !Object.keys(d.favs ?? {}).length && !Object.keys(d.ratings ?? {}).length && !Object.keys(d.playlists ?? {}).length && !d.plays?.length; },
   };
 });

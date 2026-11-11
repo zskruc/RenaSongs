@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { parsePodcastTranscript, preferredPodcastTranscripts } from '../src/lib/podcastTranscript';
+test('publisher VTT timestamps and multiline captions become actual synced lyric lines',()=>{const value=parsePodcastTranscript('WEBVTT\n\n00:01.250 --> 00:03.000\n<v Alice>Hello &amp; welcome\nagain\n\n00:04.000 --> 00:05.000\nNext','text/vtt');assert.deepEqual(value,{synced:true,lines:[{start:1250,value:'Hello & welcome again'},{start:4000,value:'Next'}]});});
+test('publisher SRT uses comma milliseconds and numbered cues',()=>{assert.equal(parsePodcastTranscript('1\n00:00:02,123 --> 00:00:03,000\n你好','application/x-subrip').lines[0].start,2123);});
+test('Podcasting2 JSON preserves publisher time rather than generating times',()=>{assert.deepEqual(parsePodcastTranscript(JSON.stringify({segments:[{startTime:2.25,body:'first'},{startTime:1,body:'second'}]}),'application/json').lines,[{value:'second',start:1000},{value:'first',start:2250}]);});
+test('plain publisher text stays unsynced and invalid timed captions reject',()=>{assert.deepEqual(parsePodcastTranscript('A\nB','text/plain'),{synced:false,lines:[{value:'A'},{value:'B'}]});assert.throws(()=>parsePodcastTranscript('WEBVTT\n\n00:99.000 --> 00:99.500\nBad','text/vtt'));});
+test('unsupported URLs are filtered and timestamped publisher documents rank first',()=>{const values=preferredPodcastTranscripts([{url:'javascript:alert(1)'},{url:'https://a.test/plain',type:'text/plain'},{url:'https://a.test/sync',type:'text/vtt'}]);assert.deepEqual(values.map(value=>value.url),['https://a.test/sync','https://a.test/plain']);});
+test('oversized publisher content is rejected before publication',()=>{assert.throws(()=>parsePodcastTranscript('x'.repeat(1500001)));});

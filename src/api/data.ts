@@ -1,3 +1,5 @@
+import { metadataArtworkUri } from '@/lib/metadata/artworkRegistry';
+import { customizationScope as artworkScope } from '@/lib/localCustomizations';
 import { downloadedFiles } from '@/lib/downloadsDb';
 import { completeDownloadedPlaylists } from '@/lib/downloadedPlaylists';
 import { guardDownloadedRead } from '@/lib/downloadedBrowse';
@@ -313,9 +315,12 @@ export function artistPortraitUrl(artist: Pick<Subsonic.Artist, 'id' | 'coverArt
  * A station has no album to fall back to, and its `url` is what says so.
  */
 export function songCoverUrl(
-  song: Pick<Song, 'coverArt' | 'albumId' | 'url'>,
+  song: Pick<Song, 'coverArt' | 'albumId' | 'url'> & Partial<Pick<Song, 'id'>>,
   size?: number,
 ): string | undefined {
+  const active = artworkScope(), expected = `${active.profile}|${active.source}`;
+  const override = metadataArtworkUri('song',song.id,metadataArtworkUri('album',song.albumId,undefined,expected),expected);
+  if (override) return override;
   const album = song.url ? undefined : song.albumId;
   if (!isOffline()) return coverArtUrl(song.coverArt ?? album, size);
   const here = song.coverArt && Local.coverUrl(song.coverArt) ? song.coverArt : undefined;
@@ -1510,6 +1515,9 @@ export function flushOfflineQueue(auth: Subsonic.SubsonicAuth): Promise<void> {
 }
 
 async function flushOutbox(auth: Subsonic.SubsonicAuth, file: string): Promise<void> {
+  const captured = captureLyricOwner(profileScopeId());
+  const isOwner = () => captured() && useAuthStore.getState().auth === auth && !useAuthStore.getState().offline;
+  if (!isOwner()) return;
   const q = useOfflineQueue.getState();
   await q.load();
   // Read the outbox through this, never off `q`: `getState()` hands back a
@@ -1532,10 +1540,12 @@ async function flushOutbox(auth: Subsonic.SubsonicAuth, file: string): Promise<v
   // Only paid for when there is something to lose. On an empty outbox there is
   // nothing to get wrong, and a profile already settled answers from its mark
   // without a request.
+  let repairVerified = true;
   if (!q.isEmpty()) {
     try {
       await (await import('@/lib/navidromeRepair')).repairIfMigrated(auth);
     } catch {
+      repairVerified = false;
       // A check that could not run is not a reason to hold somebody's
       // favourites hostage: the ids are no more wrong than they were.
     }
@@ -1544,38 +1554,41 @@ async function flushOutbox(auth: Subsonic.SubsonicAuth, file: string): Promise<v
   // Favorites.
   // Checked before each part: switching profile mid-flush loads the other
   // account's queue into the same store.
-  const ours = () => useOfflineQueue.getState().loadedFile === file;
+  const ours = () => isOwner() && useOfflineQueue.getState().loadedFile === file;
+  const confirmedMissing = (error: unknown) => repairVerified && error instanceof Subsonic.SubsonicRequestError && error.code === 70;
   if (!ours()) return;
   const favs = data().favs ?? {};
   const favFailed: [string, { type: Subsonic.StarType; starred: boolean }][] = [];
+  const favBlocked: typeof favFailed = [];
   for (const [id, op] of Object.entries(favs)) {
+    if (!ours()) return;
     try {
       if (op.starred) await Subsonic.star(auth, id, op.type);
       else await Subsonic.unstar(auth, id, op.type);
-    } catch {
-      favFailed.push([id, op]);
+    } catch (error) {
+      (confirmedMissing(error) ? favBlocked : favFailed).push([id, op]);
     }
   }
   if (!ours()) return;
   if (Object.keys(favs).length > 0) {
-    q.clearFavs();
-    for (const [id, op] of favFailed) q.setFav(id, op.type, op.starred);
+    q.settleFavs(favs, favFailed, favBlocked);
   }
 
   // Ratings.
   const ratings = data().ratings ?? {};
   const ratingFailed: [string, number][] = [];
+  const ratingBlocked: typeof ratingFailed = [];
   for (const [id, rating] of Object.entries(ratings)) {
+    if (!ours()) return;
     try {
       await Subsonic.setRating(auth, id, rating);
-    } catch {
-      ratingFailed.push([id, rating]);
+    } catch (error) {
+      (confirmedMissing(error) ? ratingBlocked : ratingFailed).push([id, rating]);
     }
   }
   if (!ours()) return;
   if (Object.keys(ratings).length > 0) {
-    q.clearRatings();
-    for (const [id, rating] of ratingFailed) q.setRating(id, rating);
+    q.settleRatings(ratings, ratingFailed, ratingBlocked);
   }
 
   // Listens. Each one goes up with the time it happened, so an evening's music
@@ -1587,6 +1600,7 @@ async function flushOutbox(auth: Subsonic.SubsonicAuth, file: string): Promise<v
   const sent: PlayOp[] = [];
   let refused = 0;
   for (const play of plays) {
+    if (!ours()) return;
     try {
       await Subsonic.submitPlay(auth, play.id, play.at);
       sent.push(play);
@@ -1614,45 +1628,45 @@ async function flushOutbox(auth: Subsonic.SubsonicAuth, file: string): Promise<v
   // Playlists. Rewrites the final state of each one (create/delete/rename +
   // full tracklist via reorderPlaylist, which avoids index juggling).
   const playlists = data().playlists ?? {};
-  const plFailed: [string, QueuePlaylist][] = [];
   for (const [id, edit] of Object.entries(playlists)) {
+    if (!ours()) return;
+    let activeId = id, expected = edit;
+    const check = () => { if (!ours()) throw new Error('Playlist profile changed'); };
     try {
       if (edit.created) {
-        if (edit.deleted) continue; // created and deleted offline: nothing to upload
-        const check = () => {
-          const state = useAuthStore.getState();
-          if (!ours() || !state.auth || state.offline || outboxFileFor(state.auth) !== file)
-            throw new Error('Playlist profile changed');
-        };
-        const realId = await createFreshServerPlaylist(auth, edit.name ?? '', edit.songIds ?? [], check);
+        if (edit.deleted) { q.acknowledgePlaylist(id, edit); continue; }
+        const realId = await createFreshServerPlaylist(auth, edit.name ?? '', edit.songIds ?? [], check, async (real) => {
+          const unchanged = ours() && data().playlists?.[id] === edit;
+          expected = await q.checkpointPlaylistCreated(id, real, edit, auth); activeId = real; check();
+          if (!unchanged || expected.deleted) throw new Error('Playlist changed during creation');
+        });
         check();
         if (edit.comment !== undefined || edit.public !== undefined) {
-          await Subsonic.updatePlaylist(auth, realId, {
-            comment: edit.comment,
-            public: edit.public,
-          });
+          await Subsonic.updatePlaylist(auth, realId, { comment: edit.comment, public: edit.public }); check();
         }
       } else if (edit.deleted) {
-        await Subsonic.deletePlaylist(auth, id);
+        await Subsonic.deletePlaylist(auth, id); check();
       } else {
-        if (edit.name !== undefined || edit.comment !== undefined || edit.public !== undefined) {
-          await Subsonic.updatePlaylist(auth, id, {
-            name: edit.name,
-            comment: edit.comment,
-            public: edit.public,
-          });
+        if (edit.needsInitialVerification) {
+          const fresh = await Subsonic.getPlaylist(auth, id); check();
+          const ids = edit.songIds ?? [];
+          if (fresh.playlist.id !== id || fresh.playlist.readonly || (fresh.playlist.name !== edit.createdName && fresh.playlist.name !== edit.name)
+            || (fresh.playlist.owner && fresh.playlist.owner !== auth.username)
+            || (fresh.songs.length > 0 && (fresh.songs.length !== ids.length || fresh.songs.some((song, index) => song.id !== ids[index]))))
+            throw new Error('The new playlist changed before import');
         }
-        if (edit.songIds) await Subsonic.reorderPlaylist(auth, id, edit.songIds);
+        if (edit.name !== undefined || edit.comment !== undefined || edit.public !== undefined) {
+          await Subsonic.updatePlaylist(auth, id, { name: edit.name, comment: edit.comment, public: edit.public }); check();
+        }
+        if (edit.songIds) { await Subsonic.reorderPlaylist(auth, id, edit.songIds); check(); }
       }
+      q.acknowledgePlaylist(activeId, expected);
     } catch {
-      plFailed.push([id, edit]);
+      // Leave the exact current intention queued. A real id is persisted before
+      // the first read/fill, and concurrent new edits are never cleared here.
     }
   }
-  if (!ours()) return;
-  if (Object.keys(playlists).length > 0) {
-    q.clearPlaylists();
-    for (const [id, edit] of plFailed) q.setPlaylist(id, edit);
-  }
+  if (ours()) await q.flushPersistence();
 }
 
 /**
@@ -1763,6 +1777,7 @@ export async function getSongLyrics(
   });
   if (!current()) throw new Error('Lyrics profile changed');
   if (selected) return selected;
+  if (song.podcastChannelId) { const { publisherTranscript } = await import('@/lib/publisherTranscript'); return publisherTranscript(song, current); }
   const lyrics = await getAutomaticSongLyrics(song, source, { ...options, stillCurrent: current });
   if (!current()) throw new Error('Lyrics profile changed');
   if (lyrics?.lines.length) {
@@ -1938,10 +1953,10 @@ export async function createPlaylist(name: string): Promise<string> {
 }
 
 /** Imports into a new playlist only; existing lists are never replaced. */
-export async function createPlaylistFromSongs(name: string, songs: Subsonic.Song[]): Promise<string> {
+export async function createPlaylistFromSongs(name: string, songs: Subsonic.Song[], recovery?: { allowEmpty?: boolean; onCreated: (id: string) => Promise<void> }): Promise<string> {
   const context = playlistEditContext();
   const title = name.trim();
-  if (!title || !songs.length || songs.length > 10000 || songs.some((song) => !song.id || !canGoIntoPlaylist(song)))
+  if (!title || (!songs.length && !recovery?.allowEmpty) || songs.length > 10000 || songs.some((song) => !song.id || !canGoIntoPlaylist(song)))
     throw new Error('Invalid playlist import');
   const ids = songs.map((song) => song.id);
   context.check();
@@ -1951,6 +1966,7 @@ export async function createPlaylistFromSongs(name: string, songs: Subsonic.Song
     return playlistEditQueue.run(JSON.stringify([context.profile, 'local-playlists']), async () => {
       context.check();
       const id = await Local.createPlaylist(title); context.check();
+      await recovery?.onCreated(id); context.check();
       await Local.editPlaylistTracklist(id, () => ids, context.current); context.check();
       void queryClient.invalidateQueries({ queryKey: ['playlists'] });
       return id;
@@ -1961,10 +1977,11 @@ export async function createPlaylistFromSongs(name: string, songs: Subsonic.Song
     const id = `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     useOfflineQueue.getState().rememberSongs(songs);
     useOfflineQueue.getState().setPlaylist(id, { created: true, name: title, songIds: ids });
+    if (recovery) { await useOfflineQueue.getState().flushPersistence(); context.check(); await recovery.onCreated(id); context.check(); }
     void queryClient.invalidateQueries({ queryKey: ['playlists'] });
     return id;
   }
-  const id = await createFreshServerPlaylist(context.owner!, title, ids, context.check);
+  const id = await createFreshServerPlaylist(context.owner!, title, ids, context.check, recovery?.onCreated);
   void queryClient.invalidateQueries({ queryKey: ['playlists'] });
   void queryClient.invalidateQueries({ queryKey: ['playlist', id] });
   return id;
@@ -1972,15 +1989,16 @@ export async function createPlaylistFromSongs(name: string, songs: Subsonic.Song
 
 /** The online importer and reconnect outbox share the same new-list guard. */
 async function createFreshServerPlaylist(
-  owner: Subsonic.SubsonicAuth, title: string, ids: string[], check: () => void,
+  owner: Subsonic.SubsonicAuth, title: string, ids: string[], check: () => void, onCreated?: (id: string) => Promise<void>,
 ): Promise<string> {
   check();
   const before = new Set((await Subsonic.getPlaylists(owner)).map((playlist) => playlist.id));
   check();
-  const id = await Subsonic.createPlaylist(owner, title); check();
+  const id = await Subsonic.createPlaylist(owner, title);
   // Legacy servers may return a name lookup instead of the newly created ID.
   // Never rewrite that pre-existing list, including during an outbox retry.
   if (before.has(id)) throw new Error('The server did not return a new playlist');
+  await onCreated?.(id); check();
   const fresh = await Subsonic.getPlaylist(owner, id); check();
   if (fresh.playlist.id !== id || fresh.playlist.name !== title || fresh.playlist.readonly
     || (fresh.playlist.owner && fresh.playlist.owner !== owner.username)
@@ -1994,16 +2012,24 @@ async function createFreshServerPlaylist(
 }
 
 export async function deletePlaylist(id: string): Promise<void> {
+  const context = playlistEditContext(), ownsRequest = captureLyricOwner(context.profile);
+  const trash = await import('@/lib/recentlyDeleted'); context.check();
+  if (!ownsRequest()) throw new Error('Playlist profile changed');
+  const owner = trash.recentlyDeletedOwner();
+  const full = await getPlaylist(id); owner.check();
+  const ticket = await trash.prepareRecentlyDeleted({ kind: 'playlist', title: full.playlist.name, payload: trash.deletedPlaylistSnapshot(full.playlist, full.songs) }, owner);
+  owner.check();
   if (isOffline()) {
-    if (!serverOffline()) return Local.deletePlaylist(id);
+    if (!serverOffline()) { await Local.deletePlaylist(id); owner.check(); await trash.commitRecentlyDeleted(ticket); return; }
     await useOfflineQueue.getState().load();
     const entry = useOfflineQueue.getState().data.playlists?.[id];
     // Created offline (never reached the server): just discard it.
     if (entry?.created) useOfflineQueue.getState().removePlaylistEntry(id);
     else useOfflineQueue.getState().setPlaylist(id, { deleted: true });
+    await useOfflineQueue.getState().flushPersistence(); owner.check(); await trash.commitRecentlyDeleted(ticket);
     return;
   }
-  return Subsonic.deletePlaylist(auth(), id);
+  await Subsonic.deletePlaylist(auth(), id); owner.check(); await trash.commitRecentlyDeleted(ticket);
 }
 
 export function getPlaylist(id: string): Promise<{ playlist: Subsonic.Playlist; songs: Subsonic.Song[] }> {

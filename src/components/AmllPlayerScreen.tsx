@@ -281,7 +281,7 @@ export function AmllPlayerScreen() {
   // Visibility pauses their clocks; removing the mask here exposes a blank patch.
   const lyricContent = lyricsMounted ? (
     lyrics.data?.lines.length ? (lyrics.data.synced ? (
-      <SyncedLyricsView key={song?.id} lines={lyrics.data.lines} large
+      <SyncedLyricsView key={song?.id} translationProvider={lyrics.data.translationProvider} lines={lyrics.data.lines} large
         nested={!horizontal && layout.scrollable} appearance="amll" active={interactive && showLyrics} onLinePress={playFromLyric} focusAnchor={horizontal ? 0.42 : 0.1} />
     ) : (
       <ScrollView key={song?.id} nestedScrollEnabled showsVerticalScrollIndicator={false}

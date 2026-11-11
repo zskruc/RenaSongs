@@ -1,8 +1,7 @@
 diff --git a/android/build.gradle b/android/build.gradle
-index 4a212e23336ac6e6b8a17a7535b455faa8e45a6b..f1c5f741a86bf65e9440249f35a321f2fc179e24 100644
 --- a/android/build.gradle
 +++ b/android/build.gradle
-@@ -23,6 +23,7 @@ repositories {
+@@ -23,6 +23,7 @@
  }
  
  dependencies {
@@ -11,7 +10,6 @@ index 4a212e23336ac6e6b8a17a7535b455faa8e45a6b..f1c5f741a86bf65e9440249f35a321f2
    implementation 'androidx.core:core-ktx:1.15.0'
  
 diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
-index 36a19f2d9c4a979a940ab681a1fb844ce45f7c75..3509de4747f3ebdda1a014f05fb02f0710563498 100644
 --- a/android/src/main/AndroidManifest.xml
 +++ b/android/src/main/AndroidManifest.xml
 @@ -1,3 +1,8 @@
@@ -26,7 +24,13 @@ index 36a19f2d9c4a979a940ab681a1fb844ce45f7c75..3509de4747f3ebdda1a014f05fb02f07
 diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/src/main/java/expo/modules/audio/AudioModule.kt
 --- a/android/src/main/java/expo/modules/audio/AudioModule.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioModule.kt
-@@ -18,6 +18,7 @@
+@@ -13,11 +13,13 @@
+ import android.util.Log
+ import androidx.core.content.ContextCompat
+ import androidx.core.net.toUri
++import androidx.media3.common.C
+ import androidx.media3.common.C.CONTENT_TYPE_DASH
+ import androidx.media3.common.C.CONTENT_TYPE_HLS
  import androidx.media3.common.C.CONTENT_TYPE_OTHER
  import androidx.media3.common.C.CONTENT_TYPE_SS
  import androidx.media3.common.MediaItem
@@ -34,7 +38,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
  import androidx.media3.common.Player
  import androidx.media3.common.util.Util
  import androidx.media3.datasource.DataSource
-@@ -28,6 +29,7 @@
+@@ -28,6 +30,7 @@
  import androidx.media3.exoplayer.smoothstreaming.SsMediaSource
  import androidx.media3.exoplayer.source.MediaSource
  import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -42,7 +46,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
  import expo.modules.interfaces.permissions.Permissions
  import expo.modules.kotlin.Promise
  import expo.modules.kotlin.exception.Exceptions
-@@ -40,6 +42,7 @@
+@@ -40,6 +43,7 @@
  import kotlinx.coroutines.GlobalScope
  import kotlinx.coroutines.launch
  import kotlinx.coroutines.runBlocking
@@ -50,7 +54,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
  import okhttp3.OkHttpClient
  import java.io.File
  import java.util.concurrent.ConcurrentHashMap
-@@ -49,7 +52,7 @@
+@@ -49,7 +53,7 @@
    private lateinit var audioManager: AudioManager
    private val context: Context
      get() = appContext.reactContext ?: throw Exceptions.ReactContextLost()
@@ -59,7 +63,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
  
    private val players = ConcurrentHashMap<String, AudioPlayer>()
    private val recorders = ConcurrentHashMap<String, AudioRecorder>()
-@@ -57,6 +60,8 @@
+@@ -57,6 +61,8 @@
    private var shouldPlayInBackground = false
    private var audioEnabled = true
    private var shouldRouteThroughEarpiece = false
@@ -68,7 +72,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
    private var focusAcquired = false
    private var interruptionMode: InterruptionMode? = null
    private var allowsBackgroundRecording = false
-@@ -140,6 +145,17 @@
+@@ -140,6 +146,17 @@
      return playsInSilentMode || audioManager.ringerMode == AudioManager.RINGER_MODE_NORMAL
    }
  
@@ -86,7 +90,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
    private fun requestAudioFocus() {
      if (focusAcquired || !audioEnabled || interruptionMode == InterruptionMode.MIX_WITH_OTHERS) {
        return
-@@ -148,14 +164,23 @@
+@@ -148,14 +165,23 @@
      val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
        val requestType = interruptionMode?.let {
          if (it == InterruptionMode.DO_NOT_MIX) {
@@ -112,7 +116,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
              .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
              .build()
          )
-@@ -169,7 +194,7 @@
+@@ -169,7 +195,7 @@
      } else {
        @Suppress("DEPRECATION")
        val requestType = if (interruptionMode == InterruptionMode.DO_NOT_MIX) {
@@ -121,7 +125,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
        } else {
          AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
        }
-@@ -284,6 +309,7 @@
+@@ -284,6 +310,7 @@
      }
  
      OnActivityEntersBackground {
@@ -129,7 +133,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
        if (!shouldPlayInBackground) {
          releaseAudioFocus()
          allPlayables.forEach { playable ->
-@@ -303,6 +329,7 @@
+@@ -303,6 +330,7 @@
      }
  
      OnActivityEntersForeground {
@@ -137,7 +141,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
        if (!shouldPlayInBackground) {
          if (!shouldPlayInSilentMode()) {
            return@OnActivityEntersForeground
-@@ -363,7 +390,16 @@
+@@ -363,7 +391,16 @@
              bufferDurationMs
            )
            player.onPlaybackStateChange = { isPlaying ->
@@ -155,7 +159,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
                releaseAudioFocus()
              }
            }
-@@ -376,6 +412,15 @@
+@@ -376,6 +413,15 @@
          player.id
        }
  
@@ -171,13 +175,10 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
        Property("isBuffering") { player ->
          runOnMain {
            player.ref.playbackState == Player.STATE_BUFFERING
-@@ -385,6 +430,16 @@
-       Property("currentStatus") { player ->
-         runOnMain {
-           player.currentStatus()
-+        }
-+      }
-+
+@@ -388,6 +434,16 @@
+         }
+       }
+ 
 +      Property("powerStatus") { player ->
 +        runOnMain { player.powerStatus() }
 +      }
@@ -185,10 +186,13 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
 +      Function("setPlaybackPowerPolicy") { player: AudioPlayer, background: Boolean, precise: Boolean, allowOffload: Boolean, networkRequired: Boolean? ->
 +        runOnMain {
 +          player.setPlaybackPowerPolicy(background, precise, allowOffload, networkRequired ?: true)
-         }
++        }
++      }
++
+       Property("isAudioSamplingSupported") { _ ->
+         true
        }
- 
-@@ -507,6 +562,27 @@
+@@ -507,6 +563,33 @@
          }
        }
  
@@ -205,6 +209,12 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
 +        }
 +      }
 +
++      Function("setPlaybackRange") { player: AudioPlayer, startSec: Double?, endSec: Double? ->
++        runOnMain { player.setPlaybackRange(startSec, endSec) }
++      }
++      Function("setABRepeat") { player: AudioPlayer, startSec: Double?, endSec: Double? ->
++        runOnMain { player.setABRepeat(startSec, endSec) }
++      }
 +      Function("clearNextSource") { player: AudioPlayer ->
 +        runOnMain {
 +          if (player.ref.availableCommands.contains(Player.COMMAND_CHANGE_MEDIA_ITEMS)) {
@@ -216,7 +226,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
        Function("setActiveForLockScreen") { ref: AudioPlayer, active: Boolean, metadata: Metadata?, options: AudioLockScreenOptions? ->
          runOnMain {
            ref.setActiveForLockScreen(active, metadata, options)
-@@ -519,10 +595,24 @@
+@@ -519,12 +602,26 @@
          }
        }
  
@@ -230,18 +240,20 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
          runOnMain {
            ref.clearLockScreenControls()
          }
-+      }
-+
+       }
+ 
 +      // Where the source loaded into this player really starts. See
 +      // `AudioPlayer.sessionPositionOffsetMs`. A plain field write, so it does
 +      // not need the main thread and must not wait for it: it is set right
 +      // beside the `replace()` that installs the re-requested stream.
 +      Function("setSessionPositionOffset") { ref: AudioPlayer, offsetMs: Double ->
 +        ref.sessionPositionOffsetMs = offsetMs.toLong()
-       }
- 
++      }
++
        Function("setAudioSamplingEnabled") { player: AudioPlayer, enabled: Boolean ->
-@@ -685,7 +775,16 @@
+         runOnMain {
+           player.setSamplingEnabled(enabled)
+@@ -685,7 +782,16 @@
            }
            playlist.loadInitialPlaylist()
            playlist.onPlaybackStateChange = { isPlaying ->
@@ -259,7 +271,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
                releaseAudioFocus()
              }
            }
-@@ -860,13 +959,29 @@
+@@ -860,13 +966,34 @@
  
    private fun createMediaItem(source: AudioSource?): MediaSource? = source?.uri?.let { uriString ->
      val uri = uriString.toUri()
@@ -273,11 +285,16 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
      }
 +    // Named, so that one track is not the next one. See `AudioSource.mediaId`.
 +    val identified = source.mediaId?.let { baseItem.buildUpon().setMediaId(it).build() } ?: baseItem
++    val clip = PlaybackWindow.create(source.clipStartSec, source.clipEndSec)
++    val ranged = clip?.let {
++      identified.buildUpon().setClippingConfiguration(MediaItem.ClippingConfiguration.Builder()
++        .setStartPositionMs(it.startMs).setEndPositionMs(it.endMs ?: C.TIME_END_OF_SOURCE).build()).build()
++    } ?: identified
 +    // The item's own metadata wins over the tags read out of the stream, which
 +    // is the point: a transcode arrives stripped of them, and the cover can be
 +    // a file on disk that the stream never had.
 +    val mediaItem = source.metadata?.let { meta ->
-+      identified.buildUpon().setMediaMetadata(
++      ranged.buildUpon().setMediaMetadata(
 +        MediaMetadata.Builder()
 +          .setTitle(meta.title)
 +          .setArtist(meta.artist)
@@ -286,11 +303,11 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
 +          .setDurationMs(meta.durationMs)
 +          .build()
 +      ).build()
-+    } ?: identified
++    } ?: ranged
  
      val preloadedBytes = AudioPreloadManager.get(uriString)
      val factory: DataSource.Factory = if (preloadedBytes != null) {
-@@ -914,10 +1029,32 @@
+@@ -914,10 +1041,32 @@
      }
    }
  
@@ -324,7 +341,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
    }
  
    private fun retrieveStreamType(uri: Uri): Int = Util.inferContentType(uri)
-@@ -931,7 +1068,7 @@
+@@ -931,7 +1080,7 @@
        CONTENT_TYPE_SS -> SsMediaSource.Factory(factory)
        CONTENT_TYPE_DASH -> DashMediaSource.Factory(factory)
        CONTENT_TYPE_HLS -> HlsMediaSource.Factory(factory)
@@ -336,7 +353,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioModule.kt b/android/s
 diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 --- a/android/src/main/java/expo/modules/audio/AudioPlayer.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioPlayer.kt
-@@ -8,15 +8,21 @@
+@@ -8,15 +8,22 @@
  import androidx.core.content.ContextCompat
  import androidx.media3.common.AudioAttributes
  import androidx.media3.common.C
@@ -352,13 +369,14 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +import androidx.media3.exoplayer.DefaultRenderersFactory
  import androidx.media3.exoplayer.ExoPlayer
  import androidx.media3.exoplayer.source.MediaSource
++import androidx.media3.exoplayer.source.ClippingMediaSource
  import androidx.media3.session.MediaSession
  import expo.modules.audio.service.AudioPlaybackServiceConnection
 +import expo.modules.audio.service.PreloadingBitmapLoader
  import expo.modules.audio.service.ServiceBindingState
  import expo.modules.kotlin.AppContext
  import expo.modules.kotlin.exception.Exceptions
-@@ -24,6 +30,12 @@
+@@ -24,6 +31,12 @@
  
  private const val PLAYBACK_STATUS_UPDATE = "playbackStatusUpdate"
  private const val AUDIO_SAMPLE_UPDATE = "audioSampleUpdate"
@@ -371,7 +389,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
  private const val SEEK_JUMP_INTERVAL_MS: Long = 10_000
  
  @UnstableApi
-@@ -36,7 +48,40 @@
+@@ -36,7 +49,40 @@
  ) : BaseAudioPlayer(
    player = ExoPlayer.Builder(context)
      .setLooper(context.mainLooper)
@@ -413,10 +431,60 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
      .setSeekForwardIncrementMs(SEEK_JUMP_INTERVAL_MS)
      .setSeekBackIncrementMs(SEEK_JUMP_INTERVAL_MS)
      .apply {
-@@ -59,12 +104,107 @@
+@@ -59,12 +105,157 @@
    statusEventName = PLAYBACK_STATUS_UPDATE
  ) {
    var preservesPitch = true
++  private var originalSource: MediaSource? = null
++  private var nextOriginalSource: MediaSource? = null
++  private var sourceRange: PlaybackWindow? = null
++  private var rangeMutation = false
++  private val abRepeat = NativeABRepeat(
++    schedule = { endMs, callback ->
++      if (ref.currentTimeline.isEmpty || ref.mediaItemCount == 0) null else {
++        val message = ref.createMessage { _, _ -> callback() }
++          .setLooper(ref.applicationLooper).setPosition(ref.currentMediaItemIndex, endMs)
++          .setDeleteAfterDelivery(true).send()
++        PlaybackBoundary { message.cancel() }
++      }
++    },
++    seek = { ref.seekTo(it); sendStatusUpdate() },
++    changed = { applyPlaybackPowerPolicy(); sendStatusUpdate() }
++  )
++  fun setPlaybackRange(startSec: Double?, endSec: Double?) {
++    val source = originalSource ?: return
++    val range = PlaybackWindow.create(startSec, endSec)
++    if (sourceRange == range) return
++    val absolute = ref.currentPosition + (sourceRange?.startMs ?: 0L)
++    val position = (absolute - (range?.startMs ?: 0L)).coerceAtLeast(0L)
++    val wasPlaying = ref.playWhenReady
++    changingSources = true
++    abRepeat.clear(false); nextOriginalSource = null; sourceRange = range
++    rangeMutation = true
++    try {
++      applyPlaybackPowerPolicy(source, disableOffload = true)
++      ref.setMediaSource(clipSource(source, range)); ref.prepare()
++      ref.seekTo(range?.endMs?.let { position.coerceAtMost((it - range.startMs - 1).coerceAtLeast(0L)) } ?: position)
++      ref.playWhenReady = wasPlaying
++    } finally { rangeMutation = false; changingSources = false; applyPlaybackPowerPolicy() }
++  }
++  fun setABRepeat(startSec: Double?, endSec: Double?) {
++    require(startSec == null && endSec == null || !ref.isCurrentMediaItemLive && ref.isCurrentMediaItemSeekable) { "A-B needs a seekable track" }
++    abRepeat.set(startSec, endSec, ref.duration)
++    val loop = abRepeat.window ?: return
++    clearNextSource(); ref.repeatMode = Player.REPEAT_MODE_OFF
++    if (ref.currentPosition < loop.startMs || ref.currentPosition >= loop.endMs!!) ref.seekTo(loop.startMs)
++    abRepeat.refresh()
++  }
++  private fun mediaRange(source: MediaSource): PlaybackWindow? {
++    val clip = source.mediaItem.clippingConfiguration
++    return if (clip.startPositionMs == 0L && clip.endPositionMs == C.TIME_END_OF_SOURCE) null
++      else PlaybackWindow(clip.startPositionMs, clip.endPositionMs.takeUnless { it == C.TIME_END_OF_SOURCE })
++  }
++  private fun clipSource(source: MediaSource, range: PlaybackWindow?): MediaSource =
++    if (range == null) source else ClippingMediaSource(source, range.startMs * 1000L,
++      range.endMs?.times(1000L) ?: C.TIME_END_OF_SOURCE)
+ 
 +  private val foregroundStatusIntervalMs = updateInterval.toLong().coerceAtLeast(16L)
 +  private var requestedPowerPolicy = PlaybackPowerPolicy()
 +  private var appBackground = false
@@ -486,7 +554,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +    // Media3 1.9.0 has a known compressed-offload/gapless-playlist stall fixed
 +    // in1.9.3. Never offload a two-item native queue, nor a repeating item.
 +    val parameters = ref.playbackParameters
-+    val offload = !disableOffload && !changingSources && policy.offloadAllowed(ref.mediaItemCount,
++    val offload = !disableOffload && !changingSources && abRepeat.window == null && policy.offloadAllowed(ref.mediaItemCount,
 +      ref.repeatMode != Player.REPEAT_MODE_OFF, parameters.speed, parameters.pitch, samplingEnabled)
 +    if (offload != appliedOffload) {
 +      ref.trackSelectionParameters = ref.trackSelectionParameters.buildUpon()
@@ -499,7 +567,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +      appliedOffload = offload
 +    }
 +  }
- 
++
    // Lock screen controls
    var isActiveForLockScreen = false
    internal var metadata: Metadata? = null
@@ -522,7 +590,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
    val serviceConnection = AudioPlaybackServiceConnection(WeakReference(this), appContext)
  
    val isLive: Boolean
-@@ -85,16 +225,157 @@
+@@ -85,18 +276,174 @@
  
    init {
      installPlayerListeners()
@@ -540,6 +608,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +     */
 +    ref.addListener(object : Player.Listener {
 +      override fun onTimelineChanged(timeline: Timeline, reason: Int) {
++        abRepeat.refresh()
 +        applyPlaybackPowerPolicy()
 +      }
 +
@@ -551,6 +620,9 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +        applyPlaybackPowerPolicy()
 +      }
 +
++      override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
++        if (reason == Player.DISCONTINUITY_REASON_SEEK) abRepeat.onSeek(newPosition.positionMs)
++      }
 +      override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
 +        emit(
 +          STREAM_METADATA,
@@ -573,6 +645,13 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +   * index without touching playback.
 +   */
 +  override fun onMediaItemChanged(mediaItem: MediaItem?, reason: Int) {
++    if (!rangeMutation) {
++      if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
++        originalSource = nextOriginalSource; nextOriginalSource = null
++        sourceRange = originalSource?.let { mediaRange(it) }
++      }
++      abRepeat.clear()
++    }
 +    applyPlaybackPowerPolicy()
 +    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
 +      emit(TRACK_TRANSITION)
@@ -585,21 +664,23 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 -    ref.setMediaSource(source)
 -    ref.prepare()
 -    startUpdating()
++    abRepeat.clear(false); originalSource = source; nextOriginalSource = null
++    sourceRange = mediaRange(source)
 +    // Upgrade before source replacement can start a remote read. The old
 +    // playing item's offload configuration must not leak into a new decoder.
 +    changingSources = true
 +    try {
 +      applyPlaybackPowerPolicy(source, disableOffload = true)
 +      previousPlaybackState = Player.STATE_IDLE
-+      ref.setMediaSource(source)
++      ref.setMediaSource(clipSource(source, sourceRange))
 +      ref.prepare()
 +      startUpdating()
 +    } finally {
 +      changingSources = false
 +      applyPlaybackPowerPolicy()
 +    }
-+  }
-+
+   }
+ 
 +  fun emitRemotePrevious() = emit(REMOTE_PREVIOUS)
 +  fun emitRemoteNext() = emit(REMOTE_NEXT)
 +
@@ -647,7 +728,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +  fun setNextSource(source: MediaSource) {
 +    // Nothing playing: there is nothing to queue BEHIND, and the track would
 +    // become the current one without anyone having asked for it.
-+    if (ref.mediaItemCount == 0) {
++    if (ref.mediaItemCount == 0 || abRepeat.window != null) {
 +      return
 +    }
 +    // Disable compressed offload and acquire required Wi-Fi protection before
@@ -656,7 +737,8 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +    try {
 +      applyPlaybackPowerPolicy(source, disableOffload = true)
 +      trimToCurrent()
-+      ref.addMediaSource(source)
++      nextOriginalSource = source
++      ref.addMediaSource(clipSource(source, mediaRange(source)))
 +    } finally {
 +      changingSources = false
 +      applyPlaybackPowerPolicy()
@@ -669,6 +751,7 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +
 +  /** Drops the queued track, if any, leaving only the one playing. */
 +  fun clearNextSource() {
++    nextOriginalSource = null
 +    trimToCurrent()
 +    applyPlaybackPowerPolicy()
 +  }
@@ -681,10 +764,27 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
 +    if (ref.mediaItemCount > 1) {
 +      ref.removeMediaItems(1, ref.mediaItemCount)
 +    }
++  }
++
+   fun setActiveForLockScreen(active: Boolean, metadata: Metadata? = null, options: AudioLockScreenOptions? = null) {
+     if (active) {
+       this.metadata = metadata
+@@ -145,6 +492,14 @@
    }
  
-   fun setActiveForLockScreen(active: Boolean, metadata: Metadata? = null, options: AudioLockScreenOptions? = null) {
-@@ -172,6 +453,7 @@
+   override fun onPlaybackStateUpdated(playbackState: Int, justFinished: Boolean) {
++    val loop = abRepeat.window
++    if (justFinished && loop != null) {
++      val resume = ref.playWhenReady
++      ref.seekTo(loop.startMs)
++      if (resume) { intendedPlayingState = true; ref.play() }
++      abRepeat.refresh(); sendStatusUpdate()
++      return
++    }
+     val updateMap = mutableMapOf<String, Any?>(
+       "playbackState" to playbackStateToString(playbackState)
+     )
+@@ -172,6 +527,7 @@
      }
  
      samplingEnabled = enabled
@@ -692,7 +792,15 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
      if (enabled) {
        createVisualizer()
      } else {
-@@ -221,7 +503,8 @@
+@@ -215,13 +571,16 @@
+       "isBuffering" to isBuffering,
+       "isLive" to isLive,
+       "currentOffsetFromLive" to currentOffsetFromLive,
++      "abRepeat" to abRepeat.window?.let { mapOf("startSec" to it.startMs / 1000.0, "endSec" to it.endMs!! / 1000.0) },
++      "playbackRange" to sourceRange?.let { mapOf("startSec" to it.startMs / 1000.0, "endSec" to it.endMs?.div(1000.0)) },
+       "error" to null
+     )
+   }
  
    internal fun assignBasicMediaSession() {
      mediaSession.release()
@@ -702,19 +810,19 @@ diff --git a/android/src/main/java/expo/modules/audio/AudioPlayer.kt b/android/s
    }
  
    private fun sendAudioSampleUpdate(sample: List<Float>) {
-@@ -277,6 +560,7 @@
+@@ -277,6 +636,8 @@
    }
  
    override fun releasePlayer() {
++    abRepeat.clear(false); originalSource = null; nextOriginalSource = null
 +    ref.removeAudioOffloadListener(offloadListener)
      mediaSession.release()
      if (isActiveForLockScreen) {
        serviceConnection.playbackServiceBinder?.service?.unregisterPlayer()
 diff --git a/android/src/main/java/expo/modules/audio/AudioRecords.kt b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-index 86880d92fd5b6413e8596e1b2b8ae28f2981addd..34044354b228072c1020dfbde62fee049d1521fe 100644
 --- a/android/src/main/java/expo/modules/audio/AudioRecords.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioRecords.kt
-@@ -12,7 +12,27 @@ import expo.modules.kotlin.types.OptimizedRecord
+@@ -12,7 +12,29 @@
  class AudioSource(
    @Field val uri: String?,
    @Field val headers: Map<String, String>?,
@@ -739,11 +847,13 @@ index 86880d92fd5b6413e8596e1b2b8ae28f2981addd..34044354b228072c1020dfbde62fee04
 +   * no reason to fetch it a second time. Not the stream URL: the media id goes
 +   * out to every connected controller and the URL carries the credentials.
 +   */
-+  @Field val mediaId: String? = null
++  @Field val mediaId: String? = null,
++  @Field val clipStartSec: Double? = null,
++  @Field val clipEndSec: Double? = null
  ) : Record
  
  enum class LoopMode(val value: String) : Enumerable {
-@@ -55,7 +75,15 @@ class Metadata(
+@@ -55,7 +77,15 @@
    @Field val title: String?,
    @Field val artist: String?,
    @Field val albumTitle: String?,
@@ -760,7 +870,7 @@ index 86880d92fd5b6413e8596e1b2b8ae28f2981addd..34044354b228072c1020dfbde62fee04
  ) : Record
  
  enum class AndroidOutputFormat(val value: String) : Enumerable {
-@@ -110,7 +138,9 @@ enum class AndroidAudioEncoder(val value: String) : Enumerable {
+@@ -110,7 +140,9 @@
  class AudioLockScreenOptions(
    @Field val showSeekForward: Boolean,
    @Field val showSeekBackward: Boolean,
@@ -772,10 +882,9 @@ index 86880d92fd5b6413e8596e1b2b8ae28f2981addd..34044354b228072c1020dfbde62fee04
  
  enum class InterruptionMode(val value: String) : Enumerable {
 diff --git a/android/src/main/java/expo/modules/audio/AudioUtils.kt b/android/src/main/java/expo/modules/audio/AudioUtils.kt
-index dca91c32a2787a7bc3ecba26f0f3f2ad9cc40d3d..089dcee0b9fe6a369f0809ecdf99a1fa42ea9ef3 100644
 --- a/android/src/main/java/expo/modules/audio/AudioUtils.kt
 +++ b/android/src/main/java/expo/modules/audio/AudioUtils.kt
-@@ -3,6 +3,8 @@ package expo.modules.audio
+@@ -3,6 +3,8 @@
  import android.content.Context
  import android.media.AudioDeviceInfo
  import android.os.Bundle
@@ -784,7 +893,7 @@ index dca91c32a2787a7bc3ecba26f0f3f2ad9cc40d3d..089dcee0b9fe6a369f0809ecdf99a1fa
  import androidx.media3.exoplayer.ExoPlayer
  import androidx.media3.session.MediaSession
  import java.io.File
-@@ -31,8 +33,124 @@ fun getMapFromDeviceInfo(deviceInfo: AudioDeviceInfo): Bundle {
+@@ -31,8 +33,124 @@
    return map
  }
  
@@ -931,14 +1040,14 @@ diff --git a/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt b/andro
    private var updateJob: Job? = null
 +  private var statusIntervalMs = updateInterval.toLong().coerceAtLeast(16L)
 +  protected val hasPeriodicStatusUpdates: Boolean get() = updateJob?.isActive == true
-+
+ 
 +  protected fun setStatusUpdateInterval(intervalMs: Long) {
 +    val bounded = intervalMs.coerceAtLeast(16L)
 +    if (statusIntervalMs == bounded) return
 +    statusIntervalMs = bounded
 +    startUpdating()
 +  }
- 
++
    protected fun startUpdating() {
      updateJob?.cancel()
 -    updateJob = flow {
@@ -975,7 +1084,7 @@ diff --git a/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt b/andro
  
          val isTransient = !isPlaying &&
            (ref.playbackState == Player.STATE_ENDED || ref.playbackState == Player.STATE_BUFFERING)
-@@ -86,10 +86,40 @@
+@@ -86,12 +86,42 @@
            intendedPlayingState = isPlaying
          }
  
@@ -996,8 +1105,8 @@ diff --git a/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt b/andro
          }
 +        onPlaybackStateChange?.invoke(isPlaying)
          sendStatusUpdate(mapOf("playing" to isPlaying))
-+      }
-+
+       }
+ 
 +      override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
 +        val wasIntendedPlaying = intendedPlayingState
 +        intendedPlayingState = playWhenReady
@@ -1013,13 +1122,13 @@ diff --git a/android/src/main/java/expo/modules/audio/BaseAudioPlayer.kt b/andro
 +          if (wasIntendedPlaying) onPlaybackStateChange?.invoke(false)
 +          sendStatusUpdate(mapOf("playing" to false, "playWhenReady" to false))
 +        }
-       }
- 
++      }
++
        override fun onIsLoadingChanged(isLoading: Boolean) {
+         this@BaseAudioPlayer.onLoadingChanged(isLoading)
+       }
 diff --git a/android/src/main/java/expo/modules/audio/FragmentSeekingExtractor.kt b/android/src/main/java/expo/modules/audio/FragmentSeekingExtractor.kt
-new file mode 100644
-index 0000000000000000000000000000000000000000..a4e9d208d0fa8f34440bc355de02f81129c91a76
---- /dev/null
+--- a/android/src/main/java/expo/modules/audio/FragmentSeekingExtractor.kt
 +++ b/android/src/main/java/expo/modules/audio/FragmentSeekingExtractor.kt
 @@ -0,0 +1,425 @@
 +package expo.modules.audio
@@ -1447,11 +1556,114 @@ index 0000000000000000000000000000000000000000..a4e9d208d0fa8f34440bc355de02f811
 +        (b[k + 2].toInt() and 0xff shl 8) or (b[k + 3].toInt() and 0xff)
 +  }
 +}
+diff --git a/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt b/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt
+--- a/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt
++++ b/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt
+@@ -0,0 +1,33 @@
++package expo.modules.audio
++
++/** Pure decisions shared by the native player and its deterministic JVM tests.
++ * Unknown sources deliberately retain the network lock. No URL is logged. */
++internal enum class PlaybackWakeMode { LOCAL, NETWORK }
++
++internal data class PlaybackPowerPolicy(
++  val background: Boolean = false,
++  val precise: Boolean = true,
++  val allowOffload: Boolean = false,
++  val networkRequired: Boolean = true
++) {
++  fun statusInterval(foregroundIntervalMs: Long): Long =
++    if (background && !precise) 5000L else foregroundIntervalMs.coerceAtLeast(16L)
++
++  fun wakeMode(nativeSourceUris: List<String?>): PlaybackWakeMode =
++    if (networkRequired || nativeSourceUris.isEmpty() || nativeSourceUris.any(::sourceNeedsNetwork)) {
++      PlaybackWakeMode.NETWORK
++    } else {
++      PlaybackWakeMode.LOCAL
++    }
++
++  fun offloadAllowed(itemCount: Int, repeating: Boolean, speed: Float, pitch: Float, sampling: Boolean): Boolean =
++    background && !precise && allowOffload && itemCount == 1 && !repeating &&
++      speed == 1f && pitch == 1f && !sampling
++}
++
++/** content: may be backed by a cloud provider; only proven local schemes may
++ * drop Wi-Fi protection. Fully cached HTTP data is conservatively network. */
++internal fun sourceNeedsNetwork(uri: String?): Boolean {
++  val scheme = uri?.substringBefore(':', "")?.lowercase()
++  return scheme !in setOf("file", "asset", "android.resource", "rawresource", "data")
++}
+diff --git a/android/src/main/java/expo/modules/audio/PlaybackRangePolicy.kt b/android/src/main/java/expo/modules/audio/PlaybackRangePolicy.kt
+--- a/android/src/main/java/expo/modules/audio/PlaybackRangePolicy.kt
++++ b/android/src/main/java/expo/modules/audio/PlaybackRangePolicy.kt
+@@ -0,0 +1,63 @@
++package expo.modules.audio
++
++/** All values use the effective Media3 window, including zero-based CUE tracks. */
++data class PlaybackWindow(val startMs: Long, val endMs: Long?) {
++  companion object {
++    const val MAX_MS = 86_400_000L
++    fun create(startSec: Double?, endSec: Double?, minimumMs: Long = 1L): PlaybackWindow? {
++      if (startSec == null && endSec == null) return null
++      val start = startSec ?: 0.0
++      require(start.isFinite() && start >= 0 && start <= MAX_MS / 1000.0) { "Invalid playback range" }
++      require(endSec == null || endSec.isFinite() && endSec <= MAX_MS / 1000.0) { "Invalid playback range" }
++      val startMs = (start * 1000).toLong(); val endMs = endSec?.let { (it * 1000).toLong() }
++      require(endMs == null || endMs - startMs >= minimumMs) { "Playback range is too short" }
++      return PlaybackWindow(startMs, endMs)
++    }
++  }
++}
++fun interface PlaybackBoundary { fun cancel() }
++
++/** Source/seek generations fence queued deliveries. Schedule is a native
++ * Media3 media-clock message; this class has no polling or wall-clock timer. */
++class NativeABRepeat(
++  private val schedule: (Long, () -> Unit) -> PlaybackBoundary?,
++  private val seek: (Long) -> Unit,
++  private val changed: () -> Unit
++) {
++  var window: PlaybackWindow? = null; private set
++  private var boundary: PlaybackBoundary? = null
++  private var epoch = 0L
++  private var delivery = 0L
++  fun set(startSec: Double?, endSec: Double?, durationMs: Long) {
++    require((startSec == null) == (endSec == null)) { "A-B requires both endpoints" }
++    val requested = PlaybackWindow.create(startSec, endSec, 1000L)
++    require(requested == null || requested.endMs != null) { "A-B requires both endpoints" }
++    require(requested == null || durationMs <= 0 || requested.endMs!! <= durationMs) { "A-B exceeds the track" }
++    reset(requested)
++  }
++  fun clear(notify: Boolean = true) {
++    if (window == null) { epoch++; boundary?.cancel(); boundary = null; return }
++    reset(null, notify)
++  }
++  private fun reset(next: PlaybackWindow?, notify: Boolean = true) {
++    epoch++; boundary?.cancel(); boundary = null; window = next
++    if (next != null) arm()
++    if (notify) changed()
++  }
++  fun refresh() { if (window != null) arm() }
++  fun onSeek(positionMs: Long) {
++    val value = window ?: return
++    if (positionMs < value.startMs || positionMs >= value.endMs!!) clear() else arm()
++  }
++  private fun arm() {
++    boundary?.cancel(); boundary = null
++    val value = window ?: return
++    val owner = epoch; val ticket = ++delivery
++    boundary = schedule(value.endMs!!) {
++      if (epoch != owner || delivery != ticket || window != value) return@schedule
++      boundary = null
++      seek(value.startMs)
++      if (epoch == owner && window == value && boundary == null) arm()
++    }
++  }
++}
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df63d6252a4 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioControlsService.kt
-@@ -23,10 +23,12 @@ import androidx.media3.session.MediaSession
+@@ -23,10 +23,12 @@
  import androidx.media3.session.MediaSessionService
  import androidx.media3.session.MediaStyleNotificationHelper
  import androidx.media3.session.SessionCommand
@@ -1464,7 +1676,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
  import expo.modules.kotlin.AppContext
  import kotlinx.coroutines.CoroutineScope
  import kotlinx.coroutines.Dispatchers
-@@ -34,6 +36,9 @@ import kotlinx.coroutines.Job
+@@ -34,6 +36,9 @@
  import kotlinx.coroutines.cancel
  import kotlinx.coroutines.isActive
  import kotlinx.coroutines.launch
@@ -1474,7 +1686,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
  import java.lang.ref.WeakReference
  import java.net.URL
  
-@@ -50,6 +55,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -50,6 +55,9 @@
    private var currentArtworkUrl: URL? = null
    private var currentArtwork: Bitmap? = null
    private var artworkLoadJob: Job? = null
@@ -1484,7 +1696,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
    private val notificationId: Int
      get() = currentPlayer?.hashCode() ?: CHANNEL_ID.hashCode()
  
-@@ -90,6 +98,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -90,6 +98,9 @@
  
          ACTION_SEEK_FORWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition + SEEK_INTERVAL_MS)
          ACTION_SEEK_BACKWARD -> currentPlayerRef.seekTo(currentPlayerRef.currentPosition - SEEK_INTERVAL_MS)
@@ -1494,7 +1706,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
        }
      }
  
-@@ -192,6 +203,18 @@ class AudioControlsService : MediaSessionService() {
+@@ -192,6 +203,18 @@
        val compactViewIndices = mutableListOf<Int>()
        var currentIndex = 0
  
@@ -1513,7 +1725,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
        if (currentOptions?.showSeekBackward == true) {
          builder.addAction(
            NotificationCompat.Action(
-@@ -227,6 +250,33 @@ class AudioControlsService : MediaSessionService() {
+@@ -227,6 +250,33 @@
            )
          )
          compactViewIndices.add(currentIndex)
@@ -1547,7 +1759,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
        }
  
        style.setShowActionsInCompactView(*compactViewIndices.toIntArray())
-@@ -240,19 +290,41 @@ class AudioControlsService : MediaSessionService() {
+@@ -240,19 +290,41 @@
      val session = mediaSession ?: return
      val mediaButtons = mutableListOf<CommandButton>()
  
@@ -1592,7 +1804,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
      mediaButtons.add(
        CommandButton.Builder(if (isPlaying) CommandButton.ICON_PAUSE else CommandButton.ICON_PLAY)
          .setDisplayName(if (isPlaying) "Pause" else "Play")
-@@ -263,13 +335,47 @@ class AudioControlsService : MediaSessionService() {
+@@ -263,21 +335,64 @@
      )
  
      // Add seek forward button if enabled
@@ -1622,10 +1834,10 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
 +          .setEnabled(true)
 +          .setSessionCommand(SessionCommand(ACTION_SKIP_NEXT, Bundle.EMPTY))
 +          .setSlots(CommandButton.SLOT_FORWARD, CommandButton.SLOT_OVERFLOW)
-+          .build()
-+      )
-+    }
-+
+           .build()
+       )
+     }
+ 
 +    // The heart, where the platform puts actions of the app's own: beside the
 +    // transport controls on the notification and the lock screen, and on the
 +    // car's playback screen. Only while JS says the song can be one (not a
@@ -1639,10 +1851,11 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
 +          .setEnabled(true)
 +          .setSessionCommand(SessionCommand(ACTION_TOGGLE_FAVORITE, Bundle.EMPTY))
 +          .setSlots(CommandButton.SLOT_OVERFLOW)
-           .build()
-       )
-     }
-@@ -278,6 +384,15 @@ class AudioControlsService : MediaSessionService() {
++          .build()
++      )
++    }
++
+     session.setCustomLayout(mediaButtons)
      session.setMediaButtonPreferences(mediaButtons)
    }
  
@@ -1658,7 +1871,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
    private fun postOrStartForegroundNotification(startInForeground: Boolean) {
      if (startInForeground) {
        postOrStartForegroundNotificationNow(startInForeground = true)
-@@ -321,12 +436,21 @@ class AudioControlsService : MediaSessionService() {
+@@ -321,17 +436,30 @@
    }
  
    private fun resolveSessionPlayer(player: AudioPlayer, options: AudioLockScreenOptions?): Player {
@@ -1672,17 +1885,32 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
 +      { positionMs -> player.emitRemoteSeek(positionMs) }
 +    )
      val isLive = options?.isLiveStream ?: player.isLive
-     if (!isLive) {
+-    if (!isLive) {
 -      return player.ref
-+      return base
-     }
- 
+-    }
+-
 -    return object : ForwardingPlayer(player.ref) {
 +    return object : ForwardingPlayer(base) {
        override fun getAvailableCommands(): Player.Commands {
-         return super.getAvailableCommands().buildUpon()
-           .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
-@@ -371,7 +495,14 @@ class AudioControlsService : MediaSessionService() {
+-        return super.getAvailableCommands().buildUpon()
+-          .remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
+-          .build()
++        // The JS queue can advance even when no gapless item is installed.
++        // Controllers otherwise discard Next before our callback receives it.
++        val commands = super.getAvailableCommands().buildUpon()
++          .add(Player.COMMAND_SEEK_TO_NEXT)
++          .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
++          .add(Player.COMMAND_SEEK_TO_PREVIOUS)
++          .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
++        if (isLive) commands.remove(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
++        return commands.build()
+       }
++
++      override fun isCommandAvailable(command: Int): Boolean = getAvailableCommands().contains(command)
+     }
+   }
+ 
+@@ -371,7 +499,14 @@
            updateMetadata(metadata)
          }
          val session = MediaSession.Builder(context, sessionPlayer)
@@ -1698,7 +1926,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
            .build()
  
          // Replace the basic media session with a session connected to our playback service.
-@@ -452,7 +583,14 @@ class AudioControlsService : MediaSessionService() {
+@@ -452,7 +587,14 @@
            updateMetadata(metadata)
          }
          val session = MediaSession.Builder(context, sessionPlayer)
@@ -1714,7 +1942,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
            .build()
  
          player.mediaSession.release()
-@@ -489,8 +627,17 @@ class AudioControlsService : MediaSessionService() {
+@@ -489,8 +631,17 @@
  
        artworkLoadJob = scope.launch {
          try {
@@ -1734,7 +1962,7 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
  
            if (isActive) {
              callback(bitmap)
-@@ -558,6 +705,9 @@ class AudioControlsService : MediaSessionService() {
+@@ -558,6 +709,9 @@
  
      const val ACTION_SEEK_FORWARD = "expo.modules.audio.action.SEEK_FORWARD"
      const val ACTION_SEEK_BACKWARD = "expo.modules.audio.action.SEEK_BACKWARD"
@@ -1745,10 +1973,9 @@ index 196a5d57f887c2667a88543bd2f6a80044a044f2..f74435f1b33120db3799c7909e198df6
      const val SEEK_INTERVAL_MS = 10000L
    }
 diff --git a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
-index 839aaef12d7699ea1a89037b31849775daa079f4..67fbeecf9e43980ecd82105519aa599dbee8f1ca 100644
 --- a/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
 +++ b/android/src/main/java/expo/modules/audio/service/AudioMediaSessionCallback.kt
-@@ -1,46 +1,106 @@
+@@ -1,40 +1,52 @@
  package expo.modules.audio.service
  
 +import android.content.Intent
@@ -1816,11 +2043,10 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..67fbeecf9e43980ecd82105519aa599d
              .build()
          )
          .build()
-     } catch (e: Exception) {
-       return MediaSession.ConnectionResult.reject()
+@@ -43,6 +55,54 @@
      }
-+  }
-+
+   }
+ 
 +  /** The real queue lives in JS; the single native item must not navigate itself. */
 +  override fun onPlayerCommandRequest(
 +    session: MediaSession,
@@ -1867,9 +2093,11 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..67fbeecf9e43980ecd82105519aa599d
 +      }
 +    }
 +    return super.onMediaButtonEvent(session, controllerInfo, intent)
-   }
- 
++  }
++
    override fun onCustomCommand(
+     session: MediaSession,
+     controller: MediaSession.ControllerInfo,
 @@ -56,6 +116,9 @@
        AudioControlsService.ACTION_SEEK_BACKWARD -> {
          session.player.seekTo(session.player.currentPosition - AudioControlsService.SEEK_INTERVAL_MS)
@@ -1881,10 +2109,9 @@ index 839aaef12d7699ea1a89037b31849775daa079f4..67fbeecf9e43980ecd82105519aa599d
      return super.onCustomCommand(session, controller, command, args)
    }
 diff --git a/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt b/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
-index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636d621f0a8 100644
 --- a/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
 +++ b/android/src/main/java/expo/modules/audio/service/MetadataInjectingPlayer.kt
-@@ -3,10 +3,20 @@ package expo.modules.audio.service
+@@ -3,10 +3,20 @@
  import android.os.Handler
  import android.os.Looper
  import androidx.core.net.toUri
@@ -1905,7 +2132,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
  import androidx.media3.common.util.UnstableApi
  import expo.modules.audio.Metadata
  import java.util.IdentityHashMap
-@@ -22,6 +32,38 @@ internal class MetadataInjectingPlayer(
+@@ -22,6 +32,38 @@
    private val listeners = IdentityHashMap<Player.Listener, Player.Listener>()
    private var injectedMetadata: Metadata? = null
  
@@ -1944,7 +2171,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
    override fun addListener(listener: Player.Listener) {
      val forwardingListener = synchronized(listeners) {
        listeners.getOrPut(listener) { MetadataForwardingListener(listener) }
-@@ -37,13 +79,16 @@ internal class MetadataInjectingPlayer(
+@@ -37,13 +79,16 @@
    }
  
    override fun getMediaMetadata(): MediaMetadata {
@@ -1962,7 +2189,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
        .setArtworkData(null, null)
        .build()
    }
-@@ -56,6 +101,9 @@ internal class MetadataInjectingPlayer(
+@@ -56,6 +101,9 @@
  
      val previousMetadata = mediaMetadata
      injectedMetadata = metadata
@@ -1972,7 +2199,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
      val newMetadata = mediaMetadata
  
      if (previousMetadata == newMetadata) {
-@@ -79,9 +127,28 @@ internal class MetadataInjectingPlayer(
+@@ -79,9 +127,28 @@
      }
    }
  
@@ -2002,7 +2229,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
      override fun onMediaMetadataChanged(mediaMetadata: MediaMetadata) {
        listener.onMediaMetadataChanged(this@MetadataInjectingPlayer.mediaMetadata)
      }
-@@ -89,5 +156,92 @@ internal class MetadataInjectingPlayer(
+@@ -89,5 +156,92 @@
      override fun onEvents(player: Player, events: Player.Events) {
        listener.onEvents(this@MetadataInjectingPlayer, events)
      }
@@ -2096,9 +2323,7 @@ index 18203a364d17dcf3de95d22a20175308e3363889..317382e2b89ec80576a0878675e52636
    }
  }
 diff --git a/android/src/main/java/expo/modules/audio/service/PreloadingBitmapLoader.kt b/android/src/main/java/expo/modules/audio/service/PreloadingBitmapLoader.kt
-new file mode 100644
-index 0000000000000000000000000000000000000000..9dcd6997d34e6b34c20eaa88b91563f67e4cb837
---- /dev/null
+--- a/android/src/main/java/expo/modules/audio/service/PreloadingBitmapLoader.kt
 +++ b/android/src/main/java/expo/modules/audio/service/PreloadingBitmapLoader.kt
 @@ -0,0 +1,120 @@
 +package expo.modules.audio.service
@@ -2222,13 +2447,24 @@ index 0000000000000000000000000000000000000000..9dcd6997d34e6b34c20eaa88b91563f6
 +  }
 +}
 diff --git a/build/Audio.types.d.ts b/build/Audio.types.d.ts
-index 25604783649fe9b64f6655172f08471a5efcbf45..b80696e3b5d647c53f6e144d830171c6800a9c32 100644
 --- a/build/Audio.types.d.ts
 +++ b/build/Audio.types.d.ts
-@@ -34,6 +34,20 @@ export type AudioSource = string | number | null | {
+@@ -12,6 +12,8 @@
+      * An optional display name for the audio source.
+      */
+     name?: string;
++  clipStartSec?: number;
++  clipEndSec?: number;
+ };
+ export type AudioSource = string | number | null | {
+     /**
+@@ -34,6 +36,23 @@
       * Useful for showing track names in a queue or playlist UI.
       */
      name?: string;
++      /** Android physical-file range, exposed with a zero-based timeline. */
++      clipStartSec?: number;
++      clipEndSec?: number;
 +    /**
 +     * What this track is, for the media session (Bluetooth, Android Auto, the
 +     * system's own controls). Their metadata comes from the item, not from
@@ -2246,7 +2482,16 @@ index 25604783649fe9b64f6655172f08471a5efcbf45..b80696e3b5d647c53f6e144d830171c6
  };
  /**
   * Options for configuring audio player behavior.
-@@ -618,6 +632,15 @@ export type AudioMetadata = {
+@@ -187,6 +206,8 @@
+  * Used by `useAudioPlayerStatus()` to provide real-time status updates.
+  */
+ export type AudioStatus = {
++  abRepeat?: { startSec: number; endSec: number } | null;
++  playbackRange?: { startSec: number; endSec: number | null } | null;
+     /** Unique identifier for the player instance. */
+     id: string;
+     /** Current playback position in seconds. */
+@@ -618,6 +639,15 @@
      artist?: string;
      albumTitle?: string;
      artworkUrl?: string;
@@ -2263,10 +2508,9 @@ index 25604783649fe9b64f6655172f08471a5efcbf45..b80696e3b5d647c53f6e144d830171c6
  /**
   * Loop mode for audio playlist playback.
 diff --git a/build/AudioConstants.d.ts b/build/AudioConstants.d.ts
-index cfd92ad0ff5765254c4e6db974fe44bce34aad06..78fa084cf34a5f56743d636b6501f90971d7898b 100644
 --- a/build/AudioConstants.d.ts
 +++ b/build/AudioConstants.d.ts
-@@ -15,5 +15,9 @@ export type AudioLockScreenOptions = {
+@@ -15,5 +15,9 @@
       * and scrub bar, and disable seek controls.
       */
      isLiveStream?: boolean;
@@ -2292,12 +2536,15 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
       * Boolean value indicating whether the player is currently playing.
       */
      playing: boolean;
-@@ -129,6 +134,15 @@
+@@ -129,6 +134,18 @@
       * @hidden
       */
      currentStatus: AudioStatus;
 +    /** Android only: background polling and optional offload requirements. */
-+    setPlaybackPowerPolicy(background: boolean, precise: boolean, allowOffload: boolean, networkRequired?: boolean): void;
++    setPlaybackRange(startSec: number | null, endSec: number | null): void;
++  /** Android native media-clock A-B loop, relative to effective window. */
++  setABRepeat(startSec: number | null, endSec: number | null): void;
++  setPlaybackPowerPolicy(background: boolean, precise: boolean, allowOffload: boolean, networkRequired?: boolean): void;
 +    /** Requested/allowed offload is not proof the hardware is offloaded. */
 +    readonly powerStatus: {
 +        background: boolean; precise: boolean; networkRequired: boolean;
@@ -2308,11 +2555,10 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
      /**
       * Start playing audio.
       */
-@@ -141,6 +155,14 @@
-      * Replaces the current audio source with a new one.
+@@ -142,6 +159,14 @@
       */
      replace(source: AudioSource): void;
-+    /**
+     /**
 +     * Queues a source behind the one playing so the player joins them with no
 +     * gap, and emits `trackTransition` when it moves on to it. Replaces a
 +     * previously queued one.
@@ -2320,10 +2566,11 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
 +    setNextSource(source: AudioSource): void;
 +    /** Drops the source queued by `setNextSource`, if any. */
 +    clearNextSource(): void;
-     /**
++    /**
       * Seeks the playback by the given number of seconds.
       * @param seconds The number of seconds to seek by.
-@@ -183,6 +205,24 @@
+      * @param toleranceMillisBefore The tolerance allowed before the requested seek time, in milliseconds. iOS only.
+@@ -183,7 +208,25 @@
       * This will clear the lock screen's now playing info.
       */
      clearLockScreenControls(): void;
@@ -2339,16 +2586,17 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
 +     * with the app about where the song is.
 +     */
 +    setSessionPositionOffset(offsetMs: number): void;
-+    /**
+     /**
 +     * The heart on the notification, the lock screen and the car (Android
 +     * only): whether the song is a favourite, or null to hide it, and what the
 +     * button is called. Pressing it emits `remoteFavorite`.
 +     */
 +    setLockScreenFavorite(favorite: boolean | null, label: string | null): void;
-     /**
++    /**
       * Remove the player from memory to free up resources.
       */
-@@ -222,6 +262,29 @@
+     remove(): void;
+@@ -222,6 +265,29 @@
      playbackStatusUpdate(status: AudioStatus): void;
      /** Fired when audio sampling is enabled and new sample data is available. */
      audioSampleUpdate(data: AudioSample): void;
@@ -2378,7 +2626,7 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
  };
  export declare class AudioRecorder extends SharedObject<RecordingEvents> {
      /**
-@@ -438,4 +501,4 @@
+@@ -438,4 +504,4 @@
       */
      destroy(): void;
  }
@@ -2386,9 +2634,7 @@ diff --git a/build/AudioModule.types.d.ts b/build/AudioModule.types.d.ts
 \ No newline at end of file
 +//# sourceMappingURL=AudioModule.types.d.ts.map
 diff --git a/ios/AnimatedArtwork.swift b/ios/AnimatedArtwork.swift
-new file mode 100644
-index 0000000000000000000000000000000000000000..fbc89d87bf732195bd9e74c2792a8843ae18c121
---- /dev/null
+--- a/ios/AnimatedArtwork.swift
 +++ b/ios/AnimatedArtwork.swift
 @@ -0,0 +1,569 @@
 +import AVFoundation
@@ -2961,21 +3207,22 @@ index 0000000000000000000000000000000000000000..fbc89d87bf732195bd9e74c2792a8843
 +
 +#endif
 diff --git a/ios/AudioModule.swift b/ios/AudioModule.swift
-index d26560627c2dfa97370440ad28304617f3f9f0f7..7cf6446bc137c4ecf0a7aab720347dab852281d1 100644
 --- a/ios/AudioModule.swift
 +++ b/ios/AudioModule.swift
-@@ -241,6 +241,18 @@ public class AudioModule: Module {
+@@ -239,8 +239,20 @@
+         } else {
+           player.replaceCurrentSource(source: source)
          }
-       }
- 
++      }
++
 +      // Gapless: same source resolution as `replace`, but the track is queued
 +      // behind the one playing instead of taking its place, so AVQueuePlayer
 +      // buffers it in advance and joins them with no gap. The move arrives as
 +      // `trackTransition`.
 +      Function("setNextSource") { (player: AudioPlayer, source: AudioSource) in
 +        player.setNextSource(source)
-+      }
-+
+       }
+ 
 +      Function("clearNextSource") { (player: AudioPlayer) in
 +        player.clearNextSource()
 +      }
@@ -2984,10 +3231,9 @@ index d26560627c2dfa97370440ad28304617f3f9f0f7..7cf6446bc137c4ecf0a7aab720347dab
          player.ref.pause()
          if !player.keepAudioSessionActive {
 diff --git a/ios/AudioPlayer.swift b/ios/AudioPlayer.swift
-index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e8ab1d4a7 100644
 --- a/ios/AudioPlayer.swift
 +++ b/ios/AudioPlayer.swift
-@@ -4,6 +4,7 @@ import Combine
+@@ -4,6 +4,7 @@
  private enum AudioConstants {
    static let playbackStatus = "playbackStatusUpdate"
    static let audioSample = "audioSampleUpdate"
@@ -2995,7 +3241,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
  }
  
  public class AudioPlayer: SharedRef<AVPlayer>, Playable {
-@@ -25,17 +26,40 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -25,17 +26,40 @@
    var samplingEnabled = false
    var keepAudioSessionActive = false
  
@@ -3038,7 +3284,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
        }
        updateStatus(with: [:])
      }
-@@ -56,7 +80,21 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -56,7 +80,21 @@
  
    var duration: Double {
      let seconds = ref.currentItem?.duration.seconds ?? 0.0
@@ -3061,7 +3307,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
    }
  
    var currentTime: Double {
-@@ -100,7 +138,9 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -100,7 +138,9 @@
    }
  
    func play(at rate: Float) {
@@ -3072,7 +3318,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
      if isLooping {
        enqueueNextLoopItem()
      }
-@@ -176,14 +216,19 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -176,14 +216,19 @@
      }
    }
  
@@ -3094,7 +3340,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
  
      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
        ref.seek(to: time, toleranceBefore: toleranceBefore, toleranceAfter: toleranceAfter) { [weak self] _ in
-@@ -224,10 +269,26 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -224,10 +269,26 @@
        .store(in: &cancellables)
  
      ref.publisher(for: \.currentItem)
@@ -3122,7 +3368,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
          if self.isLooping {
            self.enqueueNextLoopItem()
            self.addPlaybackEndNotification()
-@@ -319,6 +380,7 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -319,6 +380,7 @@
    }
  
    private func teardownPlayer() {
@@ -3130,7 +3376,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
      removeQueuedLoopItems()
      if samplingEnabled {
        uninstallTap()
-@@ -346,7 +408,7 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -346,7 +408,7 @@
  
    private func restorePlaybackState(time: Double, shouldResume: Bool, rate: Float) {
      let cmTime = CMTime(seconds: time, preferredTimescale: CMTimeScale(NSEC_PER_SEC))
@@ -3139,7 +3385,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
        guard let self, shouldResume else { return }
        self.play(at: rate)
      }
-@@ -405,6 +467,11 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -405,6 +467,11 @@
    }
  
    private func replacePlayerItem(with item: AVPlayerItem?) {
@@ -3151,7 +3397,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
      if let queuePlayer = ref as? AVQueuePlayer {
        queuePlayer.removeAllItems()
        if let item {
-@@ -429,12 +496,60 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -429,12 +496,60 @@
      queuePlayer.insert(nextItem, after: currentItem)
    }
  
@@ -3213,7 +3459,7 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
        queuePlayer.remove(item)
      }
    }
-@@ -459,7 +574,21 @@ public class AudioPlayer: SharedRef<AVPlayer>, Playable {
+@@ -459,7 +574,21 @@
          return
        }
  
@@ -3236,10 +3482,9 @@ index 074294321e872bb53c0b2d41044dac3c612f14f0..818eb0e434f11e1d82e38ec0c14ee65e
          self.updateStatus(with: [
            "playing": false,
 diff --git a/ios/AudioRecords.swift b/ios/AudioRecords.swift
-index 33db27c3b8fb40fa9db6659a0787c6b2b503d1ab..a5c41356f93d3d4a45bf14020af1cb1943731751 100644
 --- a/ios/AudioRecords.swift
 +++ b/ios/AudioRecords.swift
-@@ -64,12 +64,17 @@ struct Metadata: Record {
+@@ -64,12 +64,17 @@
    @Field var artist: String?
    @Field var albumTitle: String?
    @Field var artworkUrl: URL?
@@ -3258,10 +3503,9 @@ index 33db27c3b8fb40fa9db6659a0787c6b2b503d1ab..a5c41356f93d3d4a45bf14020af1cb19
  
  enum BitRateStrategy: String, Enumerable {
 diff --git a/ios/AudioUtils.swift b/ios/AudioUtils.swift
-index 79c7c0b256581a768c42a0291bf84bdff4c4b142..7c4800e32389f434b77f6c208f13578b963a4f17 100644
 --- a/ios/AudioUtils.swift
 +++ b/ios/AudioUtils.swift
-@@ -84,9 +84,17 @@ struct AudioUtils {
+@@ -84,9 +84,17 @@
        url
      }
  
@@ -3282,10 +3526,9 @@ index 79c7c0b256581a768c42a0291bf84bdff4c4b142..7c4800e32389f434b77f6c208f13578b
  
      let asset = AVURLAsset(url: finalUrl, options: options)
 diff --git a/ios/MediaController.swift b/ios/MediaController.swift
-index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326f10e6e9e 100644
 --- a/ios/MediaController.swift
 +++ b/ios/MediaController.swift
-@@ -11,9 +11,12 @@ class MediaController {
+@@ -11,9 +11,12 @@
  
    private var currentArtworkUrl: URL?
    private var cachedArtwork: MPMediaItemArtwork?
@@ -3298,7 +3541,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
  
    func setActivePlayer(_ player: AudioPlayer?, options: LockScreenOptions? = nil) {
      performOnMain {
-@@ -68,6 +71,7 @@ class MediaController {
+@@ -68,6 +71,7 @@
      } else {
        resetArtworkState()
        nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
@@ -3306,7 +3549,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
        applyAssetMetadata(&nowPlayingInfo, for: player)
      }
  
-@@ -80,7 +84,11 @@ class MediaController {
+@@ -80,7 +84,11 @@
        info.removeValue(forKey: MPMediaItemPropertyPlaybackDuration)
        info.removeValue(forKey: MPNowPlayingInfoPropertyElapsedPlaybackTime)
      } else {
@@ -3319,7 +3562,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
        info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = player.currentTime
      }
      info[MPNowPlayingInfoPropertyPlaybackRate] = player.isPlaying ? player.ref.rate : 0.0
-@@ -139,17 +147,21 @@ class MediaController {
+@@ -139,17 +147,21 @@
      guard let artworkUrl = metadata.artworkUrl else {
        resetArtworkState()
        info.removeValue(forKey: MPMediaItemPropertyArtwork)
@@ -3341,7 +3584,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
        return
      }
  
-@@ -173,14 +185,17 @@ class MediaController {
+@@ -173,14 +185,17 @@
          return
        }
  
@@ -3362,7 +3605,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
        self.nowPlayingInfoCenter.nowPlayingInfo = latestNowPlayingInfo
      }
    }
-@@ -204,34 +219,96 @@ class MediaController {
+@@ -204,34 +219,96 @@
    private func resetArtworkState() {
      currentArtworkUrl = nil
      cachedArtwork = nil
@@ -3464,7 +3707,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
      remoteCommandCenter.playCommand.addTarget { [weak self] _ in
        guard let player = self?.activePlayer else {
          return .commandFailed
-@@ -270,7 +347,7 @@ class MediaController {
+@@ -270,7 +347,7 @@
        }
  
        let seekTime = CMTime(seconds: event.positionTime, preferredTimescale: 1)
@@ -3473,7 +3716,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
  
        return .success
      }
-@@ -303,12 +380,34 @@ class MediaController {
+@@ -303,12 +380,34 @@
        return .success
      }
  
@@ -3508,7 +3751,7 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
    }
  
    private func disableRemoteCommands() {
-@@ -318,6 +417,8 @@ class MediaController {
+@@ -318,6 +417,8 @@
      remoteCommandCenter.changePlaybackPositionCommand.isEnabled = false
      remoteCommandCenter.skipForwardCommand.isEnabled = false
      remoteCommandCenter.skipBackwardCommand.isEnabled = false
@@ -3517,53 +3760,50 @@ index e977f577cd2e16b194b56537ad76b423f40d2496..8d8068b2edc68ca920bbdeb0c7d5c326
  
      // Remove event targets
      remoteCommandCenter.playCommand.removeTarget(self)
-diff --git a/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt b/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt
-new file mode 100644
---- /dev/null
-+++ b/android/src/main/java/expo/modules/audio/PlaybackPowerPolicy.kt
-@@ -0,0 +1,33 @@
-+package expo.modules.audio
-+
-+/** Pure decisions shared by the native player and its deterministic JVM tests.
-+ * Unknown sources deliberately retain the network lock. No URL is logged. */
-+internal enum class PlaybackWakeMode { LOCAL, NETWORK }
-+
-+internal data class PlaybackPowerPolicy(
-+  val background: Boolean = false,
-+  val precise: Boolean = true,
-+  val allowOffload: Boolean = false,
-+  val networkRequired: Boolean = true
-+) {
-+  fun statusInterval(foregroundIntervalMs: Long): Long =
-+    if (background && !precise) 5000L else foregroundIntervalMs.coerceAtLeast(16L)
-+
-+  fun wakeMode(nativeSourceUris: List<String?>): PlaybackWakeMode =
-+    if (networkRequired || nativeSourceUris.isEmpty() || nativeSourceUris.any(::sourceNeedsNetwork)) {
-+      PlaybackWakeMode.NETWORK
-+    } else {
-+      PlaybackWakeMode.LOCAL
-+    }
-+
-+  fun offloadAllowed(itemCount: Int, repeating: Boolean, speed: Float, pitch: Float, sampling: Boolean): Boolean =
-+    background && !precise && allowOffload && itemCount == 1 && !repeating &&
-+      speed == 1f && pitch == 1f && !sampling
-+}
-+
-+/** content: may be backed by a cloud provider; only proven local schemes may
-+ * drop Wi-Fi protection. Fully cached HTTP data is conservatively network. */
-+internal fun sourceNeedsNetwork(uri: String?): Boolean {
-+  val scheme = uri?.substringBefore(':', "")?.lowercase()
-+  return scheme !in setOf("file", "asset", "android.resource", "rawresource", "data")
-+}
+diff --git a/src/Audio.types.ts b/src/Audio.types.ts
+--- a/src/Audio.types.ts
++++ b/src/Audio.types.ts
+@@ -13,6 +13,8 @@
+    * An optional display name for the audio source.
+    */
+   name?: string;
++  clipStartSec?: number;
++  clipEndSec?: number;
+ };
+ 
+ // @docsMissing
+@@ -41,6 +43,9 @@
+        * Useful for showing track names in a queue or playlist UI.
+        */
+       name?: string;
++      /** Android physical-file range, exposed with a zero-based timeline. */
++      clipStartSec?: number;
++      clipEndSec?: number;
+     };
+ 
+ /**
+@@ -200,6 +205,8 @@
+  * Used by `useAudioPlayerStatus()` to provide real-time status updates.
+  */
+ export type AudioStatus = {
++  abRepeat?: { startSec: number; endSec: number } | null;
++  playbackRange?: { startSec: number; endSec: number | null } | null;
+   /** Unique identifier for the player instance. */
+   id: string;
+   /** Current playback position in seconds. */
 diff --git a/src/AudioModule.types.ts b/src/AudioModule.types.ts
 --- a/src/AudioModule.types.ts
 +++ b/src/AudioModule.types.ts
-@@ -167,6 +167,17 @@
+@@ -166,6 +166,20 @@
+    * @hidden
     */
    currentStatus: AudioStatus;
- 
++
 +  /** Android only: requirements for background power use; omitted network
 +   * hints remain conservative. Events such as pause/seek/end remain immediate. */
++  setPlaybackRange(startSec: number | null, endSec: number | null): void;
++  /** Android native media-clock A-B loop, relative to effective window. */
++  setABRepeat(startSec: number | null, endSec: number | null): void;
 +  setPlaybackPowerPolicy(background: boolean, precise: boolean, allowOffload: boolean, networkRequired?: boolean): void;
 +  /** Android only. Allowed/requested offload is distinct from actual hardware use. */
 +  readonly powerStatus: {
@@ -3572,7 +3812,6 @@ diff --git a/src/AudioModule.types.ts b/src/AudioModule.types.ts
 +    offloadRequested: boolean; offloadAllowed: boolean;
 +    offloadedPlayback: boolean; sleepingForOffload: boolean;
 +  };
-+
+ 
    /**
     * Start playing audio.
-    */

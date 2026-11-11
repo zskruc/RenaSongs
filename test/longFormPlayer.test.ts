@@ -1,3 +1,4 @@
+import { cueDeletionBlocked } from '../src/lib/cueDeletionLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -13,7 +14,7 @@ import { DEFAULT_PODCAST_PLAYBACK, podcastStartPosition, podcastOutroReached } f
 // database IO and app-state delivery are explicit controlled boundaries.
 const text = readFileSync(new URL('../src/store/player.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('player.ts', text, ts.ScriptTarget.Latest, true);
-const functions = new Set(['loadIndexSource', 'sourceFor', 'currentSong', 'flushPodcastSample', 'beginLongFormTrack',
+const functions = new Set(['loadIndexSource', 'wholeSourceFor', 'sourceFor', 'currentSong', 'flushPodcastSample', 'beginLongFormTrack',
   'parkLongFormSource', 'currentAudiobookSample', 'observeLongFormState', 'initAudiobookProgressTracking', 'clearFinishedAudiobookProgress']);
 const variables = new Set(['longFormOwner', 'resumeSeekGeneration', 'longFormInitialized', 'lastPodcastSample', 'audiobookTracker']);
 const declarations = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && functions.has(node.name?.text ?? '')
@@ -41,7 +42,7 @@ function harness() {
   const auth = {}, noop = () => {};
   const native = { play: noop, volume: 1, audioSessionId: 1 };
   const settings = { saveAudiobookProgress: true }, podcastPreferences = { ...DEFAULT_PODCAST_PLAYBACK };
-  const context: Record<string, any> = { exports: {}, AudiobookProgressTracker,
+  const context: Record<string, any> = { cueDeletionBlocked, prepareLoudnessSnapshot: async () => {}, maybeAnalyzeMissingLoudness: noop, exports: {}, AudiobookProgressTracker,
     profileScopeId: () => scope, audiobookProfileScope: () => `book:${scope}`,
     usePlayerStore: store, useSettings: { getState: () => settings, subscribe: noop },
     useAuthStore: { getState: () => ({ auth, offline: false }), subscribe: noop },

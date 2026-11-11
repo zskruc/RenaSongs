@@ -1,3 +1,6 @@
+import { cueDeletionBlocked } from '@/lib/cueDeletionLease';
+import { frozenLoudnessGain, prepareLoudnessSnapshot, maybeAnalyzeMissingLoudness } from '@/lib/loudnessTools';
+import { useRepeatSection, validRepeatSection } from './repeatRange';
 /**
  * Playback state and control over expo-audio.
  *
@@ -46,6 +49,8 @@ import {
   type SubsonicAuth,
 } from '@/api/backend';
 import { CLIENT_NAME } from '@/api/subsonic';
+import { unshuffleQueue } from '@/lib/unshuffleQueue';
+import { isSpokenContent } from '@/lib/currentContentKind';
 // The data layer's, not the backend's: `getRandomSongs` honours the library
 // filter and asks each library for its share (the rest of the mix cannot be
 // filtered, see `radioCandidates`), and `coverArtUrl` hands back the file on
@@ -71,7 +76,6 @@ import { queryClient } from '@/lib/query';
 import {
   appendEnd,
   dealt,
-  indexInOriginal,
   insertNext,
   moveIn,
   nextPlayable,
@@ -497,7 +501,7 @@ function cachedSourceFor(song: Song, always: boolean): string | undefined {
   return bitRate > 0 && cached.bitRate >= bitRate ? cached.uri : undefined;
 }
 
-function sourceFor(song: Song, timeOffsetSec = 0): AudioSource {
+function wholeSourceFor(song: Song, timeOffsetSec = 0): AudioSource {
   const metadata = itemMetadataFor(song);
   // What the media session calls this track. Without it every item goes out as
   // `MediaItem.DEFAULT_MEDIA_ID`, the empty string, so a car reading the
@@ -530,6 +534,15 @@ function sourceFor(song: Song, timeOffsetSec = 0): AudioSource {
     metadata,
     mediaId,
   };
+}
+
+/** CUE windows are installed atomically for current and native queued sources. */
+function sourceFor(song: Song, timeOffsetSec = 0): AudioSource {
+  if (cueDeletionBlocked(song)) throw new Error('CUE audio is being cleared');
+  const source = wholeSourceFor(song,timeOffsetSec);
+  if (!song.cueSourceId) return source;
+  if (!source || typeof source !== 'object' || !('uri' in source)) throw new Error('CUE audio file is unavailable');
+  return { ...source, clipStartSec: song.cueStartSec ?? 0, ...(song.cueEndSec === undefined ? {} : { clipEndSec: song.cueEndSec }) };
 }
 
 // ── Seek in transcoded streams ──────────────────────────────────────────────
@@ -567,7 +580,7 @@ function setStreamOffset(sec: number, p: AudioPlayer | null = activePlayer()) {
 function applyLoop(p: AudioPlayer | null, offsetSec = streamOffsetSec) {
   if (!p) return;
   try {
-    p.loop = usePlayerStore.getState().repeat === 'one' && !usePlayerStore.getState().chapterStop && offsetSec === 0
+    p.loop = !useRepeatSection.getState().section && usePlayerStore.getState().repeat === 'one' && !usePlayerStore.getState().chapterStop && offsetSec === 0
       && !silenceLoopManaged();
   } catch {
     // ignore
@@ -1116,7 +1129,10 @@ async function loadIndexSource(index: number, autoplay: boolean, recoveryTicket?
       `song with no duration: ${song.id} · from ${originOf(usePlayerStore.getState())} · keys ${Object.keys(song).sort().join(',')}`,
     );
   }
+  if (useSettings.getState().replayGain !== 'off') await prepareLoudnessSnapshot(song,true,() => token === loadToken && progressScope === profileScopeId() && requestOwner === useAuthStore.getState().auth).catch(() => {});
+  if (token !== loadToken || progressScope !== profileScopeId() || requestOwner !== useAuthStore.getState().auth) return false;
   const p = ensurePlayer(activeIdx);
+  if (autoplay) maybeAnalyzeMissingLoudness(song);
   const waitsForStream = !!requestOwner && !useAuthStore.getState().offline && autoplay
     && !song.url && !localSourceFor(song);
   if (sourceIntent && waitsForStream) {
@@ -1321,7 +1337,7 @@ async function ensurePlaybackReportSupport(auth: SubsonicAuth): Promise<boolean>
  * no id there, and a local profile has no server to tell.
  */
 function reportState(state: PlaybackState, song: Song | undefined, positionSec: number): void {
-  if (!song || song.url) return;
+  if (!song || song.url || song.cueSourceId || isSpokenContent(song)) return;
   // Counted because of what the panel on the server shows: `starting` is the
   // one report that says "from the top", so more of them than there were songs
   // means something is announcing a track that was already playing, and that is
@@ -1349,7 +1365,7 @@ function maybeScrobbleThreshold(positionSec: number) {
   if (scrobbledThisTrack) return;
   const st = usePlayerStore.getState();
   const song = st.queue[st.index];
-  if (!song || song.url) return; // radios are not scrobbled
+  if (!song || isSpokenContent(song) || (song.url && !song.cueSourceId)) return;
   const duration = st.durationSec || song.duration || 0;
   const { scrobblePercent, scrobbleSeconds } = useSettings.getState();
   const threshold = scrobbleThresholdSec(duration, scrobblePercent, scrobbleSeconds);
@@ -1359,6 +1375,7 @@ function maybeScrobbleThreshold(positionSec: number) {
   scrobbledThisTrack = true;
   const at = Date.now();
   const { auth, offline } = useAuthStore.getState();
+  if (song.cueSourceId) { usePlayCounts.getState().bump(song.id); return; }
   // The listen is remembered locally whatever happens to the server: it feeds
   // "Most played" on this phone, which is nobody else's business.
   if (offline) {
@@ -1999,13 +2016,14 @@ function nextIndex(_manual: boolean): number | null {
 /** Track queued in the native player, or null. The id travels along: the queue
  *  can be reordered between queueing it and getting there. */
 let queuedNext: { index: number; id: string } | null = null;
+let preparingNext: { player: AudioPlayer; next: Song; index: number; currentIndex: number; profile: string; owner: unknown; settings: string } | null = null;
 
 /**
  * Point of entry for every source change. `replace()` installs a new media
  * source and drops whatever was queued behind it, so the memo can't outlive it.
  */
 function replaceSource(p: AudioPlayer, source: AudioSource) {
-  queuedNext = null;
+  queuedNext = null; preparingNext = null;
   p.replace(source);
 }
 
@@ -2025,10 +2043,10 @@ function gaplessReady(): boolean {
   const st = usePlayerStore.getState();
   // 'one' repeats through the native `loop`, and "stop at end of song" needs
   // the track to end for real so its `didJustFinish` arrives.
-  if (st.repeat === 'one' || st.sleepAtSongEnd || st.chapterStop || chapterStoppedLoad === loadToken || silenceTailManaged()) return false;
+  if (useRepeatSection.getState().section || st.repeat === 'one' || st.sleepAtSongEnd || st.chapterStop || chapterStoppedLoad === loadToken || silenceTailManaged()) return false;
   const current = st.queue[st.index];
   // A radio has no end to join anything to.
-  return !!current && !current.url;
+  return !!current && (!current.url || !!current.cueSourceId);
 }
 
 /**
@@ -2049,10 +2067,11 @@ function scheduleNextSource(force = false) {
   // Not with "stop at end of song" pending: that one waits for the track to
   // end for real, and joining another source behind it means it never does.
   const restartSelf =
-    st.repeat === 'one' && streamOffsetSec > 0 && !st.sleepAtSongEnd && !st.chapterStop && !remoteKind();
+    !useRepeatSection.getState().section && st.repeat === 'one' && streamOffsetSec > 0 && !st.sleepAtSongEnd && !st.chapterStop && !remoteKind();
   const ni = restartSelf ? st.index : gaplessReady() ? nextIndex(false) : null;
   const next = ni == null ? null : st.queue[ni];
-  if (ni == null || !next || next.url) {
+  if (ni == null || !next || next.url && !next.cueSourceId) {
+    preparingNext = null;
     if (queuedNext) {
       queuedNext = null;
       try {
@@ -2065,12 +2084,16 @@ function scheduleNextSource(force = false) {
   }
   // `force` re-queues the same track anyway: same song, different URL.
   if (!force && queuedNext && queuedNext.index === ni && queuedNext.id === next.id) return;
-  try {
-    p.setNextSource(sourceFor(next));
-    queuedNext = { index: ni, id: next.id };
-  } catch {
-    queuedNext = null;
-  }
+  const owner = useAuthStore.getState().auth, profile = profileScopeId(), settings = gaplessSettingsKey(useSettings.getState());
+  const install = () => { try { p.setNextSource(sourceFor(next)); queuedNext = { index: ni, id: next.id }; } catch { queuedNext = null; } };
+  if (useSettings.getState().replayGain === 'off') { preparingNext = null; install(); return; }
+  if (!force && preparingNext?.player === p && preparingNext.next === next && preparingNext.index === ni && preparingNext.currentIndex === st.index && preparingNext.profile === profile && preparingNext.owner === owner && preparingNext.settings === settings) return;
+  const ticket = { player: p, next, index: ni, currentIndex: st.index, profile,owner,settings }; preparingNext = ticket;
+  // Remove an obsolete native item before async file/cache preparation.
+  queuedNext = null; try { p.clearNextSource(); } catch { /* optional older bridge */ }
+  const current = () => preparingNext === ticket && activePlayer() === p && profileScopeId() === profile && useAuthStore.getState().auth === owner
+    && usePlayerStore.getState().index === st.index && usePlayerStore.getState().queue[ni] === next && gaplessSettingsKey(useSettings.getState()) === settings && !useRepeatSection.getState().section;
+  void prepareLoudnessSnapshot(next,next.id !== currentSong(st)?.id,current).then(() => { if (current()) install(); }).catch(() => { if (current()) install(); }).finally(() => { if (preparingNext === ticket) preparingNext = null; });
 }
 
 /**
@@ -2156,7 +2179,8 @@ useSettings.subscribe((s) => {
 function gainFactor(song: Song | null | undefined): number {
   const settings = useSettings.getState();
   let mode = settings.replayGain;
-  const rg = song?.replayGain;
+  const tags = song?.replayGain;
+  const rg = tags && [tags.trackGain,tags.albumGain].some(Number.isFinite) ? tags : frozenLoudnessGain(song);
   if (mode === 'off' || !rg) return 1;
   if (mode === 'auto') {
     // Like Spotify: whole album without shuffle → album gain (preserves
@@ -2467,7 +2491,7 @@ function maybeStartCrossfade(status: AudioStatus) {
   const ni = nextIndex(false);
   if (ni == null) return;
   const next = st.queue[ni];
-  if (!next || next.url) return;
+  if (!next || next.url && !next.cueSourceId) return;
   startCrossfade(ni, Math.min(fadeSec, remaining));
 }
 
@@ -2996,6 +3020,11 @@ function clearFinishedAudiobookProgress() {
 
 /** `live`: read from the player just now, never part of a pile. */
 function onStatus(status: AudioStatus & { playWhenReady?: boolean }, live = false) {
+  const section = useRepeatSection.getState().section;
+  if (section && (section.profile !== profileScopeId() || section.songId !== currentSong(usePlayerStore.getState())?.id || status.abRepeat === null && (live || activePlayer()?.currentStatus?.abRepeat === null))) {
+    useRepeatSection.setState({ section: null }); applyLoop(activePlayer()); scheduleNextSource(true);
+  }
+
   // Before anything can decide not to use it. This beat is the only clock that
   // survives the app being minimized, so whether it arrives is the first thing
   // worth knowing about the minutes nobody was watching (see `beat`).
@@ -3806,6 +3835,9 @@ export function initRemoteIntegration() {
       }
       const song = state.queue[index];
       if (!song) return;
+      pushHistory();
+      consumeQueuedOnIndexChange(index);
+      scrobbledThisTrack = false;
       usePlayerStore.setState({
         index,
         positionSec,
@@ -4248,6 +4280,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   playQueue: async (songs, startIndex = 0, source, sourceHref, opts) => {
     if (songs.length === 0) return false;
+    if (songs.some(cueDeletionBlocked)) { useToast.getState().show(tg('CUE audio is being cleared')); return false; }
     listeningIntent++;
     rememberListeningState(get());
     const tools = currentListeningSource(), incoming = sessionSpace(songs[startIndex] ?? songs[0], isAudiobookTrack(songs[startIndex] ?? songs[0]));
@@ -4460,6 +4493,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
    * into the middle of an album and taken the header with it (`handAdded`).
    */
   addToQueue: (song) => {
+    if (cueDeletionBlocked(song)) { useToast.getState().show(tg('CUE audio is being cleared')); return; }
     const { queue } = get();
     if (queue.length === 0) {
       void get().playQueue([song], 0);
@@ -4470,6 +4504,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   playNext: (song) => {
+    if (cueDeletionBlocked(song)) { useToast.getState().show(tg('CUE audio is being cleared')); return; }
     const st = get();
     if (st.queue.length === 0) {
       void get().playQueue([song], 0);
@@ -4480,6 +4515,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   queueMany: (songs, where) => {
+    if (songs.some(cueDeletionBlocked)) { useToast.getState().show(tg('CUE audio is being cleared')); return; }
     if (songs.length === 0) return;
     const st = get();
     // Nothing playing: this is not a queue to add to, it is the queue.
@@ -4856,8 +4892,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       set({
         shuffle: false,
         queueDealt: false,
-        queue: originalQueue,
-        index: indexInOriginal(originalQueue, current),
+        ...unshuffleQueue(queue, originalQueue, index),
         originalQueue: null,
         queuedCount: 0,
       });
@@ -5303,3 +5338,19 @@ onFavoritesChange(() => {
   const song = currentSong(usePlayerStore.getState());
   if (p && song && lockOwner === p) applyLockScreenFavorite(p, song);
 });
+
+/** A-B is a native playback boundary, independent of the background status cadence. */
+export function setPlaybackRepeatSection(start?: number, end?: number): void {
+  const song = currentSong(usePlayerStore.getState()), player = activePlayer();
+  if (!song || !player || remoteKind() || typeof player.setABRepeat !== 'function') throw new Error('A-B repeat is available for playback on this phone');
+  if (start === undefined || end === undefined) {
+    useRepeatSection.setState({ section: null }); player.setABRepeat(null,null); applyLoop(player); scheduleNextSource(true); return;
+  }
+  if (!validRepeatSection(start,end,usePlayerStore.getState().durationSec || song.duration)) throw new Error('Choose a valid A-B range of at least one second');
+  if (streamOffsetSec !== 0) throw new Error('Restart the track from the beginning before setting A-B repeat');
+  queuedNext = null; preparingNext = null; player.clearNextSource();
+  player.setABRepeat(start,end);
+  useRepeatSection.setState({ section: { profile: profileScopeId(), songId: song.id, start,end } });
+  applyLoop(player); syncPlaybackPowerPolicy();
+}
+export function playbackRepeatPosition(): number { try { return (activePlayer()?.currentTime ?? usePlayerStore.getState().positionSec) + streamOffsetSec; } catch { return usePlayerStore.getState().positionSec; } }

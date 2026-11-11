@@ -8,6 +8,7 @@ import ts from 'typescript';
 import { createStore } from 'zustand/vanilla';
 import * as directory from '../src/lib/podcastDirectory';
 import { createPodcastFeedPreview } from '../src/lib/podcastFeedStream';
+import { createEndpointReader } from '../src/lib/httpCooldown';
 
 function compile(path: string, imports: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const exports: Record<string, any> = {};
@@ -174,6 +175,7 @@ test('the actual page API rejects wrong owners, caller abort and A to B to the s
     '@/lib/podcastFeed': {}, '@/lib/podcastDirectory': directory,
     '@/lib/podcastStorageLease': podcastStorageLease,
     '@/lib/podcastFeedStream': { createPodcastFeedPreview },
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     '@/lib/podcastDb': { listEpisodePage: async (_scope: string, _id: string, _options: unknown, current: () => boolean) => {
       calls++; const value = await new Promise((resolve) => { finish = resolve; }); if (!current()) throw new Error('stale'); return value;
     } },

@@ -13,7 +13,7 @@ class CarAutoModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("CarAuto")
 
-    Events("play", "transport", "connect")
+    Events("play", "transport", "connect", "browse")
 
     OnCreate {
       instance = this@CarAutoModule
@@ -27,6 +27,9 @@ class CarAutoModule : Module() {
       val context = appContext.reactContext ?: return@Function
       BrowseTreeCache.setFromJson(context, json)
       CarAutoLog.d("setNodes ${BrowseTreeCache.debugSummary()}")
+    }
+    Function("notifyBrowseChanged") { parentId: String ->
+      ResonusCarBrowserService.notifyBrowseChanged(parentId)
     }
 
     Function("setNowPlaying") { json: String? ->
@@ -98,6 +101,7 @@ class CarAutoModule : Module() {
   fun emitConnected() {
     sendEvent("connect", emptyMap<String, Any>())
   }
+  fun emitBrowse(parentId: String) { sendEvent("browse", mapOf("parentId" to parentId)) }
 
   fun emitTransport(action: String, value: Double?) {
     val payload = HashMap<String, Any>(2)

@@ -1,3 +1,4 @@
+import { createEndpointReader } from '../src/lib/httpCooldown';
 import * as podcastStorageLease from '../src/lib/podcastStorageLease';
 /** Real RSS reader → canonical episode parser → actual SQLite partial/full snapshots. */
 import assert from 'node:assert/strict';
@@ -86,6 +87,7 @@ function harness() {
   const manual = () => auth.getState().offline && !auth.getState().autoOffline;
   const responses: ReturnType<typeof response>[] = [], requests: any[] = [], downloaded: any[] = [];
   const imports: Record<string, unknown> = {
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     'expo/fetch': { fetch: async (url: string, options: any) => {
       requests.push({ url, ...options }); const next = responses.shift(); assert.ok(next, 'unexpected extra request'); return next.value;
     } },

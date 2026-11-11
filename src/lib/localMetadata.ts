@@ -1,13 +1,14 @@
 import type { Album, Artist, Song } from '@/api/subsonic';
 import type { LocalArtistAlias, LocalSongMetadata, SongMetadataPatch } from './localCustomizationModels';
-import { METADATA_FIELDS } from './localCustomizationModels';
+import { METADATA_PATCH_FIELDS } from './localCustomizationModels';
 import { rememberSourceSong, sourceSong } from './sourceSongMetadata';
 export { sourceSong } from './sourceSongMetadata';
 
 const aliasIndexes = new WeakMap<object, { ids: Map<string, string>; names: Map<string, string> }>();
 const albumIndexes = new WeakMap<object, Map<string, string>>();
+const albumArtistIndexes = new WeakMap<object, Map<string, string>>();
 export function metadataFields(song: Song): SongMetadataPatch {
-  return Object.fromEntries(METADATA_FIELDS.filter((field) => song[field] !== undefined).map((field) => [field, song[field]]));
+  return Object.fromEntries(METADATA_PATCH_FIELDS.filter((field) => song[field] !== undefined).map((field) => [field, song[field]]));
 }
 export function aliasName(name: string | undefined, artistId: string | undefined, aliases: readonly LocalArtistAlias[]): string | undefined {
   if (!name) return name;
@@ -40,7 +41,16 @@ export function applyAlbumDisplay(album: Album, corrections: Readonly<Record<str
     albumIndexes.set(corrections, index);
   }
   const name = index.get(album.id) ?? album.name;
-  const artist = aliasName(album.artist, album.artistId, aliases);
+  let artistIndex = albumArtistIndexes.get(corrections);
+  if (!artistIndex) {
+    const names = new Map<string, Set<string>>(); artistIndex = new Map();
+    for (const entry of Object.values(corrections)) if (entry.albumId && entry.patch.albumArtist !== undefined) {
+      const values = names.get(entry.albumId) ?? new Set<string>(); values.add(entry.patch.albumArtist); names.set(entry.albumId, values);
+    }
+    for (const [id, values] of names) if (values.size === 1) artistIndex.set(id, [...values][0]);
+    albumArtistIndexes.set(corrections, artistIndex);
+  }
+  const artist = aliasName(artistIndex.get(album.id) ?? album.artist, album.artistId, aliases);
   return name === album.name && artist === album.artist ? album : { ...album, name, ...(artist === undefined ? {} : { artist }) };
 }
 export function validateAliasOverlap(entries: readonly LocalArtistAlias[], candidate: LocalArtistAlias): void {

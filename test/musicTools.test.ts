@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import type { Song } from '../src/api/subsonic';
 import { createListeningMeter, listeningBars, listeningRange, localDay, type ListeningCredit, type ListeningSample } from '../src/lib/listeningMath';
+import { songContentKind } from '../src/lib/contentKind';
 import { EMPTY_RULE, evaluateSmartRule, findDuplicateCandidates, normalizeSmartRule, type SmartRule } from '../src/lib/smartRules';
 
 function song(id: string, more: Partial<Song> = {}): Song { return { id, title: id, artist: 'Artist', duration: 180, ...more }; }
@@ -167,9 +168,13 @@ function databaseModule() {
       sqlite.exec('BEGIN'); try { await work(); sqlite.exec('COMMIT'); } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
     },
   };
+  Object.assign(adapter, { withExclusiveTransactionAsync: async (work: (tx: typeof adapter) => Promise<void>) => {
+    sqlite.exec('BEGIN'); try { await work(adapter); sqlite.exec('COMMIT'); } catch (error) { sqlite.exec('ROLLBACK'); throw error; }
+  } });
   const module = loadModule('../src/lib/listeningDb.ts', {
     'expo-sqlite': { openDatabaseAsync: async () => { if (failOpen) throw new Error('database unavailable'); return adapter; } },
     './smartRules': { normalizeSmartRule },
+    './currentContentKind': { getSongContentKind: songContentKind },
   });
   return { module, sqlite, failOpening: (value: boolean) => { failOpen = value; } };
 }
@@ -266,4 +271,22 @@ test('global tracker blocks the previous account queue and stops immediately on 
   cleanup();
   assert.deepEqual(credits.map((credit) => [credit.profile, credit.seconds]), [['a', 1], ['b', 1]]);
   assert.ok(flushes >= 3);
+});
+
+test('new music, podcast and audiobook time stays separate, including identical IDs and repeated backup restores', async () => {
+  const { module, sqlite } = databaseModule();
+  for (const [kind, seconds] of [['music', 20], ['podcast', 80], ['audiobook', 120]] as const) module.queueListeningCredit({ profile: 'a', day: '2026-11-11', song: song('same', {
+    mediaKind: kind, url: 'https://private.invalid/token', podcastChannelId: kind === 'podcast' ? 'channel' : undefined,
+  }), seconds, plays: 1, at: 100 });
+  await module.flushListeningCredits();
+  assert.equal((await module.listeningSummary('a', '2026-01-01', '2027-01-01')).seconds, 20);
+  assert.equal((await module.listeningSummary('a', '2026-01-01', '2027-01-01', 'podcast')).seconds, 80);
+  assert.equal((await module.listeningSummary('a', '2026-01-01', '2027-01-01', 'audiobook')).seconds, 120);
+  const backup = await module.exportListeningLedger('a'); assert.equal(backup.rows.length, 3); assert.equal(JSON.stringify(backup).includes('private.invalid'), false);
+  await module.importListeningLedger('b', backup, () => true); await module.importListeningLedger('b', backup, () => true);
+  assert.equal((await module.listeningSummary('b', '2026-01-01', '2027-01-01', 'podcast')).seconds, 80);
+  await module.clearMusicToolsProfile('a');
+  assert.equal((await module.listeningSummary('a', '2026-01-01', '2027-01-01', 'audiobook')).seconds, 0);
+  assert.equal((await module.listeningSummary('b', '2026-01-01', '2027-01-01', 'audiobook')).seconds, 120);
+  sqlite.close();
 });

@@ -1,7 +1,7 @@
 import { requireOptionalNativeModule } from 'expo';
 import { AppRegistry, PermissionsAndroid, Platform } from 'react-native';
 
-export type BackgroundJobOwner = 'music' | 'media-cache';
+export type BackgroundJobOwner = 'music' | 'media-cache' | 'metadata';
 export interface BackgroundProgress {
   /** Processed units, including failed units. */
   completed: number;

@@ -21,7 +21,7 @@ import java.util.concurrent.CancellationException
 import kotlin.math.min
 
 /** Seekable local bytes only; implementations must not open a network source. */
-internal interface LocalAudioData {
+interface LocalAudioData {
   val length: Long
   fun readAt(position: Long, bytes: ByteArray, offset: Int, length: Int): Int
 }
@@ -33,9 +33,11 @@ internal interface LocalAudioData {
  * neither the filename nor an unknown framework MIME is treated as ALAC.
  */
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-internal class Mp4AlacSource private constructor(
+class Mp4AlacSource private constructor(
   private val data: LocalAudioData,
   private val current: () -> Boolean,
+  private val maxIoBytes: Long,
+  private val timeoutMs: Long,
 ) : AutoCloseable {
   private val extractor = Mp4Extractor()
   private val holder = PositionHolder()
@@ -62,8 +64,13 @@ internal class Mp4AlacSource private constructor(
     private const val MAX_SAMPLE_BYTES = 2 * 1024 * 1024
     private const val MAX_STEPS = 100_000
 
-    fun open(data: LocalAudioData, current: () -> Boolean): Mp4AlacSource? {
-      val source = Mp4AlacSource(data, current)
+    fun open(data: LocalAudioData, current: () -> Boolean): Mp4AlacSource? =
+      openBounded(data, MAX_IO_BYTES, 8000L, current)
+
+    /** Explicit whole-file inspector; legacy edge callers keep their exact budget. */
+    fun openBounded(data: LocalAudioData, maxIoBytes: Long, timeoutMs: Long, current: () -> Boolean): Mp4AlacSource? {
+      require(maxIoBytes in MAX_IO_BYTES..(1024L * 1024 * 1024) && timeoutMs in 8000L..120000L)
+      val source = Mp4AlacSource(data, current, maxIoBytes, timeoutMs)
       return try {
         if (source.prepare()) source else { source.close(); null }
       } catch (error: Exception) { source.close(); throw error }
@@ -72,20 +79,20 @@ internal class Mp4AlacSource private constructor(
 
   private fun resetBudget() {
     budgetBytes = 0
-    deadline = System.nanoTime() + 8_000_000_000L
+    deadline = System.nanoTime() + timeoutMs * 1_000_000L
     seeks = 0
     steps = 0
   }
 
   private fun ensureBudget() {
     if (!current() || Thread.currentThread().isInterrupted) throw CancellationException("Superseded MP4 inspection")
-    if (System.nanoTime() > deadline || budgetBytes > MAX_IO_BYTES || seeks > 128 || ++steps > MAX_STEPS)
+    if (System.nanoTime() > deadline || budgetBytes > maxIoBytes || seeks > 128 || ++steps > MAX_STEPS)
       throw IOException("Bounded MP4 inspection exhausted")
   }
 
   private fun read(position: Long, bytes: ByteArray, offset: Int, length: Int): Int {
     ensureBudget()
-    if (position < 0 || position > data.length || length < 0 || budgetBytes + length > MAX_IO_BYTES)
+    if (position < 0 || position > data.length || length < 0 || budgetBytes + length > maxIoBytes)
       throw IOException("Bounded MP4 read exhausted")
     if (length == 0) return 0
     if (position == data.length) return C.RESULT_END_OF_INPUT

@@ -36,7 +36,7 @@ function lyricsQueryOptions(song: Song, source: LyricsSource, profile = profileS
 
 /** Does it make sense to fetch lyrics for this song in the current state? */
 function canFetch(song: Song | undefined, auth: SubsonicAuth | null): song is Song {
-  return !!song && !song.url && (!!song.localUri || !!auth);
+  return !!song && (!!song.podcastChannelId || !!song.cueSourceId || !song.url && (!!song.localUri || !!auth));
 }
 
 export function useLyrics(song?: Song) {
@@ -68,7 +68,7 @@ export function useLyrics(song?: Song) {
 /** Prefetches the lyrics in the background (when the song starts playing). */
 export function prefetchLyrics(song: Song | undefined): void {
   const auth = useAuthStore.getState().auth;
-  if (!canFetch(song, auth)) return;
+  if (!canFetch(song, auth) || song.podcastChannelId) return;
   const source = useSettings.getState().lyricsSource;
   void queryClient.prefetchQuery(lyricsQueryOptions(song, source));
 }

@@ -1,4 +1,4 @@
-/** Local AND rules. Missing dates/years cannot satisfy a date/year restriction. */
+/** Local rules. Missing dates/years cannot satisfy a date/year restriction. */
 import type { Song } from '@/api/subsonic';
 
 export interface SmartRule {
@@ -14,7 +14,38 @@ export interface SmartRule {
   addedDays: number;
   limit: number;
   sort: 'title' | 'newest' | 'most-played';
+  /** Additional bounded groups; the legacy/basic filters always remain AND. */
+  groupMatch?: 'all' | 'any';
+  groups?: SmartRuleGroup[];
 }
+export type SmartCondition =
+  | { field: 'favorite'; operator: 'is'; value: boolean }
+  | { field: 'plays' | 'rating' | 'year'; operator: 'equals' | 'at-least' | 'at-most'; value: number }
+  | { field: 'genre' | 'artist'; operator: 'contains' | 'not-contains'; value: string }
+  | { field: 'added-days'; operator: 'within'; value: number };
+export interface SmartRuleGroup { match: 'all' | 'any'; conditions: SmartCondition[]; }
+export function normalizeSmartGroups(raw: unknown): SmartRuleGroup[] | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw) || raw.length > 8) return null;
+  const groups: SmartRuleGroup[] = [];
+  for (const group of raw) {
+    if (!group || !['all', 'any'].includes(group.match) || !Array.isArray(group.conditions) || group.conditions.length > 12) return null;
+    const conditions: SmartCondition[] = [];
+    for (const condition of group.conditions) {
+      if (!condition || typeof condition !== 'object') return null;
+      const { field, operator, value } = condition;
+      if (field === 'favorite' && operator === 'is' && typeof value === 'boolean') conditions.push({ field, operator, value });
+      else if (['plays', 'rating', 'year'].includes(field) && ['equals', 'at-least', 'at-most'].includes(operator)
+        && typeof value === 'number' && Number.isInteger(value) && value >= (field === 'year' ? 1000 : 0) && value <= (field === 'rating' ? 5 : field === 'year' ? 3000 : 1_000_000)) conditions.push({ field, operator, value } as SmartCondition);
+      else if ((field === 'genre' || field === 'artist') && ['contains', 'not-contains'].includes(operator) && typeof value === 'string' && value.trim() && value.length <= 100) conditions.push({ field, operator, value: value.trim() } as SmartCondition);
+      else if (field === 'added-days' && operator === 'within' && typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 3650) conditions.push({ field, operator, value });
+      else return null;
+    }
+    if (conditions.length) groups.push({ match: group.match, conditions });
+  }
+  return groups;
+}
+export function smartRuleNeedsFavorites(rule: SmartRule): boolean { return rule.favorites || !!rule.groups?.some((group) => group.conditions.some((condition) => condition.field === 'favorite')); }
 export const EMPTY_RULE: Omit<SmartRule, 'id' | 'name'> = {
   favorites: false, noPlays: false, minRating: 0, genre: '', artist: '', addedDays: 0, limit: 100, sort: 'title',
 };
@@ -27,6 +58,8 @@ export function normalizeSmartRule(value: unknown): SmartRule | null {
   if (typeof raw.id !== 'string' || !raw.id || typeof raw.name !== 'string' || !raw.name.trim()) return null;
   const year = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 1000 && n <= 3000 ? n : undefined;
   const fromYear = year(raw.fromYear), untilYear = year(raw.untilYear);
+  const groups = normalizeSmartGroups(raw.groups);
+  if (!groups || raw.groupMatch !== undefined && raw.groupMatch !== 'all' && raw.groupMatch !== 'any') return null;
   if (raw.fromYear !== undefined && fromYear === undefined || raw.untilYear !== undefined && untilYear === undefined) return null;
   if (fromYear && untilYear && fromYear > untilYear) return null;
   return { id: raw.id.slice(0, 200), name: raw.name.trim().slice(0, 100), favorites: raw.favorites === true,
@@ -35,7 +68,8 @@ export function normalizeSmartRule(value: unknown): SmartRule | null {
     artist: typeof raw.artist === 'string' ? raw.artist.trim().slice(0, 100) : '',
     addedDays: [7, 30, 90, 365].includes(raw.addedDays ?? 0) ? raw.addedDays! : 0,
     limit: [50, 100, 200, 500].includes(raw.limit ?? 0) ? raw.limit! : 100,
-    sort: raw.sort === 'newest' || raw.sort === 'most-played' ? raw.sort : 'title' };
+    sort: raw.sort === 'newest' || raw.sort === 'most-played' ? raw.sort : 'title',
+    ...(groups.length ? { groups, groupMatch: raw.groupMatch === 'any' ? 'any' : 'all' } : {}) };
 }
 export function songAddedAt(song: Song): number {
   if (typeof song.addedAt === 'number' && Number.isFinite(song.addedAt)) return song.addedAt;
@@ -49,6 +83,25 @@ export async function evaluateSmartRule(songs: readonly Song[], rule: SmartRule,
 } = {}): Promise<Song[]> {
   const now = options.now ?? Date.now(), genre = normalizedMusicText(rule.genre), artist = normalizedMusicText(rule.artist);
   const result: Song[] = [];
+  // Compile normalized text once, not once per song or while scrolling.
+  const groups = (rule.groups ?? []).map((group) => ({ ...group, conditions: group.conditions.map((condition) =>
+    condition.field === 'genre' || condition.field === 'artist' ? { ...condition, value: normalizedMusicText(condition.value) } : condition) }));
+  function matchesCondition(song: Song, condition: SmartCondition): boolean {
+    if (condition.field === 'favorite') return (!!song.starred || !!options.favoriteIds?.has(song.id)) === condition.value;
+    if (condition.field === 'genre' || condition.field === 'artist') {
+      const raw = condition.field === 'artist' ? song.artist : [song.genre, ...(song.genres ?? []).map((item) => item.name)].filter(Boolean).join(' ');
+      // Unknown metadata cannot prove a negative text rule either.
+      const value = normalizedMusicText(raw); return !!value && (condition.operator === 'contains' ? value.includes(condition.value) : !value.includes(condition.value));
+    }
+    if (condition.field === 'added-days') { const added = songAddedAt(song); return added > 0 && added >= now - condition.value * 86_400_000 && added <= now; }
+    if (typeof condition.value !== 'number') return false;
+    const value = condition.field === 'plays' ? Math.max(song.playCount ?? 0, options.counts?.[song.id] ?? 0) : condition.field === 'rating' ? song.userRating ?? 0 : song.year;
+    if (value == null || !Number.isFinite(value)) return false;
+    return condition.operator === 'equals' ? value === condition.value : condition.operator === 'at-least' ? value >= condition.value : value <= condition.value;
+  }
+  const matchesGroups = (song: Song) => !groups.length || (rule.groupMatch === 'any' ? groups.some((group) => group.match === 'any'
+    ? group.conditions.some((condition) => matchesCondition(song, condition)) : group.conditions.every((condition) => matchesCondition(song, condition)))
+    : groups.every((group) => group.match === 'any' ? group.conditions.some((condition) => matchesCondition(song, condition)) : group.conditions.every((condition) => matchesCondition(song, condition))));
   const compare = (a: Song, b: Song) => rule.sort === 'newest' ? songAddedAt(b) - songAddedAt(a) || a.id.localeCompare(b.id)
     : rule.sort === 'most-played' ? Math.max(b.playCount ?? 0, options.counts?.[b.id] ?? 0) - Math.max(a.playCount ?? 0, options.counts?.[a.id] ?? 0) || a.id.localeCompare(b.id)
       : (a.title ?? '').localeCompare(b.title ?? '') || a.id.localeCompare(b.id);
@@ -63,6 +116,7 @@ export async function evaluateSmartRule(songs: readonly Song[], rule: SmartRule,
       if (genre && !normalizedMusicText([song.genre, ...(song.genres ?? []).map((item) => item.name)].filter(Boolean).join(' ')).includes(genre)) continue;
       if (artist && !normalizedMusicText(song.artist).includes(artist)) continue;
       if (rule.addedDays && !(songAddedAt(song) >= now - rule.addedDays * 86_400_000 && songAddedAt(song) <= now)) continue;
+      if (!matchesGroups(song)) continue;
       // Bounded top-K insertion avoids a blocking full-library sort and retains
       // at most the requested result limit, even on a six-figure library.
       let low = 0, high = result.length;

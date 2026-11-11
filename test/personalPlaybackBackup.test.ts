@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { createProfilePlayCounts } from '../src/lib/profilePlayCounts';
 import { createShufflePreference } from '../src/lib/shufflePreference';
 import * as countModel from '../src/lib/profilePlayCounts';
+import { songContentKind } from '../src/lib/contentKind';
 import * as shuffleModel from '../src/lib/weightedShuffle';
 function execute(path: string, imports: Record<string, unknown>) {
   const exports: Record<string, any> = {};
@@ -24,7 +25,7 @@ function history() {
   const mod = execute('../src/store/playHistory.ts', { zustand: { create }, '@/lib/serverUrls': { primaryUrl: (value: any) => value.serverUrl },
     '@/lib/storage': { getItem: async (key: string) => { if (failRead) throw new Error('Locked'); return disk.get(key) ?? null; },
       setItemStrict: async (key: string, value: string) => { if (hold) { hold = false; await new Promise<void>((resolve) => { held = resolve; }); } disk.set(key, value); writes.push(key); }, deleteItem: async (key: string) => { disk.delete(key); } },
-    '@/lib/lyricOwner': owner, './auth': authModule,
+    '@/lib/lyricOwner': owner, './auth': authModule, '@/lib/contentKind': { songContentKind }, '@/lib/currentContentKind': { isSpokenContent: (song: any) => songContentKind(song) !== 'music' },
   });
   const key = (user: 'A' | 'B') => `resonus.playHistory.server.https___${user.toLowerCase()}.test.${user}`;
   return { mod, disk, writes, key, a, profile, switch(user: 'A' | 'B') { auth.setState({ auth: user === 'A' ? a : b }); }, failRead(value: boolean) { failRead = value; },
@@ -81,4 +82,12 @@ test('actual playback backup validator strips Song URLs, files, comments and cre
   assert.equal(value.history[0].song.id, 'one'); assert.equal(value.history[0].song.artist, 'Artist'); assert.equal(value.history[0].song.albumId, 'album');
   assert.equal(JSON.stringify(value).includes('private'), false); assert.equal(JSON.stringify(value).includes('secret'), false);
   assert.throws(() => mod.validatePersonalPlaybackBackup({ ...value, counts: { 'https://secret': 2 } }), /Invalid/);
+});
+
+test('music recents exclude spoken episodes and books while keeping finite local CUE music IDs', async () => {
+  const h = history(), store = h.mod.usePlayHistory; await store.getState().hydrate();
+  for (const song of [{ id: 'rss', title: 'Episode', podcastChannelId: 'show', vod: true }, { id: 'local-podcast', title: 'Local episode', mediaKind: 'podcast' },
+    { id: 'book', title: 'Chapter', genre: 'Audiobook' }, { id: 'cue:test:1', title: 'Music', url: 'file:///local.flac', localUri: 'file:///local.flac', cueSourceId: 'file', mediaKind: 'music', vod: true }]) store.getState().record(song);
+  await h.mod.flushPlayHistory();
+  assert.deepEqual(Array.from(await h.mod.exportPlayHistory(), (row: any) => row.song.id), ['cue:test:1']);
 });

@@ -2,6 +2,8 @@
 package expo.modules.carauto
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -44,6 +46,7 @@ class ResonusCarBrowserService : MediaLibraryService() {
       .setId("ResonusCarBrowserSession")
       .setMediaButtonPreferences(modeButtons(player))
       .build()
+    activeSession = session
     // Each of those two buttons carries the state it will put the player in,
     // so its icon has to be rebuilt whenever the state changes: shuffle turned
     // on from the phone has to come out lit in the car, and pressing it there
@@ -116,6 +119,7 @@ class ResonusCarBrowserService : MediaLibraryService() {
 
   override fun onDestroy() {
     if (activePlayer === jsPlayer) activePlayer = null
+    if (activeSession === session) activeSession = null
     session?.run { player.release(); release() }
     session = null
     jsPlayer = null
@@ -209,6 +213,9 @@ class ResonusCarBrowserService : MediaLibraryService() {
       pageSize: Int,
       params: LibraryParams?,
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
+      if (parentId.startsWith("podcast-show|") || parentId.startsWith("podcast-shelf|")) {
+        CarAutoModule.instance?.emitBrowse(parentId)
+      }
       val children = BrowseTreeCache.getChildren(parentId)
       CarAutoLog.d("children of=$parentId have=${children.size} page=$page pageSize=$pageSize")
       // Paged, like the search results and for the same reason (see `pageOf`).
@@ -412,6 +419,14 @@ class ResonusCarBrowserService : MediaLibraryService() {
   }
 
   companion object {
+    @Volatile private var activeSession: MediaLibrarySession? = null
+    fun notifyBrowseChanged(parentId: String) {
+      if (!parentId.startsWith("podcast-show|") && !parentId.startsWith("podcast-shelf|")) return
+      val expected = activeSession ?: return
+      Handler(Looper.getMainLooper()).post {
+        if (activeSession === expected) expected.notifyChildrenChanged(parentId, BrowseTreeCache.getChildren(parentId).size, null)
+      }
+    }
     @Volatile var activePlayer: JsProxyPlayer? = null
       private set
 
@@ -459,6 +474,8 @@ private fun BrowseNode.toMediaItemWithArt(embed: Boolean): Pair<MediaItem, Int> 
     // for anything that does not say what it is.
     .setMediaType(
       when {
+        mediaType == "episode" -> MediaMetadata.MEDIA_TYPE_PODCAST_EPISODE
+        mediaType == "podcast" -> MediaMetadata.MEDIA_TYPE_PODCAST
         playable -> MediaMetadata.MEDIA_TYPE_MUSIC
         mediaType == "artist" -> MediaMetadata.MEDIA_TYPE_ARTIST
         mediaType == "album" -> MediaMetadata.MEDIA_TYPE_ALBUM

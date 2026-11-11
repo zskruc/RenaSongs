@@ -19,6 +19,8 @@ import { profileScopeId } from '@/store/auth';
 import { useLastPlayed } from '@/store/lastPlayed';
 import { usePlayerStore } from '@/store/player';
 import { useSettings } from '@/store/settings';
+import { buildPodcastCarBase, CAR_PODCAST_TAB, handlePodcastCarPlay } from './carPodcastTree';
+import { captureLyricOwner } from './lyricOwner';
 import { type CarNode, type CarTree } from './carAuto';
 
 const ROOT = 'root';
@@ -64,6 +66,7 @@ const nodeTitles = new Map<string, string>();
  *  any album's songs, and emptying them there left a tap in the car with no
  *  way to tell which collection the song it was handed belongs to. */
 let mapsProfile: string | null = null;
+let mapsCurrent: (() => boolean) | undefined;
 
 /** Runs `fn` over `items` with at most `n` in parallel (avoids 429). */
 async function mapConcurrent<T>(items: T[], n: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -241,14 +244,16 @@ const SHUFFLE_SONGS = 100;
  */
 export async function buildBrowseTree(deep = true): Promise<CarTree> {
   const profile = profileScopeId();
+  const current = captureLyricOwner(profile);
   // A full build replaces what it knows; a partial one adds to it. What is
   // dropped either way is another account's, which nothing here can resolve.
-  if (deep || profile !== mapsProfile) {
+  if (deep || profile !== mapsProfile || !mapsCurrent?.()) {
     songById.clear();
     parentTracks.clear();
     nodeTitles.clear();
   }
   mapsProfile = profile;
+  mapsCurrent = current;
   const tree: Record<string, CarNode[]> = {};
 
   // Root: the four tabs Android Auto draws, and no more than four. What goes
@@ -259,6 +264,7 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
     { id: 'tab:home', title: tg('Home'), playable: false, contentStyle: 'list', artworkUrl: icon('ic_car_home') },
     { id: 'tab:recents', title: tg('Recents'), playable: false, contentStyle: 'grid', artworkUrl: icon('ic_car_recent') },
     { id: 'tab:library', title: tg('Library'), playable: false, contentStyle: 'list', artworkUrl: icon('ic_car_library') },
+    { ...CAR_PODCAST_TAB, title: tg('Podcasts') },
   ];
   tree['tab:home'] = [];
   tree['tab:recents'] = recentNodes();
@@ -295,6 +301,7 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
       return { title: tg(s.titleKey), albums: albums.slice(0, HOME_SHELF_SIZE) };
     }),
   );
+  if (!current()) throw new Error('Car profile changed');
 
   // What the tabs land on: favourite songs, playlists, starred albums and
   // starred artists. Folders are left out, as they were before: a handful of
@@ -309,6 +316,7 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
       .fetchQuery({ queryKey: ['playlists'], queryFn: () => data.getPlaylists() })
       .catch(() => [] as Playlist[]),
   ]);
+  if (!current()) throw new Error('Car profile changed');
 
   // Favourites lead the playlists: they are the one list nobody made and
   // everybody plays, and on a phone they sit above them too.
@@ -367,6 +375,9 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
   // Marked for what it is: the lists, and none of the songs inside them. The
   // native side lays it over the tree it already has rather than taking it for
   // the whole library.
+  const podcasts = await buildPodcastCarBase();
+  if (!current()) throw new Error('Car profile changed');
+  Object.assign(tree, podcasts.nodes);
   if (!deep) return { nodes: tree, partial: true, profile };
 
   // The songs of each playlist, so they can be browsed and not only played
@@ -379,7 +390,7 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
       .slice(0, MAX_PREFETCH_PLAYLISTS)
       .map((p) => p.id),
     concurrency(),
-    (id) => fillPlaylist(tree, id),
+    (id) => fillPlaylist(tree, id, current),
   );
 
   // Prefetch songs for each album (to browse them in the car), up to a point.
@@ -388,23 +399,25 @@ export async function buildBrowseTree(deep = true): Promise<CarTree> {
   // songs, every time the app opened. What a car needs at hand is the top of
   // each list; the rest can be empty until someone asks for it (#50).
   await mapConcurrent(Array.from(albumIds).slice(0, MAX_PREFETCH_ALBUMS), concurrency(), (id) =>
-    fillAlbum(tree, id),
+    fillAlbum(tree, id, current),
   );
 
   // Prefetch for starred artists: top songs + albums (and their tracks).
   await mapConcurrent(starred.artists.slice(0, MAX_PREFETCH_ARTISTS).map((a) => a.id), concurrency(), (id) =>
-    fillArtist(tree, id),
+    fillArtist(tree, id, current),
   );
 
+  if (!current()) throw new Error('Car profile changed');
   return { nodes: tree, profile };
 }
 
 // ── The songs inside one collection ──────────────────────────────────────────
 
-async function fillAlbum(tree: Record<string, CarNode[]>, id: string): Promise<void> {
+async function fillAlbum(tree: Record<string, CarNode[]>, id: string, current = captureLyricOwner()): Promise<void> {
   const parent = `album:${id}`;
   try {
     const { songs } = await albumDetail(id);
+    if (!current()) return;
     tree[parent] = songs.map((s) => songNode(s, parent));
     parentTracks.set(parent, tree[parent].map((n) => n.id));
   } catch {
@@ -412,10 +425,11 @@ async function fillAlbum(tree: Record<string, CarNode[]>, id: string): Promise<v
   }
 }
 
-async function fillPlaylist(tree: Record<string, CarNode[]>, id: string): Promise<void> {
+async function fillPlaylist(tree: Record<string, CarNode[]>, id: string, current = captureLyricOwner()): Promise<void> {
   const parent = `playlist:${id}`;
   try {
     const { songs } = await playlistDetail(id);
+    if (!current()) return;
     tree[parent] = songs.map((s) => songNode(s, parent));
     parentTracks.set(parent, tree[parent].map((n) => n.id));
   } catch {
@@ -424,16 +438,18 @@ async function fillPlaylist(tree: Record<string, CarNode[]>, id: string): Promis
 }
 
 /** Top songs and albums, and the songs of the first few of those. */
-async function fillArtist(tree: Record<string, CarNode[]>, id: string): Promise<void> {
+async function fillArtist(tree: Record<string, CarNode[]>, id: string, current = captureLyricOwner()): Promise<void> {
   const parent = `artist:${id}`;
   try {
     const { artist, albums } = await data.getArtist(id);
+    if (!current()) return;
     const top = artist.name ? await data.getTopSongs(artist.name, 10, id).catch(() => [] as Song[]) : [];
+    if (!current()) return;
     const children: CarNode[] = [...top.map((s) => songNode(s, parent)), ...albums.map(albumNode)];
     tree[parent] = children;
     parentTracks.set(parent, children.filter((n) => n.playable).map((n) => n.id));
     for (const a of albums.slice(0, MAX_ARTIST_ALBUMS)) {
-      if (!tree[`album:${a.id}`]) await fillAlbum(tree, a.id);
+      if (current() && !tree[`album:${a.id}`]) await fillAlbum(tree, a.id, current);
     }
   } catch {
     tree[parent] = [];
@@ -449,8 +465,9 @@ async function fillArtist(tree: Record<string, CarNode[]>, id: string): Promise<
  */
 export async function buildLatestRecent(): Promise<CarTree | null> {
   const profile = profileScopeId();
+  const current = captureLyricOwner();
   // The lists of another account are still on their way; they clear the maps.
-  if (profile !== mapsProfile) return null;
+  if (profile !== mapsProfile || !mapsCurrent?.()) return null;
   const latest = recentNodes()[0];
   if (!latest) return null;
   const tree: Record<string, CarNode[]> = {};
@@ -459,7 +476,7 @@ export async function buildLatestRecent(): Promise<CarTree | null> {
   if (kind === 'album') await fillAlbum(tree, id);
   else if (kind === 'playlist') await fillPlaylist(tree, id);
   else if (kind === 'artist') await fillArtist(tree, id);
-  return { nodes: tree, partial: true, profile };
+  return current() && mapsCurrent?.() ? { nodes: tree, partial: true, profile } : null;
 }
 
 // ── Playback resolution on car tap ───────────────────────────────────────────
@@ -493,6 +510,8 @@ function sourceOf(collectionId: string | undefined): [string, string] | [] {
  * plays everything.
  */
 export async function handleBrowsePlay(mediaId: string, parentId?: string): Promise<void> {
+  try { if (await handlePodcastCarPlay(mediaId)) return; } catch { return; }
+  const current = captureLyricOwner();
   const store = usePlayerStore.getState();
 
   // Asked for only now, which is the point of it: a shelf of random albums
@@ -501,11 +520,12 @@ export async function handleBrowsePlay(mediaId: string, parentId?: string): Prom
   // of songs picked at random is not a thing to list among the recents.
   if (mediaId === SHUFFLE_ID) {
     const songs = await data.getRandomSongs(SHUFFLE_SONGS).catch(() => [] as Song[]);
-    if (songs.length > 0) await store.playQueue(songs, 0, tg('Shuffle'));
+    if (current() && songs.length > 0) await store.playQueue(songs, 0, tg('Shuffle'));
     return;
   }
 
   if (mediaId.startsWith('track|')) {
+    if (!mapsCurrent?.()) return;
     const parts = mediaId.split('|');
     const parent = parts[1] || parentId;
     const songId = parts.slice(2).join('|');
@@ -540,7 +560,7 @@ export async function handleBrowsePlay(mediaId: string, parentId?: string): Prom
   } catch {
     songs = [];
   }
-  if (songs.length > 0) {
+  if (current() && songs.length > 0) {
     const [name, href] = sourceOf(mediaId);
     await store.playQueue(songs, 0, name, href);
   }

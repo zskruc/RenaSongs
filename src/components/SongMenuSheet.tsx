@@ -40,6 +40,8 @@ import { MenuRequestScope } from '@/lib/menuRequest';
 import { useArtistPicker } from '@/store/artistPicker';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { usePlaylistPicker } from '@/store/playlistPicker';
+import { captureCustomizationOwner } from '@/lib/localCustomizations';
+import { openMetadataTarget } from '@/store/metadataScraping';
 import { useLyricToolTarget } from '@/store/lyricToolTarget';
 import { useLongAudioTarget } from '@/store/longAudioTarget';
 import { canRememberLongAudio } from '@/lib/longAudio';
@@ -723,6 +725,9 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                     <Action icon="create-outline" label={t('Edit and export lyrics')} onPress={() => dismissAction(() => {
                       useLyricToolTarget.getState().open(song); router.push('/lyric-editor');
                     })} />
+                    <Action icon="search-outline" label={t('Find metadata for this song')} onPress={() => { const current = captureCustomizationOwner(); dismissAction(() => {
+                      if (!current()) return; openMetadataTarget({ kind: 'song', id: song.id, title: song.title, songs: [song] }); router.push('/metadata');
+                    }); }} />
                     <Action icon="pencil-outline" label={t('Local song metadata')} onPress={() => dismissAction(() => {
                       useLyricToolTarget.getState().open(song); router.push('/song-metadata');
                     })} />
@@ -733,6 +738,9 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                       useLyricToolTarget.getState().open(song); router.push('/lyric-poster');
                     })} />
                   </> : null}
+                  <Action icon="language-outline" label={t('Offline lyric translation')} onPress={() => { const current=captureCustomizationOwner(); dismissAction(() => { if(current()){useLyricToolTarget.getState().open(song); router.push('/lyric-translate');} }); }} />
+                  <Action icon="timer-outline" label={t('Align lyric words')} onPress={() => { const current=captureCustomizationOwner(); dismissAction(() => { if(current()){useLyricToolTarget.getState().open(song); router.push('/lyric-align');} }); }} />
+                  <Action icon="repeat-outline" label={t('A–B repeat')} onPress={() => dismissAction(() => router.push('/playback-range'))} />
                   {canRememberLongAudio(song) ? <Action icon="bookmark-outline" label={t('Long audio and bookmarks')} onPress={() => dismissAction(() => {
                     useLongAudioTarget.getState().open(song); router.push('/settings/long-audio');
                   })} /> : null}

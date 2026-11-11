@@ -33,7 +33,7 @@ export interface CarNode {
    * comes out round, an album's square — and without this everything browsable
    * is a folder to it. Left out, it falls back to that.
    */
-  mediaType?: 'album' | 'artist' | 'playlist';
+  mediaType?: 'album' | 'artist' | 'playlist' | 'podcast' | 'episode';
   /**
    * The heading this item sits under. Consecutive items sharing one are drawn
    * as a group beneath it, which is how a tab holds several shelves without
@@ -119,3 +119,6 @@ export function onTransport(cb: (e: TransportEvent) => void): { remove: () => vo
 export function onCarConnected(cb: () => void): { remove: () => void } | undefined {
   return native?.addListener('connect', cb);
 }
+/** A folder is being opened; used for small local podcast pages only. */
+export function onCarBrowse(cb: (event: { parentId: string }) => void): { remove: () => void } | undefined { return native?.addListener('browse', cb); }
+export function notifyCarBrowseChanged(parentId: string): void { native?.notifyBrowseChanged?.(parentId); }

@@ -1,9 +1,11 @@
+import { cueDeletionBlocked } from '../src/lib/cueDeletionLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { dealt, shuffleOn, indexInOriginal } from '../src/lib/queue';
+import { dealt, shuffleOn } from '../src/lib/queue';
+import { unshuffleQueue } from '../src/lib/unshuffleQueue';
 import { weightedShuffle, type ShuffleMode } from '../src/lib/weightedShuffle';
 import type { Song } from '../src/api/subsonic';
 import { sessionSpace, shuffleLinkedGroups } from '../src/lib/listeningTools';
@@ -26,11 +28,11 @@ function harness(mode: ShuffleMode) {
   const noop = () => {};
   const api: Record<string, any> = {};
   const auth = {};
-  runInNewContext(code, { exports: api, listeningIntent: 0, get: () => state, set: (value: object) => Object.assign(state, value),
+  runInNewContext(code, { cueDeletionBlocked, exports: api, listeningIntent: 0, get: () => state, set: (value: object) => Object.assign(state, value),
     usePlayerStore: { getState: () => state }, useAuthStore: { getState: () => ({ auth, offline: false }) },
     getShuffleMode: () => mode, ownedPlayCounts: () => local, isAudiobookTrack: (song: Song | null) => song?.genre === 'audiobook',
     rememberListeningState: noop, currentListeningSource: () => undefined, sessionSpace, currentSong: (value: any) => value.queue[value.index] ?? null, shuffleLinkedGroups,
-    dealt, shuffleOn, indexInOriginal,
+    dealt, shuffleOn, unshuffleQueue,
     weightedShuffle: (songs: Song[], policy: ShuffleMode, counts: object) => { assert.equal(counts, local); policies.push(policy); return weightedShuffle(songs, policy, counts, () => .5); },
     remoteKind: () => null, contextKey: () => null, forgetHistoryOf: noop, pushHistory: noop, attachAppState: noop,
     cancelPlaybackRecovery: noop, autoplayFetchedFor: null, autoplayRound: null, artistFill: null,
@@ -50,7 +52,7 @@ test('shuffle mode keeps the tapped song first and unshuffle restores the origin
   const h = harness('frequentArtists'); h.state.shuffle = true;
   await h.api.play(songs, 1);
   assert.equal(h.state.queue[0], songs[1]); assert.equal(h.state.originalQueue, songs); assert.deepEqual(h.policies, ['frequentArtists']);
-  h.api.toggle(); assert.equal(h.state.shuffle, false); assert.equal(h.state.queue, songs);
+  h.api.toggle(); assert.equal(h.state.shuffle, false); assert.deepEqual(h.state.queue, songs); assert.equal(h.state.index, 1); assert.equal(h.state.queue[h.state.index], songs[1]); assert.equal(h.state.originalQueue, null);
 });
 test('ordered books/podcasts bypass music preferences, while a normal toggle invokes the policy', async () => {
   const h = harness('rareArtists'); h.state.shuffle = true;

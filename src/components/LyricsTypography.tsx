@@ -1,3 +1,5 @@
+import { useMetadataAssetsHydration } from '@/lib/metadata/hooks';
+import { hydrateLoudnessPreferences } from '@/lib/loudnessTools';
 import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { Text } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +14,8 @@ import { useMetadataHydration } from '@/hooks/useLocalMetadata';
 const Context = createContext<{ preferences?: LocalLyricFonts; custom?: string | null }>({});
 export function LyricsTypographyProvider({ children }: { children: ReactNode }) {
   useMetadataHydration();
+  useMetadataAssetsHydration();
+  useEffect(() => { void hydrateLoudnessPreferences(); }, []);
   useAuthStore((state) => state.auth); useAuthStore((state) => state.offlineSource); useAuthStore((state) => state.offline);
   const scope = customizationScope(), client = useQueryClient();
   const key = useMemo(() => ['localLyricFonts', scope.profile, scope.source], [scope.profile, scope.source]);

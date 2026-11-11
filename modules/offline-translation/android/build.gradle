@@ -1,0 +1,5 @@
+plugins { id 'com.android.library'; id 'expo-module-gradle-plugin' }
+group = 'expo.modules.offlinetranslation'
+version = '0.0.1'
+android { namespace "expo.modules.offlinetranslation"; defaultConfig { versionCode 1; versionName "0.0.1" } }
+dependencies { implementation 'com.google.mlkit:translate:17.0.3' }

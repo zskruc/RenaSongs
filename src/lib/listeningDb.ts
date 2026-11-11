@@ -3,6 +3,8 @@ import * as SQLite from 'expo-sqlite';
 import type { Song } from '@/api/subsonic';
 import type { ListeningCredit } from './listeningMath';
 import { normalizeSmartRule, type SmartRule } from './smartRules';
+import { getSongContentKind } from './currentContentKind';
+import type { ListeningContentKind } from './contentKind';
 
 let opening: Promise<SQLite.SQLiteDatabase> | undefined;
 async function database() {
@@ -10,6 +12,7 @@ async function database() {
     await db.execAsync(`PRAGMA journal_mode=WAL; PRAGMA journal_size_limit=524288;
       CREATE TABLE IF NOT EXISTS listening_meta(profile TEXT PRIMARY KEY NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, started_at INTEGER);
       CREATE TABLE IF NOT EXISTS listening_days(profile TEXT NOT NULL, day TEXT NOT NULL, song_id TEXT NOT NULL, song TEXT NOT NULL, artist TEXT NOT NULL, seconds REAL NOT NULL, plays INTEGER NOT NULL, PRIMARY KEY(profile,day,song_id));
+      CREATE TABLE IF NOT EXISTS listening_spoken_days(profile TEXT NOT NULL,kind TEXT NOT NULL,day TEXT NOT NULL,song_id TEXT NOT NULL,song TEXT NOT NULL,artist TEXT NOT NULL,seconds REAL NOT NULL,plays INTEGER NOT NULL,PRIMARY KEY(profile,kind,day,song_id));
       CREATE TABLE IF NOT EXISTS smart_rules(profile TEXT NOT NULL,id TEXT NOT NULL,data TEXT NOT NULL,PRIMARY KEY(profile,id));`);
     return db;
   }).catch((error) => { opening = undefined; throw error; });
@@ -25,7 +28,7 @@ function safeSong(song: Song): Song {
   // Never persist playable URLs, local paths, comments, authentication or transient queue flags.
   return { id: song.id, title: song.title, artist: song.artist, album: song.album,
     albumId: song.albumId, artistId: song.artistId, coverArt: song.coverArt && !/:\/\//.test(song.coverArt) ? song.coverArt : undefined,
-    duration: song.duration, year: song.year };
+    duration: song.duration, year: song.year, mediaKind: song.mediaKind, podcastChannelId: song.podcastChannelId };
 }
 
 export async function listeningPreferences(profile: string): Promise<{ enabled: boolean; startedAt?: number }> {
@@ -46,7 +49,7 @@ const profileVersions = new Map<string, number>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 let consecutiveFailures = 0;
 function addPending(credit: ListeningCredit) {
-  const key = JSON.stringify([credit.profile, credit.day, credit.song.id]);
+  const key = JSON.stringify([credit.profile, credit.day, credit.song.id, credit.song.mediaKind ?? 'music']);
   const old = pending.get(key);
   pending.set(key, old ? { ...credit, seconds: old.seconds + credit.seconds, plays: old.plays + credit.plays, at: Math.min(old.at, credit.at) } : credit);
 }
@@ -56,7 +59,8 @@ function scheduleFlush() {
   if (!timer && pending.size && consecutiveFailures < 3) timer = setTimeout(() => { timer = undefined; void flushListeningCredits().catch(() => {}); }, 15_000);
 }
 export function queueListeningCredit(credit: ListeningCredit) {
-  addPending(credit); scheduleFlush();
+  const kind = getSongContentKind(credit.song);
+  addPending({ ...credit, song: { ...credit.song, mediaKind: kind } }); scheduleFlush();
 }
 export function flushListeningCredits(): Promise<void> {
   if (timer) { clearTimeout(timer); timer = undefined; }
@@ -69,9 +73,13 @@ export function flushListeningCredits(): Promise<void> {
         for (const { credit: row, version } of batch) {
           if ((profileVersions.get(row.profile) ?? 0) !== version) continue;
           await db.runAsync('INSERT INTO listening_meta(profile,enabled,started_at) VALUES(?,1,?) ON CONFLICT(profile) DO UPDATE SET started_at=CASE WHEN started_at IS NULL THEN excluded.started_at ELSE MIN(started_at,excluded.started_at) END', row.profile, row.at);
-          await db.runAsync(`INSERT INTO listening_days(profile,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?)
-            ON CONFLICT(profile,day,song_id) DO UPDATE SET song=excluded.song,artist=excluded.artist,seconds=seconds+excluded.seconds,plays=plays+excluded.plays`,
-          row.profile, row.day, row.song.id, JSON.stringify(safeSong(row.song)), row.song.artist ?? '', row.seconds, row.plays);
+          if (row.song.mediaKind === 'podcast' || row.song.mediaKind === 'audiobook') {
+            await db.runAsync(`INSERT INTO listening_spoken_days(profile,kind,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?,?)
+              ON CONFLICT(profile,kind,day,song_id) DO UPDATE SET song=excluded.song,artist=excluded.artist,seconds=seconds+excluded.seconds,plays=plays+excluded.plays`,
+            row.profile, row.song.mediaKind, row.day, row.song.id, JSON.stringify(safeSong(row.song)), row.song.artist ?? '', row.seconds, row.plays);
+          } else await db.runAsync(`INSERT INTO listening_days(profile,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?)
+              ON CONFLICT(profile,day,song_id) DO UPDATE SET song=excluded.song,artist=excluded.artist,seconds=seconds+excluded.seconds,plays=plays+excluded.plays`,
+            row.profile, row.day, row.song.id, JSON.stringify(safeSong(row.song)), row.song.artist ?? '', row.seconds, row.plays);
         }
       });
       consecutiveFailures = 0;
@@ -99,6 +107,7 @@ export function clearMusicToolsProfile(profile: string): Promise<void> {
     discardPending();
     await db.withTransactionAsync(async () => {
       await db.runAsync('DELETE FROM listening_days WHERE profile=?', profile);
+      await db.runAsync('DELETE FROM listening_spoken_days WHERE profile=?', profile);
       await db.runAsync('DELETE FROM listening_meta WHERE profile=?', profile);
       await db.runAsync('DELETE FROM smart_rules WHERE profile=?', profile);
     });
@@ -111,15 +120,16 @@ export interface ListeningSummary {
   top: { song: Song; seconds: number; plays: number }[];
   artists: { name: string; seconds: number }[];
 }
-export async function listeningSummary(profile: string, from: string, until: string): Promise<ListeningSummary> {
+export async function listeningSummary(profile: string, from: string, until: string, kind: ListeningContentKind = 'music'): Promise<ListeningSummary> {
   await flushListeningCredits();
   return serialized(async () => {
-  const db = await database(), args = [profile, from, until];
-  const where = 'profile=? AND day>=? AND day<?';
-  const total = await db.getFirstAsync<{ seconds: number; plays: number; songs: number }>(`SELECT COALESCE(SUM(seconds),0) seconds,COALESCE(SUM(plays),0) plays,COUNT(DISTINCT song_id) songs FROM listening_days WHERE ${where}`, args);
-  const days = await db.getAllAsync<{ day: string; seconds: number }>(`SELECT day,SUM(seconds) seconds FROM listening_days WHERE ${where} GROUP BY day ORDER BY day`, args);
-  const top = await db.getAllAsync<{ song: string; seconds: number; plays: number }>(`SELECT song,SUM(seconds) seconds,SUM(plays) plays FROM listening_days WHERE ${where} GROUP BY song_id ORDER BY seconds DESC LIMIT 30`, args);
-  const artists = await db.getAllAsync<{ name: string; seconds: number }>(`SELECT artist name,SUM(seconds) seconds FROM listening_days WHERE ${where} GROUP BY artist ORDER BY seconds DESC LIMIT 10`, args);
+  const db = await database(), args: (string | number)[] = [profile, from, until];
+  const spoken = kind === 'podcast' || kind === 'audiobook', table = spoken ? 'listening_spoken_days' : 'listening_days';
+  const where = 'profile=? AND day>=? AND day<?' + (spoken ? ' AND kind=?' : ''); if (spoken) args.push(kind);
+  const total = await db.getFirstAsync<{ seconds: number; plays: number; songs: number }>(`SELECT COALESCE(SUM(seconds),0) seconds,COALESCE(SUM(plays),0) plays,COUNT(DISTINCT song_id) songs FROM ${table} WHERE ${where}`, args);
+  const days = await db.getAllAsync<{ day: string; seconds: number }>(`SELECT day,SUM(seconds) seconds FROM ${table} WHERE ${where} GROUP BY day ORDER BY day`, args);
+  const top = await db.getAllAsync<{ song: string; seconds: number; plays: number }>(`SELECT song,SUM(seconds) seconds,SUM(plays) plays FROM ${table} WHERE ${where} GROUP BY song_id ORDER BY seconds DESC LIMIT 30`, args);
+  const artists = await db.getAllAsync<{ name: string; seconds: number }>(`SELECT artist name,SUM(seconds) seconds FROM ${table} WHERE ${where} GROUP BY artist ORDER BY seconds DESC LIMIT 10`, args);
   return { seconds: total?.seconds ?? 0, plays: total?.plays ?? 0, songs: total?.songs ?? 0, days,
     top: top.flatMap((row) => { try { return [{ ...row, song: JSON.parse(row.song) as Song }]; } catch { return []; } }), artists };
   });
@@ -129,15 +139,23 @@ export async function savedSmartRules(profile: string): Promise<SmartRule[]> {
   const rows = await (await database()).getAllAsync<{ data: string }>('SELECT data FROM smart_rules WHERE profile=? ORDER BY id', profile);
   return rows.flatMap((row) => { try { const rule = normalizeSmartRule(JSON.parse(row.data)); return rule ? [rule] : []; } catch { return []; } });
 }
-export function saveSmartRule(profile: string, rule: SmartRule): Promise<void> {
+export function saveSmartRule(profile: string, rule: SmartRule, current: () => boolean = () => true): Promise<void> {
   const normalized = normalizeSmartRule(rule);
   if (!normalized) return Promise.reject(new Error('Invalid smart playlist rule'));
+  const version = profileVersions.get(profile) ?? 0;
   return serialized(async () => {
-    await (await database()).runAsync('INSERT INTO smart_rules(profile,id,data) VALUES(?,?,?) ON CONFLICT(profile,id) DO UPDATE SET data=excluded.data', profile, normalized.id, JSON.stringify(normalized));
+    const check = () => { if (!current() || version !== (profileVersions.get(profile) ?? 0)) throw new Error('Library changed'); };
+    check(); const db = await database(); check();
+    await db.withExclusiveTransactionAsync(async (tx) => { await tx.runAsync('INSERT INTO smart_rules(profile,id,data) VALUES(?,?,?) ON CONFLICT(profile,id) DO UPDATE SET data=excluded.data', profile, normalized.id, JSON.stringify(normalized)); check(); });
   });
 }
-export function deleteSmartRule(profile: string, id: string): Promise<void> {
-  return serialized(async () => { await (await database()).runAsync('DELETE FROM smart_rules WHERE profile=? AND id=?', profile, id); });
+export function deleteSmartRule(profile: string, id: string, current: () => boolean = () => true): Promise<void> {
+  const version = profileVersions.get(profile) ?? 0;
+  return serialized(async () => {
+    const check = () => { if (!current() || version !== (profileVersions.get(profile) ?? 0)) throw new Error('Library changed'); };
+    check(); const db = await database(); check();
+    await db.withExclusiveTransactionAsync(async (tx) => { await tx.runAsync('DELETE FROM smart_rules WHERE profile=? AND id=?', profile, id); check(); });
+  });
 }
 
 export interface ListeningLedgerBackup {
@@ -150,10 +168,11 @@ export function validateListeningLedger(raw: unknown): ListeningLedgerBackup {
   if (!x || x.version !== 1 || !x.preferences || typeof x.preferences.enabled !== 'boolean' || !Array.isArray(x.rows) || x.rows.length > 100000) throw new Error('Invalid listening history');
   const seen = new Set<string>();
   const rows = x.rows.map((r) => {
-    if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(r.day) || !r.song || typeof r.song.id !== 'string' || !r.song.id || r.song.id.length > 1024
+    const kind = r?.song?.mediaKind ?? 'music';
+    if (!['music', 'podcast', 'audiobook'].includes(kind) || !r || !/^\d{4}-\d{2}-\d{2}$/.test(r.day) || !r.song || typeof r.song.id !== 'string' || !r.song.id || r.song.id.length > 1024
       || typeof r.song.title !== 'string' || r.song.title.length > 500 || !Number.isFinite(r.seconds) || r.seconds < 0 || r.seconds > 86400
-      || !Number.isInteger(r.plays) || r.plays < 0 || r.plays > 100000 || seen.has(JSON.stringify([r.day, r.song.id]))) throw new Error('Invalid listening history row');
-    seen.add(JSON.stringify([r.day, r.song.id]));
+      || !Number.isInteger(r.plays) || r.plays < 0 || r.plays > 100000 || seen.has(JSON.stringify([kind, r.day, r.song.id]))) throw new Error('Invalid listening history row');
+    seen.add(JSON.stringify([kind, r.day, r.song.id]));
     return { day: r.day, song: safeSong(r.song), seconds: r.seconds, plays: r.plays };
   });
   return { version: 1, preferences: { enabled: x.preferences.enabled, startedAt: Number.isFinite(x.preferences.startedAt) ? x.preferences.startedAt : undefined }, rows };
@@ -162,7 +181,7 @@ export async function exportListeningLedger(profile: string): Promise<ListeningL
   await flushListeningCredits();
   return serialized(async () => {
     const db = await database();
-    const rows = await db.getAllAsync<{ day: string; song: string; seconds: number; plays: number }>('SELECT day,song,seconds,plays FROM listening_days WHERE profile=? ORDER BY day,song_id LIMIT 100001', profile);
+    const rows = await db.getAllAsync<{ day: string; song: string; seconds: number; plays: number }>(`SELECT day,song,seconds,plays FROM listening_days WHERE profile=? UNION ALL SELECT day,song,seconds,plays FROM listening_spoken_days WHERE profile=? ORDER BY day LIMIT 100001`, profile, profile);
     const pref = await db.getFirstAsync<{ enabled: number; started_at: number | null }>('SELECT enabled,started_at FROM listening_meta WHERE profile=?', profile);
     return validateListeningLedger({ version: 1, preferences: { enabled: pref ? pref.enabled === 1 : true, startedAt: pref?.started_at ?? undefined }, rows: rows.map((r) => ({ ...r, song: JSON.parse(r.song) })) });
   });
@@ -175,7 +194,11 @@ export function importListeningLedger(profile: string, raw: unknown, current: ()
     check(); const db = await database(); check();
     await db.withExclusiveTransactionAsync(async (tx) => {
       for (const r of value.rows) {
-        check(); await tx.runAsync(`INSERT INTO listening_days(profile,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?)
+        check();
+        if (r.song.mediaKind === 'podcast' || r.song.mediaKind === 'audiobook') {
+          await tx.runAsync(`INSERT INTO listening_spoken_days(profile,kind,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?,?)
+            ON CONFLICT(profile,kind,day,song_id) DO UPDATE SET seconds=MAX(seconds,excluded.seconds),plays=MAX(plays,excluded.plays)`, profile, r.song.mediaKind, r.day, r.song.id, JSON.stringify(r.song), r.song.artist ?? '', r.seconds, r.plays);
+        } else await tx.runAsync(`INSERT INTO listening_days(profile,day,song_id,song,artist,seconds,plays) VALUES(?,?,?,?,?,?,?)
           ON CONFLICT(profile,day,song_id) DO UPDATE SET seconds=MAX(seconds,excluded.seconds),plays=MAX(plays,excluded.plays)`, profile, r.day, r.song.id, JSON.stringify(r.song), r.song.artist ?? '', r.seconds, r.plays);
       }
       check(); await tx.runAsync('INSERT INTO listening_meta(profile,enabled,started_at) VALUES(?,?,?) ON CONFLICT(profile) DO NOTHING', profile, value.preferences.enabled ? 1 : 0, value.preferences.startedAt ?? null);

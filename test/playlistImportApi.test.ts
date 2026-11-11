@@ -41,6 +41,9 @@ function harness() {
   const outboxFile = (auth: SubsonicAuth) => `${auth.serverUrl}|${auth.username}`;
   const queued = { playlists: {} as Record<string, any>, favs: {}, ratings: {}, plays: [] };
   const queue = { data: queued, loadedFile: outboxFile(owner), load: async () => {}, isEmpty: () => false,
+    flushPersistence: async () => {},
+    checkpointPlaylistCreated: async (temp: string, id: string, edit: any) => { const real = { ...edit, created: false, needsInitialVerification: true, createdName: edit.name }; delete queued.playlists[temp]; queued.playlists[id] = real; return real; },
+    acknowledgePlaylist(id: string, expected: any) { if (queued.playlists[id] === expected) { delete queued.playlists[id]; calls.push({ action: 'acknowledge', id }); } },
     clearPlaylists() { calls.push({ action: 'clear-outbox' }); queued.playlists = {}; },
     setPlaylist(id: string, edit: object) { calls.push({ action: 'retain-outbox', id }); queued.playlists[id] = plain(edit); },
     rememberSongs: (_songs: Song[]) => {}, clearFavs: () => assert.fail('no favorites are pending'),
@@ -64,7 +67,7 @@ function harness() {
       return (folder.songs[folderId ?? 'all'] ?? []).slice(offset, offset + Math.min(count, folder.cap)).map(song);
     },
   };
-  const context: Record<string, any> = { exports: {}, Subsonic: backend, Local: { getSongList: async (_sort: string, count: number, offset: number) => ['local-one', 'local-two'].slice(offset, offset + count).map(song) },
+  const context: Record<string, any> = { captureLyricOwner: () => () => state.auth === owner && profile === 'original' && !state.offline, exports: {}, Subsonic: backend, Local: { getSongList: async (_sort: string, count: number, offset: number) => ['local-one', 'local-two'].slice(offset, offset + count).map(song) },
     profileScopeId: () => profile, useAuthStore: { getState: () => state }, useLibraries: { getState: () => ({ disabled: folder }) }, useOfflineQueue: { getState: () => queue },
     queryClient: { invalidateQueries: (key: unknown) => { invalidations.push(plain(key)); } },
     enabledFolderIds: (auth: SubsonicAuth) => { assert.equal(auth, owner); return folder.ids; }, outboxFileFor: outboxFile,
@@ -160,7 +163,7 @@ test('reconnect creates offline imports through the same guard, then applies met
   h.queued.playlists.tmp_local = edit;
   await h.api.flush(h.owner, h.file);
   assert.equal(h.helperCalls(), 1);
-  assert.deepEqual(h.calls.map((call) => call.action), ['list', 'create', 'get', 'reorder', 'get', 'update', 'clear-outbox']);
+  assert.deepEqual(h.calls.map((call) => call.action), ['list', 'create', 'get', 'reorder', 'get', 'update', 'acknowledge']);
   assert.deepEqual(h.mutations().map((call) => [call.action, call.id]), [['reorder', 'new'], ['update', 'new']]);
   assert.deepEqual(h.server.ids, edit.songIds); assert.deepEqual(h.queued.playlists, {});
 });
@@ -176,7 +179,7 @@ test('outbox legacy-ID collisions and invalid fresh playlists retain the complet
     if (variant === 'verification') h.server.transform = (ids) => [...new Set(ids)];
     await h.api.flush(h.owner, h.file);
     assert.equal(h.helperCalls(), 1, variant);
-    assert.deepEqual(h.queued.playlists, { tmp_local: edit }, variant);
+    assert.deepEqual(h.queued.playlists, variant === 'legacy' ? { tmp_local: edit } : { new: { ...edit, created: false, needsInitialVerification: true, createdName: edit.name } }, variant);
     assert.equal(h.calls.some((call) => call.action === 'update'), false, variant);
     assert.equal(h.mutations().length, variant === 'verification' ? 1 : 0, variant);
   }

@@ -1,7 +1,10 @@
 /** Older isolated UI/API suites run with the unchanged default display policy.
  * Full customization persistence/rendering has dedicated production-path tests. */
 import { sourceSong } from '../../src/lib/sourceSongMetadata';
+import * as artworkRegistry from '../../src/lib/metadata/artworkRegistry';
 export function defaultCustomizationBoundary(name: string): unknown {
+  if (name === '@/lib/metadata/artworkRegistry') return artworkRegistry;
+  if (name === '@/lib/localCustomizations') return { customizationScope: () => ({ profile: 'test', source: 'server' }) };
   if (name === '@/lib/sourceSongMetadata') return { sourceSong };
   if (name === '@/hooks/useLocalMetadata') return { useDisplaySong: (song: unknown) => song,
     useDisplayArtist: (artist: unknown) => artist, useDisplayAlbum: (album: unknown) => album };

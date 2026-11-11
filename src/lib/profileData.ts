@@ -42,6 +42,7 @@ const SCOPED_KEYS = [
   'resonus.dailyRecommendations',
   'resonus.settingsSearchRecent',
   'resonus.podcastPreferences',
+  'resonus.alignment.token',
 ];
 
 const DOWNLOADS_DIR = `${FileSystem.documentDirectory}downloads/`;
@@ -63,6 +64,11 @@ export async function deleteProfileData(auth: SubsonicAuth): Promise<void> {
   const scope = hashKey(rawScope);
   const dir = `${DOWNLOADS_DIR}${scope}/`;
   // Stop cleanup and its compensating file/DB work before removing this scope.
+  const { stopCueProfile } = await import('./cueLibrary');
+  const releaseCue = await stopCueProfile(rawScope);
+  try {
+  const { stopOfflineQueueProfile } = await import('@/store/offlineQueue');
+  await stopOfflineQueueProfile(auth);
   const podcastStorage = await import('./podcastStorage');
   await podcastStorage.stopPodcastStorageProfile(scope);
   const playbackCheckpoint = await import('./playbackCheckpoint');
@@ -100,6 +106,15 @@ export async function deleteProfileData(auth: SubsonicAuth): Promise<void> {
     pins.clearPinsProfile(rawScope),
     personalPlayback.clearPersonalPlaybackProfile(rawScope, auth),
   ]);
+
+  const [{ clearMetadataProfile }, { clearRecentlyDeletedProfile }, { drainListeningExtrasProfile }, { clearCueProfile }] = await Promise.all([
+    import('./metadata/repository'), import('./recentlyDeleted'), import('./listeningExtras'), import('./cueLibrary'),
+  ]);
+  await Promise.all([clearMetadataProfile(rawScope), clearRecentlyDeletedProfile(rawScope)]);
+  const { drainAlignmentCredentialWrites } = await import('./lyricAlignmentService');
+  await drainAlignmentCredentialWrites(rawScope);
+  await drainListeningExtrasProfile(rawScope);
+  await clearCueProfile(rawScope);
 
   // The databases are closed before their files go, or the handles would
   // outlive what they point at and every later read would fail on a profile
@@ -142,4 +157,5 @@ export async function deleteProfileData(auth: SubsonicAuth): Promise<void> {
   for (const key of SCOPED_KEYS) {
     await deleteItem(`${key}.${scope}`).catch(() => {});
   }
+  } finally { releaseCue(); }
 }

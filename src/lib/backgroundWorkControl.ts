@@ -1,4 +1,4 @@
-export type BackgroundWorkOwner = 'music' | 'media-cache';
+export type BackgroundWorkOwner = 'music' | 'media-cache' | 'metadata';
 export type BackgroundWorkInterruption = 'pause' | 'cancel' | 'timeout' | 'service-destroyed' | 'start-failed';
 export interface BackgroundWorkProgress {
   completed: number;

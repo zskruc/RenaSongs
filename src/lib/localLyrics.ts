@@ -16,6 +16,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { type Song, type SongLyrics } from '@/api/subsonic';
 import { hashKey, readTags } from './localLibrary';
+import { clipCueLyrics } from './cue';
 import { parseLrc } from './lrc';
 import { parseTtml } from './ttml';
 import { isManualOffline } from '@/api/netGate';
@@ -66,17 +67,17 @@ async function getFileLyrics(song: Song): Promise<SongLyrics | null> {
   const ttmlUri = siblingUri(uri, '.ttml');
   const ttmlText = ttmlUri ? await readTextIfExists(ttmlUri) : null;
   const fromTtml = ttmlText ? parseTtml(ttmlText) : null;
-  if (fromTtml) return fromTtml;
+  if (fromTtml) return clipCueLyrics(song, fromTtml);
 
   // 2) .lrc next to the audio file.
   const lrcUri = siblingLrcUri(uri);
   const lrcText = lrcUri ? await readTextIfExists(lrcUri) : null;
   const fromFile = lrcText ? parseLrc(lrcText) : null;
-  if (fromFile) return fromFile;
+  if (fromFile) return clipCueLyrics(song, fromFile);
 
   // 3) Embedded USLT (may contain LRC-style timestamps inside).
   const tags = await readTags(uri);
-  return tags?.lyrics ? parseLrc(tags.lyrics) : null;
+  return clipCueLyrics(song, tags?.lyrics ? parseLrc(tags.lyrics) : null);
 }
 
 /** The source picker reads the three real file sources separately, not just
@@ -88,12 +89,12 @@ export async function getOnDeviceLyricCandidates(song: Song, current = () => tru
     const uri = siblingUri(song.localUri, ext);
     const text = uri ? await readTextIfExists(uri, true) : null;
     if (!current()) throw new Error('Lyrics request stopped');
-    const lyrics = text ? parse(text) : null;
+    const lyrics = clipCueLyrics(song, text ? parse(text) : null);
     if (lyrics) candidates.push({ id: kind, kind, lyrics });
   }
   const tags = await readTags(song.localUri);
   if (!current()) throw new Error('Lyrics request stopped');
-  const embedded = tags?.lyrics ? parseLrc(tags.lyrics) : null;
+  const embedded = clipCueLyrics(song, tags?.lyrics ? parseLrc(tags.lyrics) : null);
   if (embedded) candidates.push({ id: 'embedded', kind: 'embedded', lyrics: embedded });
   return candidates;
 }
@@ -140,7 +141,7 @@ export async function getLocalLyrics(
     return (await getOnlineLyrics(song)) ?? (await getFileLyrics(song));
   }
   const fromFile = await getFileLyrics(song);
-  if (fromFile) return fromFile;
+  if (fromFile) return clipCueLyrics(song, fromFile);
   if (allowOnline) return getOnlineLyrics(song);
   return null;
 }

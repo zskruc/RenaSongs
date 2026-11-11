@@ -1,3 +1,6 @@
+import { captureCustomizationOwner } from '@/lib/localCustomizations';
+import { openMetadataTarget } from '@/store/metadataScraping';
+import { useMetadataArtwork, useMetadataInsight } from '@/lib/metadata/hooks';
 /** Artist detail, Spotify-style: large header, actions, sections. */
 import { GlassPressable } from '@/components/glass';
 import Icon from '@/components/Icon';
@@ -265,13 +268,16 @@ export default function ArtistScreen() {
   // photo into a pastel or change the global theme for other retained routes.
   const serverPortraitUri = canFetch && data
     ? artistPortraitUrl(data.artist) : undefined;
-  const { preferredUri: preferredPortraitUri, uri: headerUri } = selectArtistPortrait({
+  const { preferredUri: preferredPortraitUri, uri: rawHeaderUri } = selectArtistPortrait({
     serverType, coverArt: data?.artist.coverArt, serverUri: serverPortraitUri,
     infoUri: info?.imageUrl, verifiedFullUri: data?.portraitUri, failedUri: failedPortrait, offline,
   });
   const onPortraitError = () => {
     if (headerUri && headerUri === preferredPortraitUri) setFailedPortrait(preferredPortraitUri);
   };
+  const headerUri = useMetadataArtwork('artist',id,rawHeaderUri);
+  const localInsight = useMetadataInsight('artist',id);
+  const biography = localInsight?.text ?? info?.biography;
   const artistArtwork = useVoltaArtistArtwork(appleMusic ? headerUri : undefined,
     offline, screenW / portraitH, portraitExtension / portraitH, data?.artist.name);
   const artistPalette = artistArtwork.palette;
@@ -518,9 +524,9 @@ export default function ArtistScreen() {
 
         {appleMusic ? (
           <View style={voltaStyles.actions}>
-            <GlassPressable style={[voltaStyles.roundAction, { backgroundColor: artistPalette.controlFill }, !info?.biography && { opacity: 0.45 }]}
+            <GlassPressable style={[voltaStyles.roundAction, { backgroundColor: artistPalette.controlFill }, !biography && { opacity: 0.45 }]}
               accessibilityRole="button" accessibilityLabel={t('About::artist')}
-              disabled={!info?.biography} onPress={() => aboutRef.current()}>
+              disabled={!biography} onPress={() => aboutRef.current()}>
               <Icon name="information" size={25} color={artistPalette.text} />
             </GlassPressable>
             <GlassPressable style={[voltaStyles.playButton, { backgroundColor: artistPalette.text }, top.length === 0 && albums.length === 0 && { opacity: 0.45 }]} accessibilityRole="button"
@@ -754,13 +760,13 @@ export default function ArtistScreen() {
           />
         ) : null}
 
-        {info?.biography ? (
+        {biography ? (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, appleText]}>{t('About::artist')}</Text>
             <Text style={[styles.bio, appleSecondary]} numberOfLines={bioExpanded ? undefined : 4}>
-              {info.biography}
+              {biography}
             </Text>
-            {info.biography.length > 220 ? (
+            {biography.length > 220 ? (
               <GlassPressable variant="subtle"
                 hitSlop={8}
                 accessibilityRole="button"
@@ -839,7 +845,8 @@ export default function ArtistScreen() {
         {(close) => <>
           <MenuGlassCardHeader title={t('About::artist')} onClose={() => close()} />
           <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ padding: spacing.lg }}>
-            <Text style={voltaStyles.aboutText}>{info?.biography}</Text>
+            <Text style={voltaStyles.aboutText}>{biography}</Text>
+            {localInsight?.url ? <Link href={localInsight.url} style={voltaStyles.aboutText}>{localInsight.source}</Link> : null}
           </ScrollView>
         </>}
       </SheetModal>
@@ -932,6 +939,12 @@ export default function ArtistScreen() {
               >
                 <Icon name="play" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Play discography')}</Text>
+              </Pressable>
+              <Pressable style={styles.action} onPress={() => { const current = captureCustomizationOwner(); close(() => { void fetchAlbumSongs().then((songs) => {
+                if (!current() || !songs) return;
+                openMetadataTarget({ kind: 'artist', id: data.artist.id, title: data.artist.name, songs }); router.push('/metadata');
+              }).catch(() => useToast.getState().show(t("Couldn't complete the action"))); }); }}>
+                <Icon name="search-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Metadata and local artwork')}</Text>
               </Pressable>
               {/* The way back to the one undivided list the discography was
                   before it was split into shelves (#138): the same screen the

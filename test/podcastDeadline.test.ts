@@ -1,3 +1,4 @@
+import { createEndpointReader } from '../src/lib/httpCooldown';
 import * as podcastStorageLease from '../src/lib/podcastStorageLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -35,6 +36,7 @@ function feedHarness(contentLength?: string) {
     bodyReads++; return mode === 'fast' ? xml : body.promise;
   } });
   const imports: Record<string, unknown> = {
+    '@/lib/httpCooldown': { readDiscoveryEndpoint: createEndpointReader() },
     'expo/fetch': { fetch: async (_url: string, options: any) => { requests.push(options.signal); return mode === 'headers' ? headers.promise : response(); } },
     './netGate': { assertCanRequest() {}, isManualOffline: () => false, OfflineError: class extends Error {} },
     '@/store/auth': { profileScopeId: () => auth.getState().auth.username, useAuthStore: auth },

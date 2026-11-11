@@ -88,6 +88,7 @@ function harness() {
     '@/lib/podcastShowNotes': notes, '@/lib/query': { queryClient: query }, '@/store/auth': authModule,
     '@/store/player': { usePlayerStore: player, currentSong: (state: any) => state.queue[state.index], playbackUserSeekVersion: () => seekVersion },
     '@/store/podcastDownloads': { podcastFile: () => undefined }, '@/store/settings': { useSettings: (selector: any) => selector({ language: 'en' }) },
+    '@/store/lyricToolTarget': { useLyricToolTarget: { getState: () => ({ open() {} }) } },
     '@/store/toast': { useToast: (selector: any) => selector({ show: (error: string) => errors.push(error) }) },
   }).default;
   const tree = () => React.createElement(Query.QueryClientProvider, { client: query }, React.createElement(Screen));

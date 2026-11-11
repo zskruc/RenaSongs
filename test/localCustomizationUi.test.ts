@@ -95,6 +95,7 @@ test('actual lyric typography creates only nested native text runs and preserves
     react: { ...React, useContext: () => ({ preferences: { version: 1, fonts: { japanese: 'serif', latin: 'monospace' } }, custom: null }) },
     '@tanstack/react-query': {}, 'expo-font': {}, '@/lib/lyricFonts': fonts,
     '@/lib/localCustomizations': {}, '@/lib/localCustomizationModels': {}, '@/store/auth': {}, '@/store/settings': {}, '@/hooks/useLocalMetadata': {},
+    '@/lib/metadata/hooks': { useMetadataAssetsHydration() {} }, '@/lib/loudnessTools': { hydrateLoudnessPreferences: async () => {} },
   });
   let root!: ReactTestRenderer;
   try {

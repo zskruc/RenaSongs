@@ -36,6 +36,15 @@ fun main() {
   var lateDone = false; BackgroundDownloads.waitForSession(firstSession) { lateDone = true }
   expect(lateDone && !HeadlessJsTaskContext.getInstance(context).hasActiveTasks(), "late JS task dispatch cannot leak an ended-session Promise")
 
+  start(context, "client", "metadata", "scrape-one")
+  val metadataService = BackgroundDownloadService(); BackgroundDownloads.serviceStarted(metadataService, session(context), 20)
+  start(context, "client", "music", "with-scraper"); start(context, "client", "media-cache", "art-with-scraper")
+  expect(BackgroundDownloads.snapshot().size == 3 && metadataService.lock, "three explicit user jobs share a protected runner")
+  BackgroundDownloads.stop("client", token("metadata"))
+  expect(BackgroundDownloads.snapshot().size == 2 && live()["running"] == true && metadataService.lock, "metadata completion cannot stop audio/artwork downloads")
+  BackgroundDownloads.stop("client", token("music")); BackgroundDownloads.stop("client", token("media-cache"))
+  expect(live()["running"] == false && !metadataService.lock, "finishing the remaining owners releases protection")
+
   var replaced: Map<String, Any?>? = null
   start(context, "client", "music", "old-run") { replaced = it }; val oldToken = token("music")
   var replacement: Map<String, Any?>? = null

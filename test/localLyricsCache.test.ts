@@ -1,3 +1,4 @@
+import { clipCueLyrics } from '../src/lib/cue';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -43,7 +44,7 @@ function harness() {
       writeAsStringAsync: async (path: string, value: string) => { state.writes++; files.set(path, value); },
     },
     './localLibrary': { hashKey: () => 'recording', readTags: async () => ({ lyrics: 'Embedded original' }) },
-    './lrc': { parseLrc }, './ttml': { parseTtml },
+    './cue': { clipCueLyrics }, './lrc': { parseLrc }, './ttml': { parseTtml },
     '@/api/netGate': { isManualOffline: () => state.manualOffline },
     './project': { PROJECT_NAME: 'Test', REPOSITORY_URL: 'https://example.test' },
     '../../modules/background-downloads': { delay: async (ms: number) => { clock += ms; } },

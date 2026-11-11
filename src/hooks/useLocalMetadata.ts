@@ -1,3 +1,4 @@
+import { metadataArtworkRevision, subscribeMetadataArtwork } from '@/lib/metadata/artworkRegistry';
 import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { Album, Artist, Song } from '@/api/subsonic';
 import { metadataCustomizationRevision, customizationScope, subscribeCustomizations } from '@/lib/localCustomizations';
@@ -16,14 +17,17 @@ export function displaySong(song: Song): Song { const state = snapshot(); return
 export function displayArtist(artist: Artist): Artist { return applyArtistDisplay(artist, snapshot().aliases); }
 export function displayAlbum(album: Album): Album { const state = snapshot(); return applyAlbumDisplay(album, state.songs, state.aliases); }
 export function useDisplaySong<T extends Song | null | undefined>(song: T): T {
+  useSyncExternalStore(subscribeMetadataArtwork, metadataArtworkRevision);
   const { songs, aliases, scope } = useLocalMetadata();
   return useMemo(() => song && scope === scopeKey(customizationScope()) ? applySongDisplay(song, songs, aliases) as T : song, [song, songs, aliases, scope]);
 }
 export function useDisplayArtist<T extends Artist | null | undefined>(artist: T): T {
+  useSyncExternalStore(subscribeMetadataArtwork, metadataArtworkRevision);
   const { aliases, scope } = useLocalMetadata();
   return useMemo(() => artist && scope === scopeKey(customizationScope()) ? applyArtistDisplay(artist, aliases) as T : artist, [artist, aliases, scope]);
 }
 export function useDisplayAlbum<T extends Album | null | undefined>(album: T): T {
+  useSyncExternalStore(subscribeMetadataArtwork, metadataArtworkRevision);
   const { songs, aliases, scope } = useLocalMetadata();
   return useMemo(() => album && scope === scopeKey(customizationScope()) ? applyAlbumDisplay(album, songs, aliases) as T : album, [album, songs, aliases, scope]);
 }

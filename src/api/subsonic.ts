@@ -99,6 +99,14 @@ export interface Song {
   artists?: { id: string; name: string }[];
   /** Album artist list (OpenSubsonic extension; Navidrome sends it). */
   albumArtists?: { id: string; name: string }[];
+  /** App-only metadata override, independent of server album-artist IDs. */
+  albumArtist?: string;
+  /** Local CUE virtual track boundaries in the original physical file. */
+  cueStartSec?: number;
+  cueEndSec?: number;
+  cueSourceId?: string;
+  /** Explicit local content classification; never sent as server metadata. */
+  mediaKind?: 'music' | 'podcast' | 'audiobook';
   /** Other credits by role (OpenSubsonic). */
   contributors?: { role: string; subRole?: string; artist: { id: string; name: string } }[];
   coverArt?: string;
@@ -1449,7 +1457,7 @@ export interface LyricLine {
   /** Milliseconds from the start of the track; only in synced lyrics. */
   start?: number;
   value: string;
-  /** Companion text supplied by the lyric file/server, never machine generated. */
+  /** Companion translation, supplied by a source or explicitly generated on-device. */
   translation?: string;
   romanization?: string;
   /**
@@ -1460,6 +1468,8 @@ export interface LyricLine {
 }
 
 export interface SongLyrics {
+  /** Locally generated companion translations retain attribution after save/backup. */
+  translationProvider?: 'google-mlkit';
   synced: boolean;
   lines: LyricLine[];
 }

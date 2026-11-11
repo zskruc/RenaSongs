@@ -193,6 +193,9 @@ export function PodcastsBrowser({ embedded, actionRef, searchOpen }: BrowserProp
         <Icon name="documents-outline" size={23} color={colors.textSecondary} />
       </GlassPressable>
       </View>
+      <GlassPressable style={[styles.discover, { marginHorizontal: listPad, marginBottom: 10 }]} onPress={() => router.push('/local-podcasts')}>
+        <Icon name="folder-open-outline" size={22} color={colors.accent} /><Text style={styles.discoverText}>{t('Local podcasts')}</Text><Icon name="chevron-forward" size={18} color={colors.textMuted} />
+      </GlassPressable>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }}
         contentContainerStyle={{ paddingHorizontal: listPad, gap: 8, paddingBottom: 14 }}>
         {([['shows', 'Shows'], ['continue', 'Continue listening'], ['unplayed', 'Latest unplayed'], ['downloaded', 'Downloaded']] as const).map(([value, label]) =>

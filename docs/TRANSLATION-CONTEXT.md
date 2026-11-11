@@ -5,7 +5,7 @@
      `src/i18n/context.jsonc`, and where a string shows up is read off the
      code, so both are fixed at the source and this page follows. -->
 
-Every string the app can show, under the screen it shows up on. 1680 of them.
+Every string the app can show, under the screen it shows up on. 1998 of them.
 The second column is only filled in where the English is ambiguous on its own
 If one tripped you up and the column is empty, that is worth telling us, and
 the answer goes into `src/i18n/context.jsonc` where the next translator of the
@@ -46,7 +46,6 @@ you are actually typing into, which is easier than reading it here.
 | --- | --- |
 | `{n} albums` |  |
 | `{year}s` |  |
-| `All` |  |
 | `Invalid release year` |  |
 | `No albums in this year` |  |
 | `Reading release years. Counts update as pages arrive.` |  |
@@ -65,6 +64,8 @@ you are actually typing into, which is easier than reading it here.
 | `1 hour` | How long a shared link lasts, counted from the moment it is made. Not a time of day |
 | `1 month` | How long a shared link lasts, counted from the moment it is made |
 | `1 week` | How long a shared link lasts, counted from the moment it is made |
+| `A–B repeat` |  |
+| `Align lyric words` |  |
 | `Allow downloads` | Whether whoever gets the link can download the music, not only listen to it |
 | `Android may stop playback in the background, interrupt downloads or delay the sleep timer. Allowing unrestricted battery use fixes it.` |  |
 | `Artists` | A heading over a list of them, never a count |
@@ -93,6 +94,7 @@ you are actually typing into, which is easier than reading it here.
 | `Edit and export lyrics` |  |
 | `Explicit` | A value of `Content`: the recording carries a parental advisory (strong language). Also read out for the E badge next to a title |
 | `Export “{name}”?` | Confirms getting the files of an album or playlist out of the app |
+| `Find metadata for this song` |  |
 | `Fixes` | Heading in the update prompt over the bugs a release fixes |
 | `Format` | The file format (FLAC, MP3…), written as the player writes it |
 | `Genre` | Label of a field in the song information sheet |
@@ -106,12 +108,15 @@ you are actually typing into, which is easier than reading it here.
 | `Long audio and bookmarks` |  |
 | `Lyric poster` |  |
 | `Lyrics tools` |  |
+| `Metadata and local artwork` |  |
 | `min remaining` |  |
 | `Mix started` | The toast that says the app is now picking the songs |
 | `Moods` | Mood tags the server has on the song: mellow, energetic… |
 | `Navigation bar` | Settings screen: which tabs are on the bar at the bottom, and in what order |
 | `New features` | Heading in the update prompt over the new things a release brings. The lines under it stay in English |
+| `Next episodes` |  |
 | `No listening history yet` |  |
+| `Offline lyric translation` |  |
 | `On` | An enabled switch, shown in the readable summary of glass parameters |
 | `Open settings` | Its confirm button: goes to Android's own settings, not the app's |
 | `Pick a date…` | Opens the calendar to choose the day the link stops working |
@@ -144,6 +149,7 @@ you are actually typing into, which is easier than reading it here.
 | `Something went wrong` |  |
 | `Song information` | The menu action and the sheet's title: what is known about the track |
 | `Start mix` | Start an auto-generated radio mix from this song |
+| `Subscribed podcasts` |  |
 | `The link expires in` | Heading over the choices below. They are spans from the moment the link is made, not times of day |
 | `This download is a {n} kbps copy, not the original file.` | Shown before exporting: the file on the phone was transcoded when it was downloaded. `{n}` is a bitrate |
 | `This song carries no information.` | Empty state: the file and the server had nothing to say |
@@ -184,6 +190,7 @@ you are actually typing into, which is easier than reading it here.
 | `Frequently played songs` |  |
 | `Interviews` | Shelf heading: records of somebody being interviewed, usually the artist |
 | `Live` | Shelf heading: records of a performance in front of an audience. Not the verb, and not “currently playing” |
+| `Metadata and local artwork` |  |
 | `Mixtapes` | Shelf heading: MusicBrainz's “Mixtape/Street”, promotional records with new material, common in rap and hip hop. Kept as-is where the term travels |
 | `No songs here yet` |  |
 | `Play discography` | Play the lot, in order |
@@ -244,7 +251,6 @@ you are actually typing into, which is easier than reading it here.
 | String | What it is |
 | --- | --- |
 | `A-Z` | Sort option: the order of a list |
-| `Album artist` |  |
 | `Find an album` | The search box's placeholder on that screen |
 | `No albums yet` | Empty state heading |
 | `Nothing played yet` | Empty state: this phone has not played anything yet |
@@ -286,6 +292,24 @@ you are actually typing into, which is easier than reading it here.
 | `Your library looks empty.` | Empty state: the server answered, and had nothing |
 | `Your most played songs will show up here.` | Empty state, before anything has been played |
 | `Your recently played songs will show up here.` | Empty state, before anything has been played |
+
+## Cue import
+
+| String | What it is |
+| --- | --- |
+| `Choose a CUE sheet, then its audio files. Audio is copied into this app; the original file is not split or changed. UTF-8, UTF-16 and GB18030 sheets are supported.` |  |
+| `Choose CUE sheet` |  |
+| `Clear imported CUE tracks` |  |
+| `CUE cleanup was interrupted. Retry clearing the imported tracks.` |  |
+| `CUE import failed` |  |
+| `CUE library supports up to 500 tracks` |  |
+| `CUE track already exists` |  |
+| `CUE tracks found` |  |
+| `CUE virtual tracks` |  |
+| `Invalid imported CUE tracks` |  |
+| `Remove CUE tracks from the playback queue before clearing their audio` |  |
+| `Select audio files and import` |  |
+| `This profile is being removed.` |  |
 
 ## Explore
 
@@ -458,6 +482,31 @@ you are actually typing into, which is easier than reading it here.
 | `Tracks without a reported play count.` |  |
 | `Unwind` |  |
 
+## Local podcasts
+
+| String | What it is |
+| --- | --- |
+| `{n} episodes` |  |
+| `{n} minutes remaining` |  |
+| `Back to shows` |  |
+| `Could not read local podcasts. Refresh the library to retry.` |  |
+| `Could not save listening progress` |  |
+| `Couldn't play` |  |
+| `Episodes` |  |
+| `Group library files marked as podcasts by album and author. Original files, IDs and server tags are unchanged; this is separate from RSS subscriptions.` |  |
+| `Local podcast profile changed` |  |
+| `Local podcasts` |  |
+| `Metadata centre` |  |
+| `No matching local podcast files. Set their content type to Podcast in local metadata editing.` |  |
+| `Oldest added first` |  |
+| `Played` |  |
+| `Recently added` | A sort order, and a section: newest first (in Favorites, last favorited first) |
+| `Refresh library` |  |
+| `Title` | One of the values of “Sort by” |
+| `Track order` |  |
+| `Unplayed` |  |
+| `Untitled podcast` |  |
+
 ## Login
 
 | String | What it is |
@@ -489,6 +538,50 @@ you are actually typing into, which is easier than reading it here.
 | `The music on your device is not touched.` | The rest of that warning: only the account's own downloads go |
 | `Username` | The username field |
 | `We need permission to read your device music.` | Android has not granted access to the phone's files yet |
+
+## Lyric align
+
+| String | What it is |
+| --- | --- |
+| `A lyric alignment is already running` |  |
+| `Align word timing` |  |
+| `Alignment endpoint URL` |  |
+| `Alignment profile changed` |  |
+| `Alignment response is too large` |  |
+| `Alignment upload is too large` |  |
+| `Apply word timing in this app` |  |
+| `Bearer token (optional; stored securely)` |  |
+| `Cantonese` |  |
+| `Changing the service address or music source clears the saved token. Enter it again for the new service.` |  |
+| `Chinese` |  |
+| `Download the audio or choose a local file first` |  |
+| `French` |  |
+| `German` |  |
+| `Invalid alignment settings` |  |
+| `Italian` |  |
+| `Japanese` |  |
+| `Keep the saved token only for this exact address and music source` |  |
+| `Korean` |  |
+| `Local audio is unavailable` |  |
+| `Local audio owner changed` |  |
+| `Lyric alignment canceled` |  |
+| `Lyric alignment failed` |  |
+| `Lyric language` |  |
+| `No word timing` |  |
+| `Portuguese` |  |
+| `Prepared audio is invalid` |  |
+| `Preparing local audio` |  |
+| `Russian` |  |
+| `Save alignment service settings` |  |
+| `Sending audio to the selected alignment service` |  |
+| `Set a compatible alignment service endpoint first` |  |
+| `Spanish` |  |
+| `The configured alignment service needs a network connection` |  |
+| `The local audio changed during preparation` |  |
+| `The local file identity could not be verified` |  |
+| `Upload selected audio and align lyrics` |  |
+| `Use a compatible service that accepts audio_base64, mime_type, language and lines at an alignment endpoint. Only the selected local audio and lyric text are uploaded when you start. Results are saved in this app only.` |  |
+| `Use an HTTP or HTTPS alignment endpoint without credentials in its URL` |  |
 
 ## Lyric editor
 
@@ -536,6 +629,44 @@ you are actually typing into, which is easier than reading it here.
 | `Poster style` |  |
 | `Sharing is not available on this device.` |  |
 
+## Lyric translate
+
+| String | What it is |
+| --- | --- |
+| `Apply translation in this app` |  |
+| `Arabic` |  |
+| `Chinese` |  |
+| `Delete model` |  |
+| `Download language models once, then translate on this device. Lyric text is not sent to a translation server.` |  |
+| `Download selected models over Wi-Fi` |  |
+| `Downloaded languages` |  |
+| `French` |  |
+| `German` |  |
+| `Hindi` |  |
+| `Italian` |  |
+| `Japanese` |  |
+| `Korean` |  |
+| `Lyrics are too large` |  |
+| `Manage downloaded models` |  |
+| `None` | One of the values of “Buttons next to play” |
+| `Offline lyric translation` |  |
+| `On-device translation is available on Android` |  |
+| `Polish` |  |
+| `Portuguese` |  |
+| `Russian` |  |
+| `Source language` |  |
+| `Spanish` |  |
+| `Target language` |  |
+| `Thai` |  |
+| `Translate with Google` |  |
+| `Translation engine: Google ML Kit. Model downloads need an available network; downloaded models work offline.` |  |
+| `Translation failed` |  |
+| `Translation owner changed` |  |
+| `Translation result does not match the lyrics` |  |
+| `Turkish` |  |
+| `Ukrainian` |  |
+| `Vietnamese` |  |
+
 ## Lyrics
 
 | String | What it is |
@@ -560,9 +691,180 @@ you are actually typing into, which is easier than reading it here.
 | `Move to` |  |
 | `New folder or tag name` |  |
 | `No items to organise` |  |
-| `Podcasts` |  |
 | `Remove from folder` |  |
 | `Rename folder` |  |
+
+## Metadata
+
+| String | What it is |
+| --- | --- |
+| `{n} need review` |  |
+| `Apply policy` |  |
+| `Changes stay inside this app. NAS files, server tags, playback IDs and your glass settings are unchanged.` |  |
+| `Choose local artwork` |  |
+| `Could not complete this song` |  |
+| `Could not save metadata settings` |  |
+| `Custom scraping sources` |  |
+| `Existing tag fields and manual corrections are kept. Turn off to review replacements.` |  |
+| `Find a sourced biography` |  |
+| `Import a JSON file or HTTPS configuration. Review domains and capabilities before enabling.` |  |
+| `LRCLIB` |  |
+| `Metadata centre` |  |
+| `Metadata tasks` |  |
+| `Move down` |  |
+| `Move up` |  |
+| `Only fill missing tag fields` |  |
+| `Open a song, album or artist menu to choose what to edit.` |  |
+| `review` |  |
+| `skipped` |  |
+| `Sources in priority order` |  |
+| `Tasks start only after your action. Interrupted work can be resumed; paused tasks never restart automatically.` |  |
+
+## Metadata › Artwork
+
+| String | What it is |
+| --- | --- |
+| `Artwork HTTPS URL` |  |
+| `Artwork saved inside this app` |  |
+| `Choose an image from this device` |  |
+| `Could not save this image. Use JPEG, PNG, GIF or WebP under 20 MiB.` |  |
+| `Download this artwork` |  |
+| `Local artwork` |  |
+| `Restore original artwork` |  |
+| `The original image is copied without JPEG conversion. GIF and WebP animation is preserved. Removing the local choice restores the existing artwork policy.` |  |
+
+## Metadata › Batch
+
+| String | What it is |
+| --- | --- |
+| `{n} of {total} tracks matched` |  |
+| `{n} songs selected` |  |
+| `Album artist` |  |
+| `Album title` |  |
+| `Apply shared tag corrections` |  |
+| `Batch action` |  |
+| `Batch metadata review` |  |
+| `Blank fields are left unchanged. Shared corrections do not rename files or merge artist IDs.` |  |
+| `Choose a release track` |  |
+| `Could not complete this request. Existing data was kept.` |  |
+| `Different album edition` |  |
+| `Different artist` |  |
+| `Different duration` |  |
+| `Different recording version` |  |
+| `Different title` |  |
+| `Enter a four-digit year` |  |
+| `Filter release tracks` |  |
+| `Find matching metadata for each song` | One of the values of “Batch action” |
+| `Genres separated by semicolons` |  |
+| `I reviewed this batch` |  |
+| `Leave this song for review` |  |
+| `Match a specific album release` |  |
+| `Metadata task` |  |
+| `Needs review` |  |
+| `Next page` |  |
+| `Only these selected songs are processed. Nothing is written to NAS or audio files.` |  |
+| `Previous page` |  |
+| `Replace selected existing fields` |  |
+| `Search album releases` |  |
+| `Source` | The music source (which server, or local). Not source code |
+| `Start metadata task` |  |
+| `Unmatched or ambiguous tracks wait for review. A release track cannot be assigned twice.` |  |
+| `Year` | Label of a field in the song information sheet: the year of the release |
+
+## Metadata › Insight
+
+| String | What it is |
+| --- | --- |
+| `Choose the exact MusicBrainz artist or release. Its linked Wikipedia summary is saved with attribution; unrelated same-name biographies are never applied automatically.` |  |
+| `Find biography candidates` |  |
+| `No sourced biography is available. Your existing information was kept.` |  |
+| `Open original source` |  |
+| `Remove local biography` |  |
+| `Sourced biography` |  |
+
+## Metadata › Song
+
+| String | What it is |
+| --- | --- |
+| `Apply selected fields locally` |  |
+| `Audiobook` |  |
+| `Choose a song first.` |  |
+| `Choose local artwork` |  |
+| `Compare before applying` |  |
+| `Could not complete this request. Existing data was kept.` |  |
+| `High-resolution artwork` |  |
+| `I checked this recording and version` |  |
+| `Lyrics sources remain available in the existing lyrics tools. A manual lyric edit keeps priority until you restore its source.` |  |
+| `Media classification` |  |
+| `Metadata changes undone` |  |
+| `Metadata saved inside this app` |  |
+| `Music` | The name given to the server's folder when it does not have one of its own, browsing by folder |
+| `No matching candidates found` |  |
+| `Only selected fields are saved locally. Audio files and server metadata are not written.` |  |
+| `Podcast` |  |
+| `Replace selected existing fields` |  |
+| `Review song metadata` |  |
+| `Search artist` |  |
+| `Search metadata and lyrics` |  |
+| `Search title` |  |
+| `Some sources were unavailable. Other results are shown.` |  |
+| `Undo these changes` |  |
+
+## Metadata › Sources
+
+| String | What it is |
+| --- | --- |
+| `Add a search or lyrics endpoint` |  |
+| `Choose configuration file` |  |
+| `Configuration scripts only parse supplied responses in an isolated runtime. They cannot access app files, music-server credentials or make their own network requests.` |  |
+| `Connection protocol` |  |
+| `Contains private headers` |  |
+| `Could not load this configuration. Check its format and network connection.` |  |
+| `Custom scraping sources` |  |
+| `Download and preview configuration` |  |
+| `Edit configuration` |  |
+| `Headers and local secrets are stored separately and are excluded from exports and recently deleted items. Normal TLS validation stays enabled.` |  |
+| `HTTPS configuration URL` |  |
+| `Invalid parsing script` |  |
+| `Invalid scraper configuration` |  |
+| `Preview configuration` |  |
+| `Remove source` |  |
+| `Request methods` |  |
+| `Requested domains` |  |
+| `Save reviewed scraping sources` |  |
+| `Saved custom sources` |  |
+| `Saving replaces this configuration. Changing requests or scripts clears previous private headers and secrets.` |  |
+| `Scraper JSON` |  |
+| `Scraping sources saved` |  |
+| `Show a configuration example` |  |
+| `They will stay in secure storage and will not be exported.` |  |
+| `This source ID already exists` |  |
+| `Use an HTTP or HTTPS endpoint` |  |
+
+## Metadata › Task
+
+| String | What it is |
+| --- | --- |
+| `{applied} applied, {failed} failed, {review} need review` |  |
+| `Cancel remaining work` |  |
+| `Cancelling keeps completed changes. Undo refuses to overwrite a later manual edit. Local artwork can be restored from its artwork page.` |  |
+| `Could not complete this action. Review the task and retry.` |  |
+| `Could not complete this song` |  |
+| `Could not load this task` |  |
+| `Could not resume this task` |  |
+| `Metadata changes undone` |  |
+| `Metadata task` |  |
+| `Metadata task not found` |  |
+| `Next page` |  |
+| `Pause task` |  |
+| `Previous page` |  |
+| `Resume task` |  |
+| `Retry failed songs` |  |
+| `review` |  |
+| `Review this song` |  |
+| `skipped` |  |
+| `Some edits changed later and were kept for review.` |  |
+| `Undo applied tag and lyric changes` |  |
 
 ## Offline
 
@@ -576,6 +878,23 @@ you are actually typing into, which is easier than reading it here.
 | `Scan the whole phone` | The other way: look everywhere for audio files |
 | `We need permission to read your device music.` | Android has not granted access to the phone's files yet |
 | `Where should we get your music?` | Heading when choosing where the phone's own music is read from |
+
+## Playback range
+
+| String | What it is |
+| --- | --- |
+| `A-B repeat` |  |
+| `A: start` |  |
+| `B: end` |  |
+| `Could not set A-B repeat` |  |
+| `Mark A at current position` |  |
+| `Mark B at current position` |  |
+| `Nothing playing` |  |
+| `Repeating section` |  |
+| `Set two positions to repeat a section. Seeking outside this section turns A-B repeat off. Minimum length: one second.` |  |
+| `Start A-B repeat` |  |
+| `Turn off A-B repeat` |  |
+| `Use seconds or minutes:seconds` |  |
 
 ## Player
 
@@ -688,7 +1007,6 @@ you are actually typing into, which is easier than reading it here.
 | `Couldn't subscribe to this podcast.` |  |
 | `Download episodes` |  |
 | `Duration excludes episodes with unknown length.` |  |
-| `Episodes` |  |
 | `First episodes` |  |
 | `In progress` |  |
 | `New` |  |
@@ -704,7 +1022,6 @@ you are actually typing into, which is easier than reading it here.
 | `The rest of this feed could not be loaded. The available episodes can still be played.` |  |
 | `This podcast's feed could not be read, so these episodes may be out of date.` |  |
 | `Trailer` |  |
-| `Unplayed` |  |
 | `Untitled episode` |  |
 | `You can play these episodes while the rest of the feed loads.` |  |
 
@@ -764,7 +1081,7 @@ you are actually typing into, which is easier than reading it here.
 | `No chapters supplied for this episode.` |  |
 | `No show notes available.` |  |
 | `Online chapters are unavailable offline.` |  |
-| `Open transcript` |  |
+| `Read transcript in app` |  |
 | `Refresh chapters` |  |
 | `Season {n}` |  |
 | `Show notes` |  |
@@ -777,7 +1094,6 @@ you are actually typing into, which is easier than reading it here.
 | `Favorite shows or episodes to see them here.` |  |
 | `No favorite podcasts` |  |
 | `Podcast` |  |
-| `Podcasts` |  |
 
 ## Podcasts
 
@@ -788,7 +1104,6 @@ you are actually typing into, which is easier than reading it here.
 | `{n} subscriptions exported. {skipped} private or invalid addresses were excluded.` |  |
 | `{n} unique subscriptions. {duplicates} duplicates and {invalid} invalid addresses skipped.` |  |
 | `{time} left` |  |
-| `All` |  |
 | `Bonus` |  |
 | `Choose OPML file` |  |
 | `Could not export podcast subscriptions.` |  |
@@ -807,6 +1122,7 @@ you are actually typing into, which is easier than reading it here.
 | `Import or export OPML. Importing adds shows without downloading audio.` |  |
 | `Import stopped. Go online and try again.` |  |
 | `Latest unplayed` |  |
+| `Local podcasts` |  |
 | `New` |  |
 | `No episodes match this filter.` |  |
 | `No episodes yet` |  |
@@ -816,7 +1132,6 @@ you are actually typing into, which is easier than reading it here.
 | `Organise folders and tags` |  |
 | `Played` |  |
 | `Podcast subscriptions` |  |
-| `Podcasts` |  |
 | `Retry failed subscriptions` |  |
 | `Search for a podcast` |  |
 | `Search for a show, or paste the address of a feed below.` |  |
@@ -826,6 +1141,14 @@ you are actually typing into, which is easier than reading it here.
 | `Tap + to subscribe to a show.` |  |
 | `Trailer` |  |
 | `Untitled episode` |  |
+
+## Publisher transcript
+
+| String | What it is |
+| --- | --- |
+| `Could not load publisher transcript` |  |
+| `No publisher transcript available` |  |
+| `Publisher transcript` |  |
 
 ## Queue
 
@@ -856,7 +1179,6 @@ you are actually typing into, which is easier than reading it here.
 | `Add internet radio stations on your server and they'll show up here.` | The line under an empty state: the stations live on the server, not in the app |
 | `Add local station` |  |
 | `Add station` | Title of the sheet for adding an internet radio station |
-| `All` |  |
 | `Change cover` | Replace the cover image of a playlist or station |
 | `Confirm your password` | Changing a cover on the server needs the password again. It is not a new password being set |
 | `Couldn't load radio stations.` | Error on the screen, with a Retry button |
@@ -1451,7 +1773,10 @@ you are actually typing into, which is easier than reading it here.
 | `{n} hours` |  |
 | `A session counts after 30 seconds, or half of a shorter song.` |  |
 | `All-time most played` |  |
+| `Audiobooks` | Shelf heading: a book read aloud by one narrator, no music |
+| `Content statistics` |  |
 | `Couldn't play` |  |
+| `Different episodes or chapters` |  |
 | `Different songs` |  |
 | `Last 30 days` |  |
 | `Last 7 days` | One of the values of “Report period” |
@@ -1460,7 +1785,10 @@ you are actually typing into, which is easier than reading it here.
 | `Listening time` |  |
 | `Listening time chart` |  |
 | `Most listened artists` |  |
+| `Most listened episodes or chapters` |  |
 | `Most listened songs` |  |
+| `Music` | The name given to the server's folder when it does not have one of its own, browsing by folder |
+| `Music, podcasts and audiobooks are recorded separately from this version. Earlier totals are preserved without guessing their content type.` |  |
 | `No listening recorded in this period` |  |
 | `Only actual advancing playback is counted. Seeking and buffering are excluded.` | The line under “Record listening on this device”, explaining it |
 | `Qualified listening sessions` |  |
@@ -1546,6 +1874,40 @@ you are actually typing into, which is easier than reading it here.
 | `Song` | In search results, the little word under a result saying what kind of thing it is |
 | `Tap a saved bookmark to play from that point.` |  |
 
+## Settings › Loudness analysis
+
+| String | What it is |
+| --- | --- |
+| `A loudness analysis is already running` |  |
+| `Album loudness exceeds the analysis budget` |  |
+| `Analysis cache cleared` |  |
+| `Analysis pauses when the app leaves the foreground. Existing file tags and the current track volume are preserved.` |  |
+| `Analysis saved. Results are used when playback starts again; the current track volume stays stable.` |  |
+| `Analyze current track` |  |
+| `Analyze missing loudness while using the app` |  |
+| `Analyze the full current album` |  |
+| `Automatic` | A value of `Normalize volume`: let the app decide between per track and per album |
+| `By album` | Volume normalization (ReplayGain) mode: even out loudness album by album |
+| `By track` | Volume normalization (ReplayGain) mode: even out loudness track by track |
+| `Cancel analysis` |  |
+| `Choose between one and 200 tracks` |  |
+| `Choose tracks from one album` |  |
+| `Clear loudness analysis cache` |  |
+| `Download the audio or choose a local file first` |  |
+| `Invalid loudness energy` |  |
+| `Invalid or excessive album loudness data` |  |
+| `Local audio is unavailable` |  |
+| `Local audio owner changed` |  |
+| `Local loudness analysis` |  |
+| `Loudness analysis canceled` |  |
+| `Loudness analysis did not complete` |  |
+| `Loudness analysis failed` |  |
+| `Normalize volume` |  |
+| `On` | An enabled switch, shown in the readable summary of glass parameters |
+| `The local audio changed during analysis` |  |
+| `The local file identity could not be verified` |  |
+| `Use existing ReplayGain tags first. For music without tags, analyze downloaded or local audio and cache the result. No audio is uploaded or downloaded by this tool.` |  |
+
 ## Settings › Lyric fonts
 
 | String | What it is |
@@ -1581,6 +1943,7 @@ you are actually typing into, which is easier than reading it here.
 | `Local TTML file` |  |
 | `LRCLIB` |  |
 | `Lyric source saved for this song` |  |
+| `Metadata provider` |  |
 | `No cached lyric candidates yet. Refresh sources or search LRCLIB.` |  |
 | `Offline: saved and local sources are available. Online lookup is disabled.` |  |
 | `Original and romanization` |  |
@@ -1601,6 +1964,7 @@ you are actually typing into, which is easier than reading it here.
 
 | String | What it is |
 | --- | --- |
+| `Align lyric words` |  |
 | `Could not save lyric timing` |  |
 | `Edit and export lyrics` |  |
 | `Lyric fonts` |  |
@@ -1609,6 +1973,7 @@ you are actually typing into, which is easier than reading it here.
 | `Lyric timing could not be loaded. Your saved values have not been changed.` |  |
 | `Lyrics tools` |  |
 | `Negative values show lyrics earlier; positive values show them later. Saved for this song only.` | The line under “Lyric timing”, explaining it |
+| `Offline lyric translation` |  |
 | `Original lyric files and downloaded copies stay unchanged.` |  |
 | `Preview lyrics` |  |
 | `Reset this song timing` |  |
@@ -1703,7 +2068,9 @@ you are actually typing into, which is easier than reading it here.
 
 | String | What it is |
 | --- | --- |
+| `A–B repeat` |  |
 | `Backup and transfer` |  |
+| `CUE virtual tracks` |  |
 | `Discover internet radio` |  |
 | `Discovery and organization` |  |
 | `Edit song metadata and export or edit lyrics from a song’s menu.` |  |
@@ -1712,14 +2079,18 @@ you are actually typing into, which is easier than reading it here.
 | `Listening scenes` |  |
 | `Listening sessions, groups and chapters` |  |
 | `Local edits and artist aliases` |  |
+| `Local loudness analysis` |  |
+| `Local podcasts` |  |
 | `Lyric language fonts` |  |
 | `Media folders and tags` |  |
+| `Metadata centre` |  |
 | `Music tools and customization` |  |
 | `Pending favorites and ratings` |  |
 | `Personal backup and restore` |  |
 | `Pinyin library search` |  |
 | `Playback and lyrics` |  |
 | `Playlist recovery` |  |
+| `Recently deleted` |  |
 | `Wi-Fi music transfer` |  |
 
 ## Settings › Navigation bar
@@ -1770,9 +2141,11 @@ you are actually typing into, which is easier than reading it here.
 | String | What it is |
 | --- | --- |
 | `{matched} matched, {unmatched} need review` |  |
+| `{n} artwork files omitted from backup` |  |
 | `{n} playlists` |  |
 | `{n} rating conflicts` |  |
 | `Apply restore` |  |
+| `Audio URLs are not supported in local podcast backups` |  |
 | `Back up favorites, ratings, your playlists, bookmarks, lyric edits, listening history and appearance. Music files and account passwords are excluded.` |  |
 | `Backup exported` |  |
 | `Cancelled. Completed changes remain.` |  |
@@ -1780,17 +2153,22 @@ you are actually typing into, which is easier than reading it here.
 | `Existing playlists stay intact. Missing tracks remain as placeholders in restored playlists; ambiguous versions wait for your choice.` |  |
 | `Export personal backup` |  |
 | `If interrupted, completed changes remain. Reopen the backup to continue.` |  |
+| `Invalid local podcast backup` |  |
 | `Keep as missing track` |  |
+| `Large or unavailable images can be selected again after restore.` |  |
+| `Local podcast profile changed` |  |
 | `Matching library` |  |
 | `Merge favorites, ratings and new playlists` |  |
 | `Personal backup and restore` |  |
 | `Reading library metadata` |  |
+| `Reading local metadata and artwork` |  |
 | `Reading personal settings` |  |
 | `Reading playlists` |  |
 | `Replace conflicting ratings` |  |
 | `Restore appearance and glass settings` |  |
 | `Restore completed: {n} actions` |  |
 | `Restore local edits, bookmarks and history` |  |
+| `Restore local podcast progress only to the same library source` |  |
 | `Restore preview` |  |
 | `Restoring personal data` |  |
 | `This is a different library. ID-based local edits, sessions and bookmarks will not be applied. Songs are matched by metadata.` |  |
@@ -2085,6 +2463,29 @@ you are actually typing into, which is easier than reading it here.
 | `Size` | The size of the quick grid tiles |
 | `Sources` | Which shortcuts the quick grid shows |
 
+## Settings › Recently deleted
+
+| String | What it is |
+| --- | --- |
+| `Could not complete this action. The recovery copy has been kept.` |  |
+| `Could not load recently deleted. Tap to retry.` |  |
+| `Delete permanently` |  |
+| `Deletion was not confirmed. The original item may still exist; restoring creates a separate copy.` |  |
+| `Empty recently deleted` |  |
+| `No recently deleted items` |  |
+| `Permanently delete?` |  |
+| `Permanently deleted` |  |
+| `Recently deleted` |  |
+| `Recover playlists, smart playlists and custom scraper configurations deleted in this App. Audio files are never deleted here. Restoring a server playlist creates a new playlist.` |  |
+| `Recovery copies stay in this profile until you permanently delete them. Credentials are not included in scraper recovery copies.` |  |
+| `Restore` | Restore settings to their defaults |
+| `Restore as a new item?` |  |
+| `Restored as a new item` |  |
+| `Scraper configuration` |  |
+| `Smart playlist` |  |
+| `The existing library is not overwritten. A server playlist will be recreated with a new ID.` |  |
+| `This removes the recovery copy only and cannot be undone. Audio files and server music are not changed.` |  |
+
 ## Settings › Scrobbling
 
 | String | What it is |
@@ -2170,42 +2571,72 @@ you are actually typing into, which is easier than reading it here.
 
 | String | What it is |
 | --- | --- |
+| `Add condition` |  |
+| `Add condition group` |  |
 | `Added within` |  |
+| `Added within days` |  |
+| `Advanced condition groups` |  |
+| `AND — all conditions` |  |
+| `AND — match every group` |  |
 | `Any` | One of the values of “Minimum rating” |
 | `Any time` | One of the values of “Added within” |
 | `Artist contains` |  |
+| `At least` | One of the values of “Condition {n}” |
+| `At most` |  |
+| `Basic filters are combined with these groups using AND. Inside and between groups, choose AND or OR. Up to 8 groups and 12 conditions per group.` |  |
+| `Basic filters use AND. Advanced groups support AND and OR. Rules are saved only for this profile and do not alter server playlists.` |  |
+| `Between groups` |  |
+| `Comparison` |  |
+| `Condition {n}` |  |
+| `Condition group {n}` |  |
+| `Condition number` |  |
+| `Condition text` |  |
+| `Contains` | One of the values of “Condition {n}” |
 | `Could not load smart playlists` |  |
 | `Could not read the music catalogue. Try refreshing.` |  |
 | `Could not save smart playlist` |  |
 | `Delete rule` |  |
+| `Does not contain` |  |
 | `Enter a name and valid year range` |  |
+| `Equals` |  |
+| `Favorite` | One of the values of “Buttons next to play” |
 | `Favorites only` |  |
 | `From year` |  |
+| `Genre` | Label of a field in the song information sheet |
 | `Genre contains` |  |
 | `Last 30 days` |  |
 | `Last 365 days` |  |
 | `Last 7 days` | One of the values of “Report period” |
 | `Last 90 days` |  |
+| `Matches` |  |
 | `Matching songs: {n}` |  |
 | `Minimum rating` |  |
 | `Missing year or added-date tags cannot match those filters.` |  |
 | `Most played` | Sorted by how many times they were played |
+| `Moved to recently deleted` |  |
 | `New smart playlist` | One of the values of “Saved smart playlists” |
 | `No recorded plays` |  |
 | `No songs match these rules` |  |
+| `Not a favorite` |  |
 | `Offline rules use the music available in this profile.` |  |
+| `OR — any condition` |  |
+| `OR — match any group` |  |
+| `Play count` |  |
+| `Rating` | The stars given to the song. Not a bitrate, not a review |
 | `Recently added` | A sort order, and a section: newest first (in Favorites, last favorited first) |
 | `Refresh library` |  |
+| `Release year` |  |
+| `Remove condition` |  |
+| `Remove group` |  |
 | `Result limit` |  |
-| `Rules are combined with AND and saved only for this profile. They do not alter server playlists.` |  |
 | `Save rule` |  |
 | `Saved smart playlists` |  |
-| `Smart playlist removed` |  |
 | `Smart playlist saved` |  |
 | `Smart playlists` |  |
 | `Through year` |  |
 | `Title` | One of the values of “Sort by” |
 | `Waiting for favorites` |  |
+| `Within this group` |  |
 
 ## Settings › Song lists
 
@@ -2281,7 +2712,6 @@ you are actually typing into, which is easier than reading it here.
 | String | What it is |
 | --- | --- |
 | `Could not save local corrections. Existing values were kept.` |  |
-| `Disc number` |  |
 | `Local metadata saved` |  |
 | `Local song corrections` |  |
 | `Original` | Quality option: the file exactly as it is on the server, nothing transcoded. It also appears in quotes inside two descriptions on those screens, so use the same wording in all three |
@@ -2290,7 +2720,6 @@ you are actually typing into, which is easier than reading it here.
 | `Restore original metadata` |  |
 | `Save local corrections` |  |
 | `These display corrections stay on this device. Song IDs, audio files, server tags and download identities stay unchanged.` |  |
-| `Track number` |  |
 | `Use whole non-negative numbers for year, track and disc.` |  |
 
 ## Widget listening
@@ -2320,6 +2749,7 @@ you are actually typing into, which is easier than reading it here.
 | `{songs} need about {size}, but only {free} is free. The download may stop partway.` | The same line when the phone is nearly full |
 | `{songs} will be saved to this device (about {size}).` | The same line when the size is known. `{size}` is like "340 MB" |
 | `{songs} will be saved to this device.` | The line under that title. `{songs}` is already worded and inflected, "12 songs" |
+| `A CUE import or cleanup is in progress. Try again when it finishes.` |  |
 | `Add missing songs or remove all matching entries from a selected playlist.` |  |
 | `Add podcast` |  |
 | `Add to a playlist` | Menu action: put this song, album or selection into a playlist |
@@ -2329,19 +2759,25 @@ you are actually typing into, which is easier than reading it here.
 | `Added to queue` | The toast that says it worked |
 | `Album` | In search results, the little word under a result saying what kind of thing it is |
 | `Albums` | A heading over a list of them, never a count |
+| `All` |  |
 | `All episodes marked as played.` |  |
 | `Alphabetical` | Sort option: the order of a list |
 | `Artist` | In search results, the little word under a result saying what kind of thing it is |
+| `Artwork` |  |
 | `Ascending` | Sort option: the order of a list |
 | `Back` | Screen reader label for the back arrow. A direction, not a verb |
 | `Cancel` | The button that closes a dialog without doing anything, and the one beside a search box |
+| `Cancel request` |  |
+| `cancelled` |  |
 | `Casual` | The informal handwritten-style system typeface option in Settings › Font |
+| `Check this recording` |  |
 | `Choose a match or skip` |  |
 | `Choose a song first to use lyrics tools.` |  |
 | `Clear` | Read out by the screen reader for the small x that empties a search box. A verb |
 | `Clear all` | Throw away the whole list: the history, the queue, or what you searched for |
 | `Close` | Read out by the screen reader for a button that closes what is open. A verb |
 | `Columns` | The same menu's title on a screen that has no list to switch to, so all it chooses is the density |
+| `completed` |  |
 | `Condensed` | A narrow typeface option in Settings › Font, not a condensed list layout |
 | `Connect to the server before scanning or backing up the whole library.` |  |
 | `Connect to Wi-Fi to download` | Toast: downloading over mobile data is turned off in the settings |
@@ -2358,12 +2794,16 @@ you are actually typing into, which is easier than reading it here.
 | `Couldn't save podcast settings.` |  |
 | `Create` | The confirm button of the new-playlist dialog. A verb |
 | `Created playlist not found` |  |
+| `CUE audio is being cleared` |  |
+| `CUE audio is being cleared. Try again when clearing finishes.` |  |
 | `Default` | Sorting pill: what you get when nothing is sorted, which is the order the server keeps its songs in. Not alphabetical, and not Resonus deciding. On a playlist it is the order the list came in, which is the one you made by dragging the songs if it is an ordinary playlist and the one its rules produced if it is a smart one — hence a word that is true of both rather than "custom" or "pre-defined" |
 | `Delete` | The confirm button of a delete dialog, for a playlist or a radio station |
 | `Delete downloaded episodes` |  |
 | `Delete downloads` | Menu action: delete the downloaded files of everything here |
 | `Descending` | Sort option: the order of a list |
 | `Direction` | Sort sheet: the ascending vs descending toggle. Not a compass direction |
+| `Disc number` |  |
+| `done` |  |
 | `Done` | The button that leaves drag-to-reorder, or accepts a fine-tuned number |
 | `Download` | The confirm button of the download dialog, and what the screen reader calls the download button. A verb |
 | `Download “{name}”?` | Dialog title. `{name}` is an album, artist or playlist |
@@ -2374,10 +2814,12 @@ you are actually typing into, which is easier than reading it here.
 | `Downloading…` | Toast: the download has started. The songs arrive one by one after this |
 | `Drag to reorder, toggle to show or hide.` |  |
 | `Enable all server libraries before a complete backup or missing-track scan.` |  |
+| `English` |  |
 | `Episode details` |  |
 | `Episode notes` |  |
 | `Export` | Get the downloaded file itself out of the app, as a file. Not the same as `Share`, which makes a link on the server |
 | `Exporting…` | The file is being copied out |
+| `failed` |  |
 | `Favorites` | The songs, albums and artists you starred |
 | `Find in playlist` | Placeholder of the search box hidden above a tracklist, for finding a song within it |
 | `Hold to go back to {tab}` | The hint on holding the back arrow. `{tab}` is Home, Search or Library |
@@ -2386,6 +2828,7 @@ you are actually typing into, which is easier than reading it here.
 | `Library changed. Reopen this page.` |  |
 | `List` | An option in that menu: one row per item, instead of cards |
 | `Loading…` |  |
+| `Local metadata changed. Review again.` |  |
 | `Lost the connection to {name}` |  |
 | `Lyric sources` |  |
 | `Lyrics` | The words of the song. Also a line of the storage bar, where it is their size on the phone |
@@ -2413,6 +2856,8 @@ you are actually typing into, which is easier than reading it here.
 | `Open website` |  |
 | `Output device` |  |
 | `Pause` | Read out by the screen reader for the pause button. A verb |
+| `paused` |  |
+| `pending` |  |
 | `Pink` |  |
 | `Play` | Read out by the screen reader for the play button. A verb |
 | `Play next` | Action: put this song right after the one playing, without clearing the rest |
@@ -2424,12 +2869,14 @@ you are actually typing into, which is easier than reading it here.
 | `Playlist name` | The name field when making or renaming a playlist |
 | `Playlists` | A section on Home and in the library, and a folder in the car |
 | `Podcast settings` |  |
+| `Podcasts` |  |
 | `Previous` | Player control: the previous track (accessibility label) |
 | `Queue` | The list of songs waiting to play. Not a playlist |
 | `Radio` | Internet radio stations. Most languages keep the word |
 | `Rate {n} stars` | Read out by the screen reader for each star. `{n}` is which star it is |
 | `Read-only playlist` |  |
 | `Reading library: {n} songs` |  |
+| `Recording matches` |  |
 | `Refresh` | Ask the server for this playlist again, in case it changed elsewhere. Also the button under suggested tracks to regenerate them |
 | `Remove` | Take something out of a list. Deleting for good is `Delete` |
 | `Remove “{name}” and its episodes from this device?` |  |
@@ -2441,6 +2888,7 @@ you are actually typing into, which is easier than reading it here.
 | `Reorder` | Enter drag-to-reorder mode |
 | `Restore defaults` | Button at the end of the `Scrobbling` screen, putting both rules back to what they came as |
 | `Retry` | The button on an error message: try again. A verb |
+| `running` |  |
 | `Save` | The confirm button of an edit sheet. A verb |
 | `Saving…` |  |
 | `Search` | The search tab, and the action of searching |
@@ -2470,12 +2918,14 @@ you are actually typing into, which is easier than reading it here.
 | `The server did not return a link` |  |
 | `This playlist cannot be edited.` |  |
 | `This song can't be cast` | Toast: the speaker or TV will not take this file |
+| `Track number` |  |
 | `Turn off` | Turn off the sleep timer |
 | `Undo` | The button in a toast that takes back what just happened. It is there for a few seconds |
 | `Unexpected server response` |  |
 | `Unknown album` | Fallback when the file and the server have no album |
 | `Unknown artist` | Fallback when the file and the server have no artist |
 | `Unsubscribe` |  |
+| `Untitled` |  |
 | `View` | Title of the menu that chooses how a collection is drawn, and the label of the button that opens it. A noun: what you are looking at, not the verb |
 | `View cover` | The same as `View image`, for album and playlist artwork |
 | `When the episode ends` |  |
