@@ -19,3 +19,7 @@ java -cp "$LIB" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflec
  "$ROOT/modules/offline-translation/android/src/main/java/expo/modules/offlinetranslation/TranslationWorkGate.kt" \
  "$ROOT/modules/offline-translation/android/src/test/java/expo/modules/offlinetranslation/TranslationWorkGateTest.kt"
 java -Xmx128m -cp "$OUT:$LIB" org.junit.runner.JUnitCore expo.modules.metadatascript.ScriptEngineTest expo.modules.metadatascript.ParserResourcesTest expo.modules.offlinetranslation.TranslationWorkGateTest
+# The platform loader has desktop modules on a Mac. Deny them explicitly in a
+# separate loader, then repeat with Rhino's entire optional optimizer absent.
+javac -d "$OUT" "$ROOT/modules/metadata-script/tests/RestrictedAndroidClassLoader.java"
+java -Xmx128m -cp "$OUT" RestrictedAndroidClassLoader "$OUT:$LIB"
