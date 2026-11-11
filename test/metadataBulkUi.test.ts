@@ -61,6 +61,27 @@ function harness(params: Record<string, string> = {}, task = false) {
   };
   const useStore = Object.assign(() => React.useSyncExternalStore((listener) => { storeListeners.add(listener); return () => { storeListeners.delete(listener); }; }, () => state), { getState: () => state });
   const useAuth = (select: (value: typeof auth) => unknown) => React.useSyncExternalStore((listener) => { authListeners.add(listener); return () => { authListeners.delete(listener); }; }, () => select(auth));
+  const dockEvents: any[] = [], animatedScrollBindings: object[] = [];
+  // Reanimated's useEvent returns this object at runtime even though its
+  // exported TypeScript overload disguises it as an ordinary callback.
+  const dockHandler = { workletEventHandler: {
+    eventNames: ['onScroll', 'onScrollBeginDrag', 'onScrollEndDrag', 'onMomentumScrollEnd'],
+    worklet: (event: unknown) => { dockEvents.push(plain(event)); },
+  } };
+  const createAnimatedComponent = (Component: React.ComponentType<any>) => function AnimatedBoundary(props: any) {
+    const normalized = { ...props };
+    for (const value of Object.values(props)) {
+      const processed = value as typeof dockHandler | undefined;
+      if (!processed || typeof processed !== 'object' || !processed.workletEventHandler) continue;
+      animatedScrollBindings.push(processed);
+      for (const name of processed.workletEventHandler.eventNames) {
+        // Stand in for native worklet registration/event delivery followed by
+        // Reanimated's callable host listener. Native drawing is not simulated.
+        normalized[name] = (event: { nativeEvent: object }) => processed.workletEventHandler.worklet({ ...event.nativeEvent, eventName: name });
+      }
+    }
+    return React.createElement(Component, normalized);
+  };
   function FlatList(props: any) {
     return React.createElement('List', props, props.ListHeaderComponent,
       props.data.map((item: any, index: number) => React.createElement(React.Fragment, { key: props.keyExtractor(item, index) }, props.renderItem({ item, index }))), props.ListFooterComponent);
@@ -68,11 +89,12 @@ function harness(params: Record<string, string> = {}, task = false) {
   const dependencies: Record<string, any> = {
     react: React, 'react/jsx-runtime': JSXRuntime,
     'react-native': { Text: 'Text', TextInput: 'Input', View: 'View', ActivityIndicator: 'Spinner', FlatList, Pressable: 'Pressable' },
+    'react-native-reanimated': { __esModule: true, default: { createAnimatedComponent } },
     'expo-image': { Image: 'Image' }, 'expo-router': { router: { push: (value: unknown) => routes.push(plain(value)) }, useLocalSearchParams: () => currentParams },
     '@/components/Icon': { __esModule: true, default: 'Icon' }, '@/components/glass': { GlassPressable: 'Button' },
     '@/components/SettingsUI': { SettingsPage: 'Page', SettingsGroup: 'Group', SettingRow: 'Row', SelectList: 'Select', SwitchList: 'Switches', settingsStyles: {} },
     '@/theme': { useTheme: () => palette, themed: (make: any) => make(palette), fontSize: { sm: 12, md: 16, lg: 20, xs: 10 }, spacing: { sm: 4, md: 8, lg: 12 } },
-    '@/hooks/useLiquidDock': { useLiquidDockScrollHandler: () => () => {} }, '@/hooks/useScreenBottomPadding': { useScreenBottomPadding: () => 160 },
+    '@/hooks/useLiquidDock': { useLiquidDockScrollHandler: () => dockHandler }, '@/hooks/useScreenBottomPadding': { useScreenBottomPadding: () => 160 },
     '@/i18n': { useT: () => translate }, '@/store/auth': { useAuthStore: useAuth }, '@/store/metadataBulk': { useMetadataBulk: useStore },
     '@/lib/metadata/repository': { metadataOperation }, '@/lib/metadata/models': { isMetadataCancelled: (error: unknown) => (error as Error)?.name === 'MetadataCancelled' },
     '@/lib/metadata/catalog': {
@@ -89,7 +111,7 @@ function harness(params: Record<string, string> = {}, task = false) {
   const UI = load('../src/components/metadata/MetadataUI.tsx', dependencies, timerBoundary);
   dependencies['@/components/metadata/MetadataUI'] = UI;
   const Screen = load(task ? '../src/app/metadata/bulk-task.tsx' : '../src/app/metadata/bulk.tsx', dependencies, timerBoundary).default;
-  return { Screen, UI, routes, starts, stops, resumes, pages, containers, taskReads, clears, targets,
+  return { Screen, UI, routes, starts, stops, resumes, pages, containers, taskReads, clears, targets, dockHandler, dockEvents, animatedScrollBindings,
     changeOwner: () => { epoch++; auth = { ...auth, auth: { username: epoch % 2 ? 'B' : 'A' } }; for (const listener of authListeners) listener(); },
     setParams: (value: typeof params) => { currentParams = value; },
     setSelected: (value: string[] | null) => { selected = value; },
@@ -260,4 +282,27 @@ test('task review callbacks retired by unmount cannot reopen a song editor', asy
   await act(async () => { root.unmount(); });
   await act(async () => { review(); });
   assert.equal(h.routes.length, 0); assert.equal(h.targets.length, 0);
+});
+
+test('setup and task lists normalize the real processed scroll object before the React Native event boundary', async () => {
+  for (const task of [false, true]) {
+    const h = harness(task ? { id: 'scroll-task' } : { kind: 'selected', selection: 'selected-key' }, task); let root!: ReactTestRenderer;
+    try {
+      await act(async () => { root = create(React.createElement(h.Screen)); });
+      assert.equal(typeof h.dockHandler, 'object');
+      assert.equal(typeof list(root).props.onScroll, 'function', 'a plain RN FlatList cannot call Reanimated processed handler objects');
+      assert.equal(h.animatedScrollBindings.includes(h.dockHandler), true, 'the dock handler must pass through Animated registration');
+      const event = { nativeEvent: { contentOffset: { x: 0, y: 210 }, contentSize: { width: 400, height: 3000 }, layoutMeasurement: { width: 400, height: 800 }, timestamp: 100 } };
+      await act(async () => {
+        // This is what RN ScrollView._handleScroll does on the first real drag.
+        assert.doesNotThrow(() => list(root).props.onScroll(event));
+        assert.doesNotThrow(() => list(root).props.onScrollBeginDrag(event));
+        assert.doesNotThrow(() => list(root).props.onScrollEndDrag(event));
+      });
+      assert.deepEqual(h.dockEvents.map((value) => value.eventName), ['onScroll', 'onScrollBeginDrag', 'onScrollEndDrag']);
+      assert.equal(h.dockEvents[0].contentOffset.y, 210);
+      assert.equal(list(root).props.scrollEventThrottle, 16);
+      assert.equal(h.starts.length, 0); assert.equal(h.stops.length, 0); assert.equal(h.resumes.length, 0);
+    } finally { await act(async () => root?.unmount()); }
+  }
 });

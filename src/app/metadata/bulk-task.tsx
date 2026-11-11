@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import { SettingsPage } from '@/components/SettingsUI';
 import { MetadataButton, metadataStyles } from '@/components/metadata/MetadataUI';
@@ -14,6 +15,8 @@ import { openMetadataTarget } from '@/store/metadataScraping';
 import { spacing, useTheme } from '@/theme';
 
 type Item = Awaited<ReturnType<typeof readBulkJobItems>>[number];
+// Match the animated dock handler's native event registration contract.
+const AnimatedList = Animated.createAnimatedComponent(FlatList<Item>);
 const PAGE = 25;
 export default function BulkMetadataTaskScreen() {
   const params = useLocalSearchParams<{ id?: string }>(), id = Array.isArray(params.id) ? params.id[0] : params.id;
@@ -54,7 +57,7 @@ function BulkMetadataTask({ id }: { id?: string }) {
   }
   const counts = job?.counts;
   return <SettingsPage title={t('Bulk metadata task')}>
-    <FlatList<Item> data={active ? items : []} keyExtractor={(item) => item.song.id} onScroll={onScroll} scrollEventThrottle={16}
+    <AnimatedList data={active ? items : []} keyExtractor={(item) => item.song.id} onScroll={onScroll} scrollEventThrottle={16}
       initialNumToRender={10} maxToRenderPerBatch={8} windowSize={5} contentContainerStyle={{ padding: spacing.lg, paddingBottom: bottom }}
       ListHeaderComponent={<View style={{ gap: spacing.sm }}>
         {!active ? <Text style={metadataStyles.note}>{t('The music source changed. Reopen this page to choose songs again.')}</Text> : !job || !counts ? <>

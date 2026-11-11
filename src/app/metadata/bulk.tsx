@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { router, useLocalSearchParams } from 'expo-router';
 import type { Song } from '@/api/subsonic';
 import Icon from '@/components/Icon';
@@ -19,6 +20,8 @@ import { fontSize, spacing, themed, useTheme } from '@/theme';
 type Mode = 'all' | 'missing' | 'manual' | 'album' | 'artist' | 'playlist';
 type Container = { id: string; name: string; subtitle?: string; coverArt?: string };
 type Row = { kind: 'song'; song: Song } | { kind: 'container'; item: Container };
+// The dock returns a Reanimated event handler, which a plain FlatList cannot dispatch.
+const AnimatedList = Animated.createAnimatedComponent(FlatList<Row>);
 const DEFAULT_FIELDS: ScrapeField[] = ['title', 'artist', 'albumArtist', 'album', 'year', 'genres', 'track', 'discNumber'];
 const first = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] : value;
 
@@ -97,7 +100,7 @@ function BulkMetadataSetup({ initialKind, initialId, initialTitle, selectionKey 
   const visible = mode === 'manual' || selectContainer ? rows : rows.slice(0, 7);
   const startButton = <MetadataButton title={starting ? t('Preparing metadata task…') : mode === 'manual' ? t('Scrape {n} selected songs', { n: selected.size }) : t('Start scraping')} disabled={!canStart} onPress={() => { void start(); }} />;
   return <SettingsPage title={t('Batch scrape metadata')}>
-    <FlatList<Row> data={active ? visible : []} keyExtractor={(row) => row.kind === 'song' ? row.song.id : row.item.id}
+    <AnimatedList data={active ? visible : []} keyExtractor={(row) => row.kind === 'song' ? row.song.id : row.item.id}
       onScroll={onScroll} scrollEventThrottle={16} initialNumToRender={10} maxToRenderPerBatch={8} windowSize={5} keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: bottom + spacing.lg }}
       onEndReached={() => { if (mode === 'manual' || selectContainer) void loadPage(false); }} onEndReachedThreshold={0.4}
