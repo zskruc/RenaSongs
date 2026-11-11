@@ -114,20 +114,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Measure performance"
   },
   {
-    "id": "/settings/about#Diagnostics",
-    "route": "/settings/about",
-    "title": "Diagnostics",
-    "chinese": "诊断",
-    "section": "About & diagnostics",
-    "breadcrumbs": [
-      "About & diagnostics"
-    ],
-    "aliases": [
-      "关于与诊断"
-    ],
-    "anchor": "Diagnostics"
-  },
-  {
     "id": "/settings/about#Share diagnostic report",
     "route": "/settings/about",
     "title": "Share diagnostic report",
@@ -232,7 +218,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "下载与存储",
-      "已缓存歌曲"
+      "已缓存歌曲",
+      "Cached songs",
+      "下载与离线"
+    ],
+    "legacyIds": [
+      "/settings/downloads#Cached songs"
     ]
   },
   {
@@ -247,7 +238,14 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播客与长音频",
-      "本机章节"
+      "本机章节",
+      "Local chapters",
+      "收听工具",
+      "Listening sessions",
+      "收听状态"
+    ],
+    "legacyIds": [
+      "/settings/listening-tools#Local chapters"
     ]
   },
   {
@@ -371,7 +369,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "关于与诊断",
-      "诊断"
+      "诊断",
+      "Diagnostics"
+    ],
+    "legacyIds": [
+      "/settings/about#Diagnostics"
     ]
   },
   {
@@ -419,29 +421,16 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "aliases": [
       "外观与布局",
       "搜索结果布局",
+      "Search result layout",
+      "首页与浏览",
       "Home and search layouts",
       "首页与搜索布局"
     ],
     "legacyIds": [
+      "/settings/home-layout#Search result layout",
       "/settings/music-tools#Home and search layouts",
       "/settings/personalization#Home and search layouts"
     ]
-  },
-  {
-    "id": "/settings/discovery-layout#Music search index",
-    "route": "/settings/discovery-layout",
-    "title": "Music search index",
-    "chinese": "音乐搜索索引",
-    "section": "Search result layout",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Search result layout"
-    ],
-    "aliases": [
-      "外观与布局",
-      "搜索结果布局"
-    ],
-    "anchor": "Music search index"
   },
   {
     "id": "/settings/download-manager",
@@ -455,7 +444,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "下载与存储",
-      "下载管理"
+      "下载管理",
+      "Download manager",
+      "下载与离线"
+    ],
+    "legacyIds": [
+      "/settings/downloads#Download manager"
     ]
   },
   {
@@ -520,38 +514,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "下载与存储",
       "下载与离线"
     ]
-  },
-  {
-    "id": "/settings/downloads#Download manager",
-    "route": "/settings/downloads",
-    "title": "Download manager",
-    "chinese": "下载管理",
-    "section": "Downloads & offline",
-    "breadcrumbs": [
-      "Downloads & storage",
-      "Downloads & offline"
-    ],
-    "aliases": [
-      "下载与存储",
-      "下载与离线"
-    ],
-    "anchor": "Download manager"
-  },
-  {
-    "id": "/settings/downloads#Bulk artwork & lyrics",
-    "route": "/settings/downloads",
-    "title": "Bulk artwork & lyrics",
-    "chinese": "批量缓存封面与歌词",
-    "section": "Downloads & offline",
-    "breadcrumbs": [
-      "Downloads & storage",
-      "Downloads & offline"
-    ],
-    "aliases": [
-      "下载与存储",
-      "下载与离线"
-    ],
-    "anchor": "Bulk artwork & lyrics"
   },
   {
     "id": "/settings/downloads#Download quality",
@@ -670,22 +632,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Cache size"
   },
   {
-    "id": "/settings/downloads#Cached songs",
-    "route": "/settings/downloads",
-    "title": "Cached songs",
-    "chinese": "已缓存歌曲",
-    "section": "Downloads & offline",
-    "breadcrumbs": [
-      "Downloads & storage",
-      "Downloads & offline"
-    ],
-    "aliases": [
-      "下载与存储",
-      "下载与离线"
-    ],
-    "anchor": "Cached songs"
-  },
-  {
     "id": "/settings/downloads#Automatic offline mode",
     "route": "/settings/downloads",
     "title": "Automatic offline mode",
@@ -766,7 +712,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "均衡器"
+      "均衡器",
+      "Equalizer"
+    ],
+    "legacyIds": [
+      "/settings/playback#Equalizer"
     ]
   },
   {
@@ -831,7 +781,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "探索版块"
+      "探索版块",
+      "Explore sections",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Explore sections",
+      "/settings/personalization#Explore sections"
     ]
   },
   {
@@ -846,7 +802,16 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "字体"
+      "字体",
+      "Import app font",
+      "导入 App 字体",
+      "播放器与歌词",
+      "歌词字体",
+      "Font"
+    ],
+    "legacyIds": [
+      "/settings/lyric-fonts#Import app font",
+      "/settings/personalization#Font"
     ]
   },
   {
@@ -877,7 +842,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "玻璃调节室"
+      "玻璃调节室",
+      "Glass tuning"
+    ],
+    "legacyIds": [
+      "/settings/personalization#Glass tuning"
     ]
   },
   {
@@ -988,7 +957,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "问候语"
+      "问候语",
+      "Greeting",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Greeting",
+      "/settings/personalization#Greeting"
     ]
   },
   {
@@ -1035,7 +1010,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "首页按钮"
+      "首页按钮",
+      "Home buttons",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Home buttons",
+      "/settings/personalization#Home buttons"
     ]
   },
   {
@@ -1050,7 +1031,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "首页标签"
+      "首页标签",
+      "Home chips",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Home chips",
+      "/settings/personalization#Home chips"
     ]
   },
   {
@@ -1097,133 +1084,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "首页与浏览"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Home title",
-    "route": "/settings/home-layout",
-    "title": "Home title",
-    "chinese": "首页标题",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
+      "首页与浏览",
       "Home & browsing"
     ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Home title",
-      "首页标题"
-    ],
-    "anchor": "Home title",
     "legacyIds": [
-      "/settings/personalization#Home title"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Greeting",
-    "route": "/settings/home-layout",
-    "title": "Greeting",
-    "chinese": "问候语",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Greeting",
-      "问候语"
-    ],
-    "anchor": "Greeting",
-    "legacyIds": [
-      "/settings/personalization#Greeting"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Home sections",
-    "route": "/settings/home-layout",
-    "title": "Home sections",
-    "chinese": "首页版块",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Home sections",
-      "首页版块"
-    ],
-    "anchor": "Home sections",
-    "legacyIds": [
-      "/settings/personalization#Home sections"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Home buttons",
-    "route": "/settings/home-layout",
-    "title": "Home buttons",
-    "chinese": "首页按钮",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Home buttons",
-      "首页按钮"
-    ],
-    "anchor": "Home buttons",
-    "legacyIds": [
-      "/settings/personalization#Home buttons"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Quick grid",
-    "route": "/settings/home-layout",
-    "title": "Quick grid",
-    "chinese": "快捷网格",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Quick grid",
-      "快捷网格"
-    ],
-    "anchor": "Quick grid",
-    "legacyIds": [
-      "/settings/personalization#Quick grid"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Home chips",
-    "route": "/settings/home-layout",
-    "title": "Home chips",
-    "chinese": "首页标签",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Home chips",
-      "首页标签"
-    ],
-    "anchor": "Home chips",
-    "legacyIds": [
-      "/settings/personalization#Home chips"
+      "/settings/personalization#Home & browsing"
     ]
   },
   {
@@ -1245,64 +1110,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Playing on other devices",
     "legacyIds": [
       "/settings/personalization#Playing on other devices"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Explore sections",
-    "route": "/settings/home-layout",
-    "title": "Explore sections",
-    "chinese": "探索版块",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Explore sections",
-      "探索版块"
-    ],
-    "anchor": "Explore sections",
-    "legacyIds": [
-      "/settings/personalization#Explore sections"
-    ]
-  },
-  {
-    "id": "/settings/home-layout#Search result layout",
-    "route": "/settings/home-layout",
-    "title": "Search result layout",
-    "chinese": "搜索结果布局",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览"
-    ],
-    "anchor": "Search result layout"
-  },
-  {
-    "id": "/settings/home-layout#Your library chips",
-    "route": "/settings/home-layout",
-    "title": "Your library chips",
-    "chinese": "音乐库分类",
-    "section": "Home & browsing",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Home & browsing"
-    ],
-    "aliases": [
-      "外观与布局",
-      "首页与浏览",
-      "Your library chips",
-      "音乐库分类"
-    ],
-    "anchor": "Your library chips",
-    "legacyIds": [
-      "/settings/personalization#Your library chips"
     ]
   },
   {
@@ -1359,7 +1166,14 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "首页版块"
+      "首页版块",
+      "Home sections",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Home sections",
+      "/settings/discovery-layout#Home sections",
+      "/settings/personalization#Home sections"
     ]
   },
   {
@@ -1440,7 +1254,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "首页标题"
+      "首页标题",
+      "Home title",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Home title",
+      "/settings/personalization#Home title"
     ]
   },
   {
@@ -1491,6 +1311,7 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "Home screen widgets"
     ],
     "legacyIds": [
+      "/settings/personalization#Home screen widgets",
       "/settings/listening-tools#Home screen widgets",
       "/settings/music-tools#Home screen widgets"
     ]
@@ -1555,7 +1376,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "导航与手势"
+      "导航与手势",
+      "Navigation & gestures"
+    ],
+    "legacyIds": [
+      "/settings/personalization#Navigation & gestures"
     ]
   },
   {
@@ -1585,27 +1410,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Open the app on",
     "legacyIds": [
       "/settings/personalization#Open the app on"
-    ]
-  },
-  {
-    "id": "/settings/interface#Navigation bar",
-    "route": "/settings/interface",
-    "title": "Navigation bar",
-    "chinese": "导航栏",
-    "section": "Navigation & gestures",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Navigation & gestures"
-    ],
-    "aliases": [
-      "外观与布局",
-      "导航与手势",
-      "Navigation bar",
-      "导航栏"
-    ],
-    "anchor": "Navigation bar",
-    "legacyIds": [
-      "/settings/personalization#Navigation bar"
     ]
   },
   {
@@ -1746,7 +1550,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "语言"
+      "语言",
+      "Language"
+    ],
+    "legacyIds": [
+      "/settings/personalization#Language"
     ]
   },
   {
@@ -1777,7 +1585,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "音乐库分类"
+      "音乐库分类",
+      "Your library chips",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Your library chips",
+      "/settings/personalization#Your library chips"
     ]
   },
   {
@@ -2077,42 +1891,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Separate listening sessions"
   },
   {
-    "id": "/settings/listening-tools#Linked songs in shuffle",
-    "route": "/settings/listening-tools",
-    "title": "Linked songs in shuffle",
-    "chinese": "随机连播曲组",
-    "section": "Listening tools",
-    "breadcrumbs": [
-      "Podcasts & long audio",
-      "Listening tools"
-    ],
-    "aliases": [
-      "播客与长音频",
-      "收听工具",
-      "Listening sessions",
-      "收听状态"
-    ],
-    "anchor": "Linked songs in shuffle"
-  },
-  {
-    "id": "/settings/listening-tools#Local chapters",
-    "route": "/settings/listening-tools",
-    "title": "Local chapters",
-    "chinese": "本机章节",
-    "section": "Listening tools",
-    "breadcrumbs": [
-      "Podcasts & long audio",
-      "Listening tools"
-    ],
-    "aliases": [
-      "播客与长音频",
-      "收听工具",
-      "Listening sessions",
-      "收听状态"
-    ],
-    "anchor": "Local chapters"
-  },
-  {
     "id": "/settings/local-customizations",
     "route": "/settings/local-customizations",
     "title": "Local corrections",
@@ -2149,24 +1927,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "本机编辑与艺人别名"
     ],
     "anchor": "Correct current song metadata"
-  },
-  {
-    "id": "/settings/local-customizations#Lyric fonts",
-    "route": "/settings/local-customizations",
-    "title": "Lyric fonts",
-    "chinese": "歌词字体",
-    "section": "Local corrections",
-    "breadcrumbs": [
-      "Library & metadata",
-      "Local corrections"
-    ],
-    "aliases": [
-      "曲库与元数据",
-      "本机信息修正",
-      "Local edits and artist aliases",
-      "本机编辑与艺人别名"
-    ],
-    "anchor": "Lyric fonts"
   },
   {
     "id": "/settings/local-customizations#Alias preview",
@@ -2494,7 +2254,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "本机响度分析"
+      "本机响度分析",
+      "Local loudness analysis"
+    ],
+    "legacyIds": [
+      "/settings/playback#Local loudness analysis"
     ]
   },
   {
@@ -2619,30 +2383,21 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "播放器与歌词",
       "歌词字体",
       "Lyric fonts",
+      "曲库与元数据",
+      "本机信息修正",
+      "Local edits and artist aliases",
+      "本机编辑与艺人别名",
+      "歌词",
       "Lyric language fonts",
       "按语言设置歌词字体"
     ],
     "legacyIds": [
+      "/settings/local-customizations#Lyric fonts",
+      "/settings/lyrics#Lyric fonts",
       "/settings/lyrics-tools#Lyric fonts",
       "/settings/music-tools#Lyric language fonts",
       "/settings/personalization#Lyric language fonts"
     ]
-  },
-  {
-    "id": "/settings/lyric-fonts#Import app font",
-    "route": "/settings/lyric-fonts",
-    "title": "Import app font",
-    "chinese": "导入 App 字体",
-    "section": "Lyric fonts",
-    "breadcrumbs": [
-      "Player & lyrics",
-      "Lyric fonts"
-    ],
-    "aliases": [
-      "播放器与歌词",
-      "歌词字体"
-    ],
-    "anchor": "Import app font"
   },
   {
     "id": "/settings/lyric-fonts#Restore default lyric fonts",
@@ -2688,7 +2443,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放器与歌词",
-      "歌词来源"
+      "歌词来源",
+      "Lyric sources",
+      "歌词"
+    ],
+    "legacyIds": [
+      "/settings/lyrics#Lyric sources"
     ]
   },
   {
@@ -2768,9 +2528,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "aliases": [
       "播放器与歌词",
       "歌词工具",
-      "Lyrics tools"
+      "Lyrics tools",
+      "歌词"
     ],
     "legacyIds": [
+      "/settings/lyrics#Lyrics tools",
       "/settings/player#Lyrics tools"
     ]
   },
@@ -2994,7 +2756,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放器与歌词",
-      "歌词"
+      "歌词",
+      "Lyrics"
+    ],
+    "legacyIds": [
+      "/settings/player#Lyrics"
     ]
   },
   {
@@ -3018,22 +2784,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "禁用在线搜索"
     ],
     "anchor": "Lyrics source"
-  },
-  {
-    "id": "/settings/lyrics#Lyric fonts",
-    "route": "/settings/lyrics",
-    "title": "Lyric fonts",
-    "chinese": "歌词字体",
-    "section": "Lyrics",
-    "breadcrumbs": [
-      "Player & lyrics",
-      "Lyrics"
-    ],
-    "aliases": [
-      "播放器与歌词",
-      "歌词"
-    ],
-    "anchor": "Lyric fonts"
   },
   {
     "id": "/settings/player#Lyrics size",
@@ -3172,38 +2922,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Lyrics card background"
   },
   {
-    "id": "/settings/lyrics#Lyric sources",
-    "route": "/settings/lyrics",
-    "title": "Lyric sources",
-    "chinese": "歌词来源",
-    "section": "Lyrics",
-    "breadcrumbs": [
-      "Player & lyrics",
-      "Lyrics"
-    ],
-    "aliases": [
-      "播放器与歌词",
-      "歌词"
-    ],
-    "anchor": "Lyric sources"
-  },
-  {
-    "id": "/settings/lyrics#Lyrics tools",
-    "route": "/settings/lyrics",
-    "title": "Lyrics tools",
-    "chinese": "歌词工具",
-    "section": "Lyrics",
-    "breadcrumbs": [
-      "Player & lyrics",
-      "Lyrics"
-    ],
-    "aliases": [
-      "播放器与歌词",
-      "歌词"
-    ],
-    "anchor": "Lyrics tools"
-  },
-  {
     "id": "/settings/media-cache",
     "route": "/settings/media-cache",
     "title": "Bulk artwork & lyrics",
@@ -3215,7 +2933,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "下载与存储",
-      "批量缓存封面与歌词"
+      "批量缓存封面与歌词",
+      "Bulk artwork & lyrics",
+      "下载与离线"
+    ],
+    "legacyIds": [
+      "/settings/downloads#Bulk artwork & lyrics"
     ]
   },
   {
@@ -3327,10 +3050,19 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "aliases": [
       "曲库与元数据",
       "音乐搜索索引",
+      "Music search index",
+      "外观与布局",
+      "搜索结果布局",
+      "播客与长音频",
+      "想听什么",
+      "Listening scenes",
+      "听歌情景",
       "Pinyin library search",
       "曲库拼音搜索"
     ],
     "legacyIds": [
+      "/settings/discovery-layout#Music search index",
+      "/listening-intents#Music search index",
       "/settings/music-tools#Pinyin library search"
     ]
   },
@@ -3391,7 +3123,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "导航栏"
+      "导航栏",
+      "Navigation bar",
+      "导航与手势"
+    ],
+    "legacyIds": [
+      "/settings/interface#Navigation bar",
+      "/settings/personalization#Navigation bar"
     ]
   },
   {
@@ -3450,7 +3188,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "页面布局"
+      "页面布局",
+      "Page layouts"
+    ],
+    "legacyIds": [
+      "/settings/personalization#Page layouts"
     ]
   },
   {
@@ -3553,27 +3295,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Cover corners",
     "legacyIds": [
       "/settings/personalization#Cover corners"
-    ]
-  },
-  {
-    "id": "/settings/page-layouts#Song lists",
-    "route": "/settings/page-layouts",
-    "title": "Song lists",
-    "chinese": "歌曲列表",
-    "section": "Page layouts",
-    "breadcrumbs": [
-      "Appearance & layout",
-      "Page layouts"
-    ],
-    "aliases": [
-      "外观与布局",
-      "页面布局",
-      "Song lists",
-      "歌曲列表"
-    ],
-    "anchor": "Song lists",
-    "legacyIds": [
-      "/settings/personalization#Song lists"
     ]
   },
   {
@@ -3763,118 +3484,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ]
   },
   {
-    "id": "/settings/personalization#Theme",
-    "route": "/settings/personalization",
-    "title": "Theme",
-    "chinese": "主题",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Theme"
-  },
-  {
-    "id": "/settings/personalization#Glass tuning",
-    "route": "/settings/personalization",
-    "title": "Glass tuning",
-    "chinese": "玻璃调节室",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Glass tuning"
-  },
-  {
-    "id": "/settings/personalization#Font",
-    "route": "/settings/personalization",
-    "title": "Font",
-    "chinese": "字体",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Font"
-  },
-  {
-    "id": "/settings/personalization#Language",
-    "route": "/settings/personalization",
-    "title": "Language",
-    "chinese": "语言",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Language"
-  },
-  {
-    "id": "/settings/personalization#Page layouts",
-    "route": "/settings/personalization",
-    "title": "Page layouts",
-    "chinese": "页面布局",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Page layouts"
-  },
-  {
-    "id": "/settings/personalization#Home & browsing",
-    "route": "/settings/personalization",
-    "title": "Home & browsing",
-    "chinese": "首页与浏览",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Home & browsing"
-  },
-  {
-    "id": "/settings/personalization#Navigation & gestures",
-    "route": "/settings/personalization",
-    "title": "Navigation & gestures",
-    "chinese": "导航与手势",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Navigation & gestures"
-  },
-  {
-    "id": "/settings/personalization#Home screen widgets",
-    "route": "/settings/personalization",
-    "title": "Home screen widgets",
-    "chinese": "桌面小组件",
-    "section": "Appearance & layout",
-    "breadcrumbs": [
-      "Appearance & layout"
-    ],
-    "aliases": [
-      "外观与布局"
-    ],
-    "anchor": "Home screen widgets"
-  },
-  {
     "id": "/settings/playback",
     "route": "/settings/playback",
     "title": "Playback & sound",
@@ -3938,34 +3547,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Pre-amp"
   },
   {
-    "id": "/settings/playback#Equalizer",
-    "route": "/settings/playback",
-    "title": "Equalizer",
-    "chinese": "均衡器",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音"
-    ],
-    "anchor": "Equalizer"
-  },
-  {
-    "id": "/settings/playback#Local loudness analysis",
-    "route": "/settings/playback",
-    "title": "Local loudness analysis",
-    "chinese": "本机响度分析",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音"
-    ],
-    "anchor": "Local loudness analysis"
-  },
-  {
     "id": "/settings/playback#Autoplay",
     "route": "/settings/playback",
     "title": "Autoplay",
@@ -3992,86 +3573,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "播放与声音"
     ],
     "anchor": "Pick up the queue from other players"
-  },
-  {
-    "id": "/settings/playback#A–B repeat",
-    "route": "/settings/playback",
-    "title": "A–B repeat",
-    "chinese": "A–B 区间循环",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音"
-    ],
-    "anchor": "A–B repeat"
-  },
-  {
-    "id": "/settings/playback#Shuffle preference",
-    "route": "/settings/playback",
-    "title": "Shuffle preference",
-    "chinese": "随机播放偏好",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音",
-      "Shuffle preference",
-      "随机播放偏好"
-    ],
-    "anchor": "Shuffle preference",
-    "legacyIds": [
-      "/settings/player#Shuffle preference"
-    ]
-  },
-  {
-    "id": "/settings/playback#Linked songs in shuffle",
-    "route": "/settings/playback",
-    "title": "Linked songs in shuffle",
-    "chinese": "随机连播曲组",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音"
-    ],
-    "anchor": "Linked songs in shuffle"
-  },
-  {
-    "id": "/settings/playback#Skip leading and trailing silence",
-    "route": "/settings/playback",
-    "title": "Skip leading and trailing silence",
-    "chinese": "跳过开头和结尾的静音",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音",
-      "Skip leading and trailing silence",
-      "跳过开头和结尾的静音"
-    ],
-    "anchor": "Skip leading and trailing silence",
-    "legacyIds": [
-      "/settings/player#Skip leading and trailing silence"
-    ]
-  },
-  {
-    "id": "/settings/playback#Scrobbling",
-    "route": "/settings/playback",
-    "title": "Scrobbling",
-    "chinese": "播放上报",
-    "section": "Playback & sound",
-    "breadcrumbs": [
-      "Playback & sound"
-    ],
-    "aliases": [
-      "播放与声音"
-    ],
-    "anchor": "Scrobbling"
   },
   {
     "id": "/settings/playback#Play downloaded songs from the phone",
@@ -4219,7 +3720,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放器与歌词",
-      "底部按钮栏"
+      "底部按钮栏",
+      "Bottom row"
+    ],
+    "legacyIds": [
+      "/settings/player#Bottom row"
     ]
   },
   {
@@ -4254,20 +3759,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "aliases": [
       "播放器与歌词"
     ]
-  },
-  {
-    "id": "/settings/player#Lyrics",
-    "route": "/settings/player",
-    "title": "Lyrics",
-    "chinese": "歌词",
-    "section": "Player & lyrics",
-    "breadcrumbs": [
-      "Player & lyrics"
-    ],
-    "aliases": [
-      "播放器与歌词"
-    ],
-    "anchor": "Lyrics"
   },
   {
     "id": "/settings/player#Player layout",
@@ -4546,20 +4037,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "播放器与歌词"
     ],
     "anchor": "Show previous tracks"
-  },
-  {
-    "id": "/settings/player#Bottom row",
-    "route": "/settings/player",
-    "title": "Bottom row",
-    "chinese": "底部按钮栏",
-    "section": "Player & lyrics",
-    "breadcrumbs": [
-      "Player & lyrics"
-    ],
-    "aliases": [
-      "播放器与歌词"
-    ],
-    "anchor": "Bottom row"
   },
   {
     "id": "/settings/player#Swap favorite and menu",
@@ -5140,7 +4617,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "快捷网格"
+      "快捷网格",
+      "Quick grid",
+      "首页与浏览"
+    ],
+    "legacyIds": [
+      "/settings/home-layout#Quick grid",
+      "/settings/personalization#Quick grid"
     ]
   },
   {
@@ -5186,7 +4669,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "播放上报"
+      "播放上报",
+      "Scrobbling"
+    ],
+    "legacyIds": [
+      "/settings/playback#Scrobbling"
     ]
   },
   {
@@ -5249,7 +4736,16 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "随机连播曲组"
+      "随机连播曲组",
+      "Linked songs in shuffle",
+      "播客与长音频",
+      "收听工具",
+      "Listening sessions",
+      "收听状态"
+    ],
+    "legacyIds": [
+      "/settings/listening-tools#Linked songs in shuffle",
+      "/settings/playback#Linked songs in shuffle"
     ]
   },
   {
@@ -5296,7 +4792,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "随机播放偏好"
+      "随机播放偏好",
+      "Shuffle preference"
+    ],
+    "legacyIds": [
+      "/settings/playback#Shuffle preference",
+      "/settings/player#Shuffle preference"
     ]
   },
   {
@@ -5327,7 +4828,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "跳过歌曲首尾静音"
+      "跳过歌曲首尾静音",
+      "Skip leading and trailing silence",
+      "跳过开头和结尾的静音"
+    ],
+    "legacyIds": [
+      "/settings/playback#Skip leading and trailing silence",
+      "/settings/player#Skip leading and trailing silence"
     ]
   },
   {
@@ -5653,7 +5160,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "歌曲列表"
+      "歌曲列表",
+      "Song lists",
+      "页面布局"
+    ],
+    "legacyIds": [
+      "/settings/page-layouts#Song lists",
+      "/settings/personalization#Song lists"
     ]
   },
   {
@@ -5809,7 +5322,11 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "外观与布局",
-      "主题"
+      "主题",
+      "Theme"
+    ],
+    "legacyIds": [
+      "/settings/personalization#Theme"
     ]
   },
   {
@@ -5998,22 +5515,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ]
   },
   {
-    "id": "/metadata#Batch scrape metadata",
-    "route": "/metadata",
-    "title": "Batch scrape metadata",
-    "chinese": "批量刮削元数据",
-    "section": "Metadata centre",
-    "breadcrumbs": [
-      "Library & metadata",
-      "Metadata centre"
-    ],
-    "aliases": [
-      "曲库与元数据",
-      "元数据中心"
-    ],
-    "anchor": "Batch scrape metadata"
-  },
-  {
     "id": "/metadata#Choose local artwork",
     "route": "/metadata",
     "title": "Choose local artwork",
@@ -6062,22 +5563,6 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     "anchor": "Only fill missing tag fields"
   },
   {
-    "id": "/metadata#Custom scraping sources",
-    "route": "/metadata",
-    "title": "Custom scraping sources",
-    "chinese": "自定义刮削源",
-    "section": "Metadata centre",
-    "breadcrumbs": [
-      "Library & metadata",
-      "Metadata centre"
-    ],
-    "aliases": [
-      "曲库与元数据",
-      "元数据中心"
-    ],
-    "anchor": "Custom scraping sources"
-  },
-  {
     "id": "/metadata/bulk",
     "route": "/metadata/bulk",
     "title": "Batch scrape metadata",
@@ -6089,7 +5574,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "曲库与元数据",
-      "批量刮削元数据"
+      "批量刮削元数据",
+      "Batch scrape metadata",
+      "元数据中心"
+    ],
+    "legacyIds": [
+      "/metadata#Batch scrape metadata"
     ]
   },
   {
@@ -6148,7 +5638,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "曲库与元数据",
-      "自定义刮削源"
+      "自定义刮削源",
+      "Custom scraping sources",
+      "元数据中心"
+    ],
+    "legacyIds": [
+      "/metadata#Custom scraping sources"
     ]
   },
   {
@@ -6243,7 +5738,12 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
     ],
     "aliases": [
       "播放与声音",
-      "A-B 片段循环"
+      "A-B 片段循环",
+      "A–B repeat",
+      "A–B 区间循环"
+    ],
+    "legacyIds": [
+      "/settings/playback#A–B repeat"
     ]
   },
   {
@@ -6407,29 +5907,13 @@ export const SETTINGS_SEARCH_ENTRIES: SettingsSearchEntry[] = [...[
       "播客与长音频",
       "想听什么",
       "Listening scenes",
-      "听歌情景"
-    ],
-    "legacyIds": [
-      "/settings/music-tools#Listening scenes"
-    ]
-  },
-  {
-    "id": "/listening-intents#Music search index",
-    "route": "/listening-intents",
-    "title": "Music search index",
-    "chinese": "音乐搜索索引",
-    "section": "Listening intentions",
-    "breadcrumbs": [
-      "Podcasts & long audio",
+      "听歌情景",
       "Listening intentions"
     ],
-    "aliases": [
-      "播客与长音频",
-      "想听什么",
-      "Listening scenes",
-      "听歌情景"
-    ],
-    "anchor": "Music search index"
+    "legacyIds": [
+      "/settings/discovery-layout#Listening intentions",
+      "/settings/music-tools#Listening scenes"
+    ]
   },
   {
     "id": "/listening-intents#Restore hidden intentions",

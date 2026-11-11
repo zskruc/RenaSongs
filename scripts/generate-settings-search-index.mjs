@@ -12,6 +12,22 @@ function translated(expression) {
     && expression.arguments[0] && ts.isStringLiteral(expression.arguments[0]) ? expression.arguments[0].text : undefined;
 }
 const attr = (node, key) => node.attributes.properties.find((item) => ts.isJsxAttribute(item) && item.name.text === key)?.initializer;
+/** Only a direct, unconditional navigation callback proves a row is a link.
+ * Do not guess from its text or from a router call hidden in another action. */
+function navigationTarget(initializer, source) {
+  let expression = initializer && ts.isJsxExpression(initializer) ? initializer.expression : undefined;
+  while (expression && ts.isParenthesizedExpression(expression)) expression = expression.expression;
+  if (!expression || !ts.isArrowFunction(expression)) return undefined;
+  let body = expression.body;
+  if (ts.isBlock(body)) {
+    if (body.statements.length !== 1) return undefined;
+    const statement = body.statements[0];
+    body = ts.isExpressionStatement(statement) ? statement.expression : ts.isReturnStatement(statement) ? statement.expression : undefined;
+  }
+  while (body && ts.isParenthesizedExpression(body)) body = body.expression;
+  return body && ts.isCallExpression(body) && body.expression.getText(source) === 'router.push'
+    && body.arguments.length === 1 && ts.isStringLiteral(body.arguments[0]) ? body.arguments[0].text : undefined;
+}
 /** Match the categories visible on Settings home. Routes and saved search IDs stay stable. */
 const categoryRoutes = {
   'Playback & sound': ['playback', 'equalizer', 'scrobbling', 'shuffle', 'shuffle-links', 'silence-trim', 'loudness-analysis'],
@@ -61,10 +77,16 @@ function visitNavigation(node) {
   node.forEachChild(visitNavigation);
 }
 visitNavigation(navigationSource);
-const entries = [];
+const entries = [], navigationTargets = new Map();
 for (const { file, route, category } of [...pages, ...externalPages]) {
   const source = ts.createSourceFile(file, readFileSync(new URL(`src/app/${file}`, root), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const labels = new Set(), optionAliases = new Map(); let heading;
+  const labels = new Set(), optionAliases = new Map(), labelDestinations = new Map(); let heading;
+  function recordLabel(label, destination) {
+    labels.add(label);
+    const destinations = labelDestinations.get(label) ?? new Set();
+    destinations.add(destination);
+    labelDestinations.set(label, destinations);
+  }
   function visit(node) {
     if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
       const name = node.tagName.getText(source);
@@ -73,7 +95,10 @@ for (const { file, route, category } of [...pages, ...externalPages]) {
       }
       if (['SettingRow', 'Field', 'SliderRow', 'TextRow', 'SelectList'].includes(name)) {
         const label = attr(node, 'label');
-        if (label && ts.isJsxExpression(label) && label.expression) { const key = translated(label.expression); if (key) labels.add(key); }
+        if (label && ts.isJsxExpression(label) && label.expression) {
+          const key = translated(label.expression);
+          if (key) recordLabel(key, name === 'SettingRow' ? navigationTarget(attr(node, 'onPress'), source) : undefined);
+        }
       }
       if (name === 'SelectList') {
         const label = attr(node, 'label'), options = attr(node, 'options');
@@ -93,7 +118,7 @@ for (const { file, route, category } of [...pages, ...externalPages]) {
       if (name === 'SwitchList' || (name === 'SelectList' && collapsible?.getText(source) === '{false}')) {
         const options = attr(node, 'options');
         const walk = (child) => {
-          if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'label') { const key = translated(child.initializer); if (key) labels.add(key); }
+          if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'label') { const key = translated(child.initializer); if (key) recordLabel(key); }
           child.forEachChild(walk);
         };
         if (options) walk(options);
@@ -107,7 +132,7 @@ for (const { file, route, category } of [...pages, ...externalPages]) {
     const findParameters = (node) => {
       if (ts.isVariableDeclaration(node) && node.name.getText(source) === 'PARAMETERS' && node.initializer) {
         const scan = (child) => {
-          if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'label' && ts.isStringLiteral(child.initializer)) labels.add(child.initializer.text);
+          if (ts.isPropertyAssignment(child) && child.name.getText(source) === 'label' && ts.isStringLiteral(child.initializer)) recordLabel(child.initializer.text);
           child.forEachChild(scan);
         };
         scan(node.initializer);
@@ -129,12 +154,27 @@ for (const { file, route, category } of [...pages, ...externalPages]) {
       : route === '/settings/lyrics' && movedLyricLabels.has(label) ? '/settings/player' : route;
     const choices = optionAliases.get(label) ?? [];
     const controlAliases = [...new Set([...aliases, ...choices.flatMap((choice) => [choice, titleOf(choice)])])];
-    entries.push({ id: `${oldRoute}#${label}`, route, title: label, chinese: titleOf(label), section: heading, breadcrumbs, aliases: controlAliases, anchor: label });
+    const id = `${oldRoute}#${label}`;
+    entries.push({ id, route, title: label, chinese: titleOf(label), section: heading, breadcrumbs, aliases: controlAliases, anchor: label });
+    const destinations = labelDestinations.get(label);
+    if (destinations?.size === 1 && !destinations.has(undefined)) navigationTargets.set(id, [...destinations][0]);
   }
 }
+// A page and the row which opens it are one destination, not two settings.
+// Keep the row's previous ID as a history alias so old Recent settings open
+// the actual destination instead of stopping at the former intermediate page.
+const pageEntries = new Map(entries.filter((entry) => !entry.anchor).map((entry) => [entry.route, entry]));
+const canonicalEntries = entries.filter((entry) => {
+  const target = pageEntries.get(navigationTargets.get(entry.id));
+  if (!target || target === entry) return true;
+  target.legacyIds = [...new Set([...(target.legacyIds ?? []), entry.id, ...(entry.legacyIds ?? [])])];
+  target.aliases = [...new Set([...(target.aliases ?? []), entry.title, entry.chinese, ...(entry.aliases ?? [])])];
+  return false;
+});
+entries.splice(0, entries.length, ...canonicalEntries);
 // Navigation rows no longer shown on a large catch-all page should keep working
 // from Recent settings without adding duplicate rows to new search results.
-const byId = new Map(entries.map((entry) => [entry.id, entry]));
+const byId = new Map(entries.flatMap((entry) => [entry.id, ...(entry.legacyIds ?? [])].map((id) => [id, entry])));
 function keepHistory(oldRoute, labels, targetRoute, anchor) {
   for (const label of labels) {
     const oldId = `${oldRoute}#${label}`;
@@ -154,6 +194,8 @@ for (const [label, target] of [['Home screen widgets', '/settings/home-widgets']
   keepHistory('/settings/listening-tools', [label], target);
 }
 keepHistory('/settings/lyrics-tools', ['Lyric fonts'], '/settings/lyric-fonts');
+keepHistory('/settings/discovery-layout', ['Home sections'], '/settings/home-sections');
+keepHistory('/settings/discovery-layout', ['Listening intentions'], '/listening-intents');
 for (const [label, target] of [
   ['Home and search layouts', '/settings/discovery-layout'], ['Pinyin library search', '/settings/music-search'],
   ['Listening scenes', '/listening-intents'], ['Discover internet radio', '/radio-discover'], ['Media folders and tags', '/media-collections'],
