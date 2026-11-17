@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.ColorSpace
 import android.graphics.HardwareRenderer
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.PorterDuff
 import android.graphics.Rect
@@ -69,7 +70,8 @@ internal data class BackdropFrame(
 
 /** A borrowed producer node, never an independently retained screen snapshot. */
 internal class RecordedBackdropContent(val node: RenderNode, val source: WeakReference<View>,
-  val windowWidth: Int, val windowHeight: Int, val windowX: Int, val windowY: Int, val direct: Boolean = false) {
+  val windowWidth: Int, val windowHeight: Int, val windowX: Int, val windowY: Int, val direct: Boolean = false,
+  val menuProgram: Boolean = false) {
   var firstReadTraced = false
 }
 
@@ -213,6 +215,7 @@ internal class WindowBackdrop(
   private val location = IntArray(2)
   private val activityLocation = IntArray(2)
   private val contentLocation = IntArray(2)
+  private val menuScrimPaint = Paint()
   private var contentSourceReference: WeakReference<View>? = null
   private var menuScrimReference: WeakReference<View>? = null
   private val backgroundChanges = BackdropSceneChanges()
@@ -345,6 +348,7 @@ internal class WindowBackdrop(
   private val directRecordStats = CapturePhaseStats()
   private val directTotalStats = CapturePhaseStats()
   private var directCaptureCount = 0L
+  private var menuDirectCaptureCount = 0L
   private val atlasRecordStats = CapturePhaseStats()
   private val renderSyncAndDrawStats = CapturePhaseStats()
   private var lastDiagnosticLog = 0L
@@ -526,7 +530,36 @@ internal class WindowBackdrop(
   }
 
   private fun isolatesModalForeground(): Boolean = activityDecor != null && activityDecor !== root &&
-    surfaces.isNotEmpty() && surfaces.all { it.isolateModalForeground }
+    surfaces.isNotEmpty() && surfaces.all { it.isolateModalForeground || nativeMenuOwner(it) != null }
+
+  /** Nested live sliders/switches belong to the same trusted omitted card. */
+  private fun nativeMenuOwner(surface: LiquidGlassView): MenuMorphView? {
+    var ancestor = surface.parent as? View
+    var depth = 0
+    while (ancestor != null && ancestor !== root && depth++ < 64) {
+      if (ancestor is MenuMorphView) {
+        val backdrop = ancestor.getChildAt(0) as? LiquidGlassView
+        return ancestor.takeIf { backdrop?.isolateModalForeground == true }
+      }
+      ancestor = ancestor.parent as? View
+    }
+    return null
+  }
+
+  /** Only our known native menu scaffold may bypass whole-window GPU capture. */
+  private fun nativeMenuScrim(): View? {
+    if (!isolatesModalForeground() || surfaces.any { nativeMenuOwner(it) == null || it.progressiveBlur } ||
+      activityDecor == null || activityDecor.rootView === root || !activityDecor.isAttachedToWindow ||
+      !activityDecor.isShown || activityDecor.width <= 0 || activityDecor.height <= 0) return null
+    // Two stacked cards can carry two independently animated scrims. A single
+    // literal program cannot represent both layers for both consumers; retain
+    // the existing complete-window path for that nested-dialog case.
+    val owner = surfaces.firstOrNull()?.let { nativeMenuOwner(it) } ?: return null
+    if (surfaces.any { nativeMenuOwner(it) !== owner }) return null
+    val scrim = findMenuScrim() ?: return null
+    if (scrim.background !is ColorDrawable && BackgroundStyleApplicator.getBackgroundColor(scrim) == null) return null
+    return scrim
+  }
 
   /** Called before another window captures, or before the Activity's normal draw. */
   fun observeBackgroundScene(source: View) {
@@ -619,7 +652,8 @@ internal class WindowBackdrop(
           "sceneVersion=$sceneVersion capturedScene=$capturedSceneVersion serial=${recordedBridge.recordSerial}"
       }
     }
-    if (isolatedSceneKnown && frame != null && !scrollDirty && !materialDirty && !sceneDirty) {
+    val hasNativeMenuSource = recordedBridge.value?.content?.menuProgram == true
+    if (isolatedSceneKnown && (frame != null || hasNativeMenuSource) && !scrollDirty && !materialDirty && !sceneDirty) {
       // Foreground scrolling does not change the omitted card's background.
       // Do not leave the old 42ms idle request waking this otherwise static scene.
       root.removeCallbacks(delayedCapture)
@@ -713,6 +747,13 @@ internal class WindowBackdrop(
     try {
       root.getLocationOnScreen(location)
       updateCaptureRect(visible)
+      val nativeScrim = if (asynchronous) nativeMenuScrim() else null
+      if (nativeScrim != null && captureNativeMenu(visible, nativeScrim, candidateEpoch,
+          submittedScrollVersion, submittedMaterialVersion, submittedSceneVersion, vsyncNanos, isScrollCapture)) {
+        directAttempt = true
+        preparationEnded = SystemClock.elapsedRealtimeNanos()
+        return null
+      }
       val edge = visible.firstOrNull { it.progressiveBlur }
       val activityWindow = activityDecor == null || activityDecor === root
       // ScreenStack can still draw disappearing Home siblings after assigning
@@ -1015,6 +1056,74 @@ internal class WindowBackdrop(
     }
   }
 
+  /**
+   * Record exactly the underlay Activity and a literal scrim. Never record any
+   * Modal child RenderNode: restoring its alpha later could otherwise replay
+   * the popup into its own backdrop. This is the upstream overlay's acyclic
+   * drawing model, retaining the existing Kyant material above this source.
+   */
+  private fun captureNativeMenu(visible: List<LiquidGlassView>, scrim: View, epoch: Long,
+    submittedScrollVersion: Long, submittedMaterialVersion: Long, submittedSceneVersion: Long,
+    vsyncNanos: Long, isScrollCapture: Boolean): Boolean {
+    val underlay = activityDecor ?: return false
+    val scrimColor = (scrim.background as? ColorDrawable)?.color
+      ?: BackgroundStyleApplicator.getBackgroundColor(scrim) ?: return false
+    if (captureRect.isEmpty || underlay.rootView === root || !nativePage.policy.captureAllowed) return false
+    var opacity = 1f
+    var ancestor: View? = scrim
+    while (ancestor != null) {
+      opacity *= ancestor.alpha.coerceIn(0f, 1f)
+      if (ancestor === root) break
+      ancestor = ancestor.parent as? View
+    }
+    if (ancestor !== root) return false
+    val scale = minOf(0.5f, MAX_SAMPLE_WIDTH / root.width.toFloat())
+    val width = quantize(ceil(captureRect.width() * scale).toInt(), SAMPLE_SIZE_STEP)
+    val height = quantize(ceil(captureRect.height() * scale).toInt(), SAMPLE_SIZE_STEP)
+    if (width <= 0 || height <= 0) return false
+    clearRecordedBackdrop("record")
+    val serial = recordedBridge.beginRecord()
+    val node = directSourceNode ?: RenderNode("RenaSongs menu underlay source").also { directSourceNode = it }
+    node.setPosition(0, 0, width, height)
+    node.setClipToBounds(true)
+    node.setRenderEffect(null)
+    timeCapturePhase(directRecordStats) {
+      val recording = node.beginRecording(width, height)
+      try {
+        recording.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        recording.scale(scale, scale)
+        recording.translate(-captureRect.left.toFloat(), -captureRect.top.toFloat())
+        recording.clipRect(captureRect)
+        underlay.getLocationOnScreen(activityLocation)
+        val checkpoint = recording.save()
+        recording.translate((activityLocation[0] - location[0]).toFloat(),
+          (activityLocation[1] - location[1]).toFloat())
+        underlay.draw(recording)
+        recording.restoreToCount(checkpoint)
+        menuScrimPaint.color = scrimColor
+        menuScrimPaint.alpha = (Color.alpha(scrimColor) * opacity).toInt().coerceIn(0, 255)
+        recording.drawRect(captureRect, menuScrimPaint)
+      } finally { node.endRecording() }
+    }
+    val mask = RecordedBackdropEligibility.MODAL_DIRECT_SAFETY or RecordedBackdropEligibility.RECORDED
+    if (!recordedBridge.publish(RecordedBackdropContent(node, WeakReference(underlay),
+        root.width, root.height, location[0], location[1], direct = true, menuProgram = true),
+        RecordedBackdropGeometry(scale, location[0] + captureRect.left, location[1] + captureRect.top, width, height),
+        epoch, generation, serial, nativePage.policy.epoch, generation, nativePage.policy.captureAllowed,
+        mask, direct = true)) return false
+    frame = null
+    inFlightTickets.removeAll { !recordedBridge.acceptsImage(it.recordSerial) }
+    updateCaptureWatchdog()
+    captureCount++
+    directCaptureCount++
+    menuDirectCaptureCount++
+    lastCapture = SystemClock.uptimeMillis()
+    recordSubmission(submittedScrollVersion, submittedMaterialVersion, submittedSceneVersion, vsyncNanos, isScrollCapture)
+    ownRedrawsToSkip = OWN_REDRAW_TRAVERSALS
+    notifyBackdropDrawingChanged(visible)
+    return true
+  }
+
   /** Shared source recording; exactly one source draw in either producer. */
   private fun recordSource(node: RenderNode, width: Int, height: Int, scale: Float,
     captureSource: View, underlayColor: Int?, processedColor: Int?, direct: Boolean = false) {
@@ -1097,7 +1206,8 @@ internal class WindowBackdrop(
     if (closed || captureFailed || recorded == null || source == null || !root.isHardwareAccelerated ||
       recorded.content.windowWidth != root.width || recorded.content.windowHeight != root.height ||
       recorded.content.windowX != location[0] || recorded.content.windowY != location[1] ||
-      !isRecordedSourceDrawable(source) || WindowBackdrops.sourceContainsAttachedGlass(source) ||
+      !(if (recorded.content.menuProgram) source === activityDecor && source.rootView !== root &&
+        nativeMenuScrim() != null else isRecordedSourceDrawable(source) && !WindowBackdrops.sourceContainsAttachedGlass(source)) ||
       !recorded.content.node.hasDisplayList()) {
       clearRecordedBackdrop("invalid")
       return null
@@ -1454,6 +1564,8 @@ internal class WindowBackdrop(
     return mapOf(
       "captureCount" to captureCount,
       "directCaptureCount" to directCaptureCount,
+      "menuDirectCaptureCount" to menuDirectCaptureCount,
+      "nativeMenuSourceActive" to (recordedBridge.value?.content?.menuProgram == true),
       "directPrepareTotalNs" to directPrepareStats.totalNanos,
       "directRecordTotalNs" to directRecordStats.totalNanos,
       "directRecordMaxNs" to directRecordStats.maxNanos,
@@ -1545,7 +1657,7 @@ internal class WindowBackdrop(
       "preDrawCount=$preDrawCount ownSkip=$ownRedrawSkipCount " +
       "throttled=$throttledDrawCount delayed=$delayedCaptureCount " +
       "hostRestore=$hostRestoreCount failed=$captureFailed " +
-      "async=$asyncCaptureCount dropped=$droppedFrameCount busy=$inFlightSkipCount " +
+      "async=$asyncCaptureCount menuDirect=$menuDirectCaptureCount direct=$directCaptureCount dropped=$droppedFrameCount busy=$inFlightSkipCount " +
       "inFlightPeak=$inFlightPeak recreate=$captureRecreateCount shrink=$captureShrinkCount discarded=$discardedGenerationCount " +
       "retiredImages=${retiredImages.size} retiredPeak=$retirementPeak retirementBusy=$retirementBackpressureCount " +
       "retirementFallback=${retirementFallbackCount.get()} retirementFailures=${retirementCloseFailureCount.get()} " +

@@ -19,7 +19,7 @@ export function usePopupMorphPresence(visible: boolean, identity?: unknown) {
 
   const close = useCallback((after?: unknown) => {
     const current = transaction.current;
-    if (!alive.current || !current.mounted || current.closing) return;
+    if (!alive.current || !current.mounted || current.closing || current.session !== presence.session) return false;
     current.closing = true;
     const session = current.session;
     animationRef.current.dismiss(() => {
@@ -32,7 +32,20 @@ export function usePopupMorphPresence(visible: boolean, identity?: unknown) {
       setPresence({ mounted: false, session });
       if (typeof after === 'function') after();
     });
-  }, []);
+    return true;
+  }, [presence.session]);
+
+  /** A safe local selection takes effect on the tap; only its visual shell and
+   * owner cleanup wait for exit. Navigation/save/destructive actions keep close(). */
+  const select = useCallback((action: unknown, after?: unknown) => {
+    if (typeof action !== 'function' || !close(after)) return false;
+    action();
+    return true;
+  }, [close]);
+  const canInteract = useCallback(() => {
+    const current = transaction.current;
+    return alive.current && current.mounted && !current.closing && current.session === presence.session;
+  }, [presence.session]);
 
   useLayoutEffect(() => {
     const last = previous.current;
@@ -48,5 +61,5 @@ export function usePopupMorphPresence(visible: boolean, identity?: unknown) {
     }
   }, [visible, identity, close]);
 
-  return { ...presence, animation, close };
+  return { ...presence, animation, close, select, canInteract };
 }

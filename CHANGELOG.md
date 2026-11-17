@@ -13,6 +13,19 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.5] - 2026-11-18
+
+### Fixed
+
+- 可信的单层玻璃弹窗直接记录 Activity 与遮罩，避免离屏 GPU 捕获阻塞；复杂叠层继续采用原有安全路径。
+- 临时滤镜按实际面板裁剪并限制纹理像素，合并等效高斯模糊；稳定态仍以完整分辨率绘制。
+- 弹簧按实际经过时间推进，减少掉帧时的慢动作感；设置和安全的本地选项即时应用，退出动画独立清理窗口。
+
+### English
+
+- Add an acyclic recorded source for trusted single-card windows and bound transient portal work; retain the guarded image-capture fallback for stacked/unknown windows.
+- Keep animation time tied to elapsed wall time and apply safe selections immediately while retaining the popup through its exit.
+
 ## [0.8.8.1-preview.4] - 2026-11-18
 
 ### Fixed

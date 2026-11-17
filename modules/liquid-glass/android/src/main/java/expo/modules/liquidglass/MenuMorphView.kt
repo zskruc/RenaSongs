@@ -9,7 +9,9 @@ import android.graphics.RectF
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
+import android.os.SystemClock
 import android.provider.Settings
+import android.util.Log
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
@@ -72,6 +74,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private var interactive = false
   private var animationScale = 1f
   private var lockedFieldStep = 0f
+  private var motionTrace = false
+  private var motionStartedAt = 0L
+  private var motionFrames = 0
   private var emittedStart = false
   private var completedOpen: Boolean? = null
   private var targetRadius = 0f
@@ -247,6 +252,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (!isAttachedToWindow || windowVisibility != VISIBLE) return
     if (!emittedStart) {
       emittedStart = true
+      motionTrace = Log.isLoggable("ResonusGlass", Log.DEBUG)
+      motionStartedAt = SystemClock.uptimeMillis()
+      motionFrames = 0
+      foregroundPortal?.diagnosticsEnabled = motionTrace
       animationScale = try { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) }
         catch (_: RuntimeException) { 1f }
       frameClock.restart(animationScale)
@@ -262,6 +271,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     callbackPosted = false
     if (!initialized || !isAttachedToWindow || windowVisibility != VISIBLE) return
     val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
+    motionFrames++
     settled = motion.advanceBy(seconds)
     applyFrame()
     if (settled) {
@@ -366,12 +376,14 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     captureEnvelope.set(target)
     captureEnvelope.union(source)
     // Reserve movement/rebound once, bounded by this Modal's actual window.
-    val guard = max(80f * density, max(target.width(), target.height()) * 0.18f)
+    val guard = 48f * density
     captureEnvelope.inset(-guard, -guard)
     rootView.getLocationOnScreen(rootLocation)
     if (!captureEnvelope.intersect(rootLocation[0].toFloat(), rootLocation[1].toFloat(),
         rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
-    material.reserveMenuMorph(captureEnvelope)
+    material.reserveMenuMorph(captureEnvelope,
+      kotlin.math.ceil(target.width() * 1.2f + 8f * density).toInt(),
+      kotlin.math.ceil(target.height() * 1.2f + 8f * density).toInt())
     lockedFieldStep = max(5f * density, max(captureEnvelope.width(), captureEnvelope.height()) / 64f)
     foregroundBounds.set(captureEnvelope)
     foregroundBounds.offset(-target.left, -target.top)
@@ -384,6 +396,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private fun emitComplete(open: Boolean) {
     if (completedOpen == open) return
     completedOpen = open
+    if (motionTrace) Log.d("ResonusGlass", "menuMotion session=$activeSession open=$open " +
+      "durationMs=${SystemClock.uptimeMillis() - motionStartedAt} frames=$motionFrames " +
+      "portal=${foregroundPortal?.diagnostics()}")
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }

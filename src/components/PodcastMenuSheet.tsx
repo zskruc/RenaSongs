@@ -89,13 +89,13 @@ export function PodcastMenuSheet() {
         const downloaded = list.filter((item) => files[item.id]);
         if (mode === 'sleep') return <>
           {row('chevron-back', t('Sleep timer'), () => setMode('actions'))}
-          {[15, 30, 45, 60].map((minutes) => row('time-outline', t('{n} minutes', { n: minutes }), () => close(() => {
+          {[15, 30, 45, 60].map((minutes) => row('time-outline', t('{n} minutes', { n: minutes }), () => close.select(() => {
             if (current(value)) usePlayerStore.getState().setSleepTimer(minutes);
           })))}
-          {row('stop-circle-outline', t('When the episode ends'), () => close(() => {
+          {row('stop-circle-outline', t('When the episode ends'), () => close.select(() => {
             if (current(value)) usePlayerStore.getState().setSleepAtSongEnd();
           }))}
-          {row('close-circle-outline', t('Turn off'), () => close(() => {
+          {row('close-circle-outline', t('Turn off'), () => close.select(() => {
             if (current(value)) usePlayerStore.getState().cancelSleepTimer();
           }))}
         </>;
@@ -109,7 +109,7 @@ export function PodcastMenuSheet() {
             <View style={{ flex: 1 }}><Text style={styles.title} numberOfLines={2}>{episode?.title || ch.title}</Text>
               {episode ? <Text style={styles.sub} numberOfLines={1}>{ch.title}</Text> : null}</View>
           </View>
-          {row('play-outline', t('Play'), () => close(() => perform(value, async () => {
+          {row('play-outline', t('Play'), () => close.select(() => perform(value, async () => {
             const ready = episode ? [episode] : await listAllEpisodes(ch.id);
             if (!current(value)) return;
             const pref = useSortPrefs.getState().prefs[podcastEpisodeSortKey(value.owner, ch.id)];
@@ -119,14 +119,14 @@ export function PodcastMenuSheet() {
             if (episode) queueEpisode(episode, ch);
             else await usePlayerStore.getState().playQueue(playable.map((item) => episodeToSong(item, ch)), 0, ch.title, `/podcast/${ch.id}`, { ordered: true });
           })))}
-          {row(heart ? 'heart' : 'heart-outline', t(heart ? 'Remove from favorites' : 'Add to favorites'), () => close(() =>
+          {row(heart ? 'heart' : 'heart-outline', t(heart ? 'Remove from favorites' : 'Add to favorites'), () => close.select(() =>
             perform(value, () => togglePodcastHeart(episode?.id ?? ch.id, episode ? 'episode' : 'channel', ch.id))))}
           {episode ? <>
             {row('document-text-outline', t('Episode details'), () => close(() => { if (current(value)) router.push({ pathname: '/podcast-episode/[id]', params: { id: episode.id, channelId: ch.id } }); }))}
-            {row('play-skip-forward-outline', t('Play next'), () => close(() => {
+            {row('play-skip-forward-outline', t('Play next'), () => close.select(() => {
               if (current(value) && (episode.url || files[episode.id]) && (!isManualOffline() || files[episode.id])) usePlayerStore.getState().playNext(episodeToSong(episode, ch));
             }))}
-            {row('list-outline', t('Add to queue'), () => close(() => {
+            {row('list-outline', t('Add to queue'), () => close.select(() => {
               if (current(value) && (episode.url || files[episode.id]) && (!isManualOffline() || files[episode.id])) usePlayerStore.getState().addToQueue(episodeToSong(episode, ch));
             }))}
             {row('checkmark-circle-outline', t('Mark as played'), () => close(() => perform(value, () => setEpisodePlayed(episodeToSong(episode, ch), true))))}
@@ -139,7 +139,7 @@ export function PodcastMenuSheet() {
             {row('settings-outline', t('Podcast settings'), () => close(() => { if (current(value)) setSettingsTarget(value); }))}
             {row('checkmark-done-outline', t('Mark all as played'), () => close(() => { if (current(value)) setMarkConfirmation(value); }))}
             {!added.has(ch.id) ? row('add', t('Add podcast'), () => close(() => perform(value, () => addChannel(ch.id)))) : null}
-            {row(automatic.has(ch.id) ? 'cloud-done' : 'cloud-download-outline', t('Download new episodes'), () => close(() =>
+            {row(automatic.has(ch.id) ? 'cloud-done' : 'cloud-download-outline', t('Download new episodes'), () => close.select(() =>
               perform(value, async () => {
                 const on = !automatic.has(ch.id); await setChannelAutoDownload(ch.id, on);
                 if (current(value)) toast(t(on ? 'Auto-download on' : 'Auto-download off'));

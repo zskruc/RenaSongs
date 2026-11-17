@@ -8,12 +8,17 @@
  * Every window uses the artist picker’s floating glass card. Existing detail
  * cards retain their own scrolling; legacy action sheets get a bounded body.
  */
-import { type MutableRefObject, type ReactNode, useCallback, useEffect, useState } from 'react';
+import { type MutableRefObject, type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, ScrollView } from 'react-native';
 
 import { MenuGlassCardFrame } from '@/components/MenuGlassCard';
 import { useBottomSheetAnim } from '@/hooks/useBottomSheetAnim';
 import { MenuRequestScope } from '@/lib/menuRequest';
+
+export type SheetModalClose = ((after?: () => void) => void) & {
+  /** Apply a reversible local selection now; retain the shell until its exit. */
+  select: (action: () => void) => void;
+};
 
 export function SheetModal({
   openRef,
@@ -27,13 +32,15 @@ export function SheetModal({
    *  that unmounts the sheet along with whatever declares it. */
   onClosed?: () => void;
   presentation?: 'sheet' | 'card';
-  children: (close: (after?: () => void) => void) => ReactNode;
+  children: (close: SheetModalClose) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [session, setSession] = useState(0);
   const [lifecycle] = useState(() => new MenuRequestScope());
+  const closing = useRef(false);
   useEffect(() => {
     openRef.current = () => {
+      closing.current = false;
       setSession(lifecycle.begin());
       setOpen(true);
     };
@@ -58,12 +65,20 @@ export function SheetModal({
   // Unmount the Modal only after its exit animation, for either presentation.
   // A next modal opens only after this surface is offscreen, avoiding a
   // background switch underneath two independently visible native windows.
-  const close = (after?: () => void) => {
+  const beginClose = (after?: () => void) => {
+    if (!lifecycle.owns(session) || closing.current) return false;
+    closing.current = true;
     // React Native passes a PressEvent to handlers supplied as onPress={close}.
     // Only explicit callbacks are actions to run after the card has left.
     const callback = typeof after === 'function' ? after : undefined;
     dismiss(() => closeNow(callback));
+    return true;
   };
+  function close(after?: () => void) { beginClose(after); }
+  close.select = (action: () => void) => { if (typeof action === 'function' && beginClose()) action(); };
+  // The render prop receives deferred press handlers; it does not run them.
+  // eslint-disable-next-line react-hooks/refs
+  const content = children(close);
 
   return (
     <Modal onShow={onModalShow} transparent animationType="none" visible={open} onRequestClose={() => close()}>
@@ -71,10 +86,10 @@ export function SheetModal({
         cardStyle={sheetStyle} onLayout={onSheetLayout}>
         {/* Detail cards already own their scroll view. Legacy short action
             sheets share the same shell and gain a bounded scrolling body. */}
-        {presentation === 'card' ? children(close) : (
+        {presentation === 'card' ? content : (
           <ScrollView style={{ flexShrink: 1, minHeight: 0 }} showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled">
-            {children(close)}
+            {content}
           </ScrollView>
         )}
       </MenuGlassCardFrame>

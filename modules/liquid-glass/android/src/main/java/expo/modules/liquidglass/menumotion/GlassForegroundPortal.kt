@@ -9,7 +9,6 @@
 package expo.modules.liquidglass.menumotion
 
 import android.graphics.Canvas
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.RenderEffect
 import android.graphics.RenderNode
@@ -20,36 +19,58 @@ import android.view.View
 import androidx.annotation.RequiresApi
 import java.util.WeakHashMap
 import kotlin.math.abs
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
-/**
- * Upstream's foreground lens, independent of the app's existing glass
- * background. Geometry and the shared field use host-local physical pixels.
- * Only arbitrary RN foreground views are recorded here; settled material,
- * colors, parameters and input ownership stay with their existing hosts.
- */
+/** Upstream foreground lens; the existing material remains a separate pass. */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-internal class GlassForegroundPortal(@Suppress("UNUSED_PARAMETER") density: Float) {
+internal class GlassForegroundPortal(density: Float) {
   private val portal = RuntimeShader(GlassForegroundPortalShader)
   private val texture = GlassFieldTexture()
   private val foregroundNode = RenderNode("ResonusMenu.foreground")
+  private val rowsNode = RenderNode("ResonusMenu.rows")
+  private val raster = GlassPortalRaster(density)
   private val incoming = RectF()
   private val outgoing = RectF()
-  private val recordingBounds = Rect()
   private val contentBlur = WeakHashMap<View, Float>()
+  private var hasSource = false
+  private var rowsVisible = false
+  private var rowsSigmaX = 0f
+  private var rowsSigmaY = 0f
   private var portalBlur = 0f
+  private var generation = 0L
+  private var renderedGeneration = -1L
+  private var effectGeneration = -1L
+  private var effectLeft = Float.NaN
+  private var effectTop = Float.NaN
+  private var effectScale = Float.NaN
+  private var rowsEffectX = Float.NaN
+  private var rowsEffectY = Float.NaN
+  private var nodeWidth = 0
+  private var nodeHeight = 0
   private var wasWarping = false
 
-  /** `field` comes from the outline, avoiding a second Gaussian CPU pass. */
+  var diagnosticsEnabled = false
+  private var draws = 0L
+  private var records = 0L
+  private var invisibleSkips = 0L
+  private var maxPhysicalPixels = 0L
+  private var maxRasterPixels = 0L
+  private var maxCompensatedBlur = 0f
+  private var maxScreenBlur = 0f
+
+  /** `field` comes from the outline; no duplicate Gaussian CPU pass. */
   fun update(frame: GlassMorphFrame, originX: Float, originY: Float,
     hasSource: Boolean, field: GlassGaussianField?) {
     incoming.set(frame.bounds)
     incoming.offset(-originX, -originY)
     outgoing.set(frame.sourceLobe)
     outgoing.offset(-originX, -originY)
+    this.hasSource = hasSource
+    rowsVisible = frame.rowsOpacity > .001f
+    generation++
+    // Invisible rows are skipped by GlassMenuSession before foreground draw.
+    if (!rowsVisible) return
     portal.setFloatUniform("center", incoming.centerX(), incoming.centerY())
     portal.setFloatUniform("halfSize", incoming.width() / 2f, incoming.height() / 2f)
     portal.setFloatUniform("cornerRadii", frame.radiusX, frame.radiusY)
@@ -62,68 +83,129 @@ internal class GlassForegroundPortal(@Suppress("UNUSED_PARAMETER") density: Floa
     texture.update(field)
     texture.bind(portal)
     portal.setFloatUniform("height", frame.lensHeight)
-    // The original foreground shader uses the default refraction multiplier 1.
-    // It does not replace or retune the existing background optical renderer.
     portal.setFloatUniform("amount", frame.lensAmount)
     portalBlur = frame.portalBlur
   }
 
   /**
-   * `bounds` is a fixed, window-bounded capture envelope in HOST LOCAL space,
-   * not the shrinking incoming bounds. Keeping it fixed avoids reallocating
-   * the GPU layer during a spring. The callback draws in the same local space.
-   * Do not surround this pass with a hard incoming clip: its distance field
-   * supplies the original anti-aliased portal edge and lens sampling reach.
+   * Filter current visible foreground, never the entire source-to-menu travel
+   * envelope. Raster coordinates are converted back to physical field/lens
+   * coordinates by the shader. Only transient filtered images are downsampled;
+   * the settled native foreground still draws directly at full resolution.
    */
   fun draw(canvas: Canvas, bounds: RectF, warp: Boolean, drawContent: (Canvas) -> Unit) {
     if (!warp || !canvas.isHardwareAccelerated) {
-      if (wasWarping) {
-        foregroundNode.setRenderEffect(null)
-        foregroundNode.discardDisplayList()
-        wasWarping = false
-      }
+      clearTransientNodes()
       drawContent(canvas)
       return
     }
-    if (!bounds.left.isFinite() || !bounds.top.isFinite() || !bounds.right.isFinite() || !bounds.bottom.isFinite()) return
-    recordingBounds.set(floor(bounds.left).toInt(), floor(bounds.top).toInt(),
-      ceil(bounds.right).toInt(), ceil(bounds.bottom).toInt())
-    if (recordingBounds.isEmpty) return
-    foregroundNode.setPosition(recordingBounds)
-    portal.setFloatUniform("nodeOrigin", recordingBounds.left.toFloat(), recordingBounds.top.toFloat())
-    val bend = RenderEffect.createRuntimeShaderEffect(portal, "content")
-    foregroundNode.setRenderEffect(if (portalBlur > .01f) {
-      RenderEffect.createChainEffect(bend,
-        RenderEffect.createBlurEffect(portalBlur, portalBlur, Shader.TileMode.DECAL))
-    } else bend)
-    val recording = foregroundNode.beginRecording(recordingBounds.width(), recordingBounds.height())
-    try {
-      recording.translate(-recordingBounds.left.toFloat(), -recordingBounds.top.toFloat())
-      drawContent(recording)
-    } finally {
-      foregroundNode.endRecording()
+    if (!rowsVisible) {
+      if (diagnosticsEnabled) invisibleSkips++
+      return
+    }
+    val portalSigma = GlassPortalBlur.sigma(portalBlur)
+    val blurReach = max(portalSigma, max(rowsSigmaX, rowsSigmaY))
+    if (!raster.update(incoming, if (hasSource) outgoing else null, bounds, blurReach)) return
+    val area = raster.bounds
+    val scale = raster.scale
+    val width = raster.width
+    val height = raster.height
+    val dimensionsChanged = nodeWidth != width || nodeHeight != height
+    if (dimensionsChanged) {
+      nodeWidth = width; nodeHeight = height
+      rowsNode.setPosition(0, 0, width, height)
+      foregroundNode.setPosition(0, 0, width, height)
+      foregroundNode.setPivotX(0f); foregroundNode.setPivotY(0f)
+    }
+    foregroundNode.setScaleX(1f / scale)
+    foregroundNode.setScaleY(1f / scale)
+    foregroundNode.setTranslationX(area.left)
+    foregroundNode.setTranslationY(area.top)
+
+    // Both original Gaussian passes precede the lens. Their variances add,
+    // so one anisotropic Gaussian preserves both blur phases while avoiding
+    // another filtered intermediate image (RN body has no trigger composite).
+    val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, portalSigma, scale)
+    val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, portalSigma, scale)
+    if (blurX != rowsEffectX || blurY != rowsEffectY) {
+      rowsEffectX = blurX; rowsEffectY = blurY
+      rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
+        RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null)
+    }
+    // Geometry uniforms are snapshotted by RenderEffect. Reuse an effect and
+    // recording only for repeated draws of the same unchanged native frame.
+    val effectChanged = effectGeneration != generation || effectLeft != area.left ||
+      effectTop != area.top || effectScale != scale
+    if (effectChanged) {
+      effectGeneration = generation; effectLeft = area.left; effectTop = area.top; effectScale = scale
+      portal.setFloatUniform("nodeOrigin", area.left, area.top)
+      portal.setFloatUniform("rasterScale", scale)
+      foregroundNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(portal, "content"))
+    }
+    if (effectChanged || dimensionsChanged || renderedGeneration != generation ||
+      contentBlur.keys.any { it.isDirty || it.isLayoutRequested }) {
+      val recording = rowsNode.beginRecording(width, height)
+      try {
+        recording.scale(scale, scale)
+        recording.translate(-area.left, -area.top)
+        drawContent(recording)
+      } finally { rowsNode.endRecording() }
+      renderedGeneration = generation
+      if (diagnosticsEnabled) records++
+    }
+    if (dimensionsChanged || !foregroundNode.hasDisplayList()) {
+      val recording = foregroundNode.beginRecording(width, height)
+      try { recording.drawRenderNode(rowsNode) } finally { foregroundNode.endRecording() }
     }
     wasWarping = true
     canvas.drawRenderNode(foregroundNode)
+    if (diagnosticsEnabled) {
+      draws++
+      maxPhysicalPixels = max(maxPhysicalPixels, (area.width() * area.height()).toLong())
+      maxRasterPixels = max(maxRasterPixels, width.toLong() * height)
+    }
   }
 
-  /** Original rows blur stays continuous and compensates for view scaling. */
+  /**
+   * Gaussian blur commutes with scaling. Move the original compensated blur
+   * from the unscaled full-layout View layer into the tight transformed rows
+   * node; anisotropic radii preserve the same physical horizontal/vertical blur.
+   */
   fun setContentBlur(view: View, radius: Float, scaleX: Float, scaleY: Float) {
     val scale = max(min(abs(scaleX), abs(scaleY)), MinimumRowsScale)
     val compensated = if (radius.isFinite() && radius > .01f) radius / scale else 0f
-    if (contentBlur[view] == compensated) return
+    if (!contentBlur.containsKey(view)) view.setRenderEffect(null)
     contentBlur[view] = compensated
-    view.setRenderEffect(if (compensated > .01f) {
-      RenderEffect.createBlurEffect(compensated, compensated, Shader.TileMode.DECAL)
-    } else null)
+    val sigma = GlassPortalBlur.sigma(compensated)
+    rowsSigmaX = sigma * abs(scaleX)
+    rowsSigmaY = sigma * abs(scaleY)
+    if (diagnosticsEnabled) {
+      maxCompensatedBlur = max(maxCompensatedBlur, compensated)
+      maxScreenBlur = max(maxScreenBlur, GlassPortalBlur.radius(max(rowsSigmaX, rowsSigmaY)))
+    }
+  }
+
+  fun diagnostics(): Map<String, Number> = mapOf("portalDraws" to draws, "portalRecords" to records,
+    "portalInvisibleSkips" to invisibleSkips, "portalMaxPhysicalPixels" to maxPhysicalPixels,
+    "portalMaxRasterPixels" to maxRasterPixels, "portalMaxCompensatedBlurPx" to maxCompensatedBlur,
+    "portalMaxScreenBlurPx" to maxScreenBlur)
+
+  private fun clearTransientNodes() {
+    if (!wasWarping) return
+    rowsNode.setRenderEffect(null)
+    foregroundNode.setRenderEffect(null)
+    rowsNode.discardDisplayList()
+    foregroundNode.discardDisplayList()
+    rowsEffectX = Float.NaN; rowsEffectY = Float.NaN
+    effectGeneration = -1L; renderedGeneration = -1L
+    nodeWidth = 0; nodeHeight = 0
+    wasWarping = false
   }
 
   fun release() {
-    foregroundNode.setRenderEffect(null)
-    foregroundNode.discardDisplayList()
-    wasWarping = false
-    for (view in contentBlur.keys) view.setRenderEffect(null)
+    clearTransientNodes()
     contentBlur.clear()
+    rowsSigmaX = 0f; rowsSigmaY = 0f
     texture.update(null)
     texture.bind(portal)
     texture.release()

@@ -149,3 +149,49 @@ test('live dialog status text updates do not replace or restart its popup sessio
     assert.equal(h.exits.length, 0);
   } finally { await act(async () => root?.unmount()); }
 });
+
+test('a local selection runs on the tap once, retaining native presence and deferring only owner cleanup', async () => {
+  const h = harness(); let root!: ReactTestRenderer; let popup: any;
+  const changes: string[] = [], cleanup: string[] = [];
+  function Probe() { popup = h.usePopupMorphPresence(true); return React.createElement('Probe', { mounted: popup.mounted }); }
+  try {
+    await act(async () => { root = create(React.createElement(Probe)); });
+    await act(async () => {
+      assert.equal(popup.select(() => changes.push('dark'), () => cleanup.push('closed')), true);
+      assert.equal(popup.select(() => changes.push('light')), false);
+      popup.close(() => cleanup.push('cancel'));
+    });
+    assert.deepEqual(changes, ['dark']);
+    assert.deepEqual(cleanup, []);
+    assert.equal(root.root.findByType('Probe' as any).props.mounted, true);
+    assert.equal(h.exits.length, 1);
+    await act(async () => { h.exits[0](); h.exits[0](); });
+    assert.deepEqual(changes, ['dark']);
+    assert.deepEqual(cleanup, ['closed']);
+    assert.equal(root.root.findByType('Probe' as any).props.mounted, false);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('cancelled and replaced local selections reject stale handlers without changing or closing the new session', async () => {
+  const h = harness(); let root!: ReactTestRenderer; let popup: any; const changes: string[] = [];
+  function Probe({ visible, owner }: { visible: boolean; owner: string }) {
+    popup = h.usePopupMorphPresence(visible, owner);
+    return React.createElement('Probe', { mounted: popup.mounted });
+  }
+  try {
+    await act(async () => { root = create(React.createElement(Probe, { visible: true, owner: 'A' })); });
+    const staleSelect = popup.select, staleClose = popup.close;
+    await act(async () => popup.close());
+    assert.equal(staleSelect(() => changes.push('cancelled')), false);
+    await act(async () => root.update(React.createElement(Probe, { visible: true, owner: 'B' })));
+    await act(async () => { h.exits[0](); });
+    assert.equal(staleSelect(() => changes.push('old owner')), false);
+    assert.equal(staleClose(), false);
+    assert.equal(root.root.findByType('Probe' as any).props.mounted, true);
+    assert.equal(h.exits.length, 1);
+    await act(async () => popup.select(() => changes.push('B')));
+    assert.deepEqual(changes, ['B']);
+    await act(async () => h.exits[1]());
+    assert.equal(root.root.findByType('Probe' as any).props.mounted, false);
+  } finally { await act(async () => root?.unmount()); }
+});

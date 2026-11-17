@@ -19,7 +19,7 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
   let current!: Scope;
   const scopes = new Map<string, Scope>(), effects: (() => void)[] = [];
   const endings: ((finished: boolean) => void)[] = [], rn: (() => void)[] = [];
-  const calls = { closed: 0, after: 0, defaultClose: 0, speed: 1 };
+  const calls = { closed: 0, after: 0, selected: 0, defaultClose: 0, speed: 1 };
   const edgeArgs: unknown[][] = [];
   const openRef = { current: () => {} };
   const hook: { current?: any } = {};
@@ -108,11 +108,12 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
     children: jsx(glass.MenuGlassCardHeader, { title: 'Edges', onClose: edgeClose }) })
     : kind === 'hook' ? jsx(HookOnly, {}) : kind === 'speed' ? jsx(speed.SpeedSheet, { openRef }) : jsx(modal.SheetModal, {
     openRef, presentation: 'card', onClosed: () => { calls.closed++; },
-    children: (close: (after?: unknown) => void) => jsx('View', { children: [
+    children: (close: ((after?: unknown) => void) & { select: (action: () => void) => void }) => jsx('View', { children: [
       jsx(glass.MenuGlassCardHeader, { title: 'Test', onClose: close }),
       jsx('Pressable', { testID: 'direct-option', onPress: close }),
       jsx('Pressable', { testID: 'plain-option', onPress: () => close() }),
       jsx('Pressable', { testID: 'after-option', onPress: () => close(() => { calls.after++; }) }),
+      jsx('Pressable', { testID: 'select-option', onPress: () => close.select(() => { calls.selected++; }) }),
     ] }),
   });
   let tree: any;
@@ -207,4 +208,32 @@ test('changing actual playback speed retains the card until an explicit close', 
   const h = harness('speed'); h.press('Pressable', (props) => props.children?.props.children === '1.5×'); h.render();
   assert.equal(h.calls.speed, 1.5); assert.equal(h.visible(), true); assert.equal(h.endings.length, 0);
   h.press('GlassPressable', (props) => props.accessibilityLabel === 'Close'); h.finish(); assert.equal(h.visible(), false);
+});
+
+test('SheetModal applies safe selections immediately once while retaining its native window for exit', () => {
+  const h = harness();
+  h.press('Pressable', (props) => props.testID === 'select-option');
+  h.press('Pressable', (props) => props.testID === 'select-option');
+  assert.equal(h.calls.selected, 1);
+  assert.equal(h.calls.closed, 0);
+  assert.equal(h.visible(), true);
+  h.finish();
+  assert.equal(h.calls.selected, 1);
+  assert.equal(h.calls.closed, 1);
+  assert.equal(h.visible(), false);
+});
+
+test('cancel and rapid reopen cannot apply an old SheetModal selection to the replacement', () => {
+  const h = harness();
+  const oldSelection = h.find('Pressable', (props) => props.testID === 'select-option')[0].props.onPress;
+  h.press('Pressable', (props) => props.testID === 'plain-option');
+  oldSelection(); assert.equal(h.calls.selected, 0);
+  h.openRef.current(); h.render();
+  oldSelection(); h.render(); h.finish();
+  assert.equal(h.calls.selected, 0);
+  assert.equal(h.calls.closed, 0);
+  assert.equal(h.visible(), true);
+  h.press('Pressable', (props) => props.testID === 'select-option');
+  assert.equal(h.calls.selected, 1);
+  h.finish(); assert.equal(h.calls.closed, 1);
 });

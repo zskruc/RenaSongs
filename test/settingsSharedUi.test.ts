@@ -134,7 +134,7 @@ test('selectors still open their anchored glass menu and apply only the selected
     assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
     const dark = root.root.findAllByType('Pressable' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Dark'))!;
     await act(async () => dark.props.onPress());
-    assert.deepEqual(changes, [], 'a setting is applied after its popup has closed');
+    assert.deepEqual(changes, ['dark'], 'a setting applies on the tap while its popup is still closing');
     assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
     await act(async () => h.finish());
     assert.deepEqual(changes, ['dark']);
@@ -174,7 +174,7 @@ test('anchored selector waits for natural height, keeps its target during exit a
     const option = root.root.findAllByType('Pressable' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Dark'))!;
     await act(async () => { option.props.onPress(); option.props.onPress(); root.root.findByType('Modal' as any).props.onRequestClose(); });
     assert.equal(h.exits.length, 1);
-    assert.deepEqual(changes, []);
+    assert.deepEqual(changes, ['dark']);
     assert.equal(flatten(root.root.findByType('GlassMenu' as any).props.style).top, 146);
     await act(async () => h.finish());
     assert.deepEqual(changes, ['dark']);
@@ -200,5 +200,58 @@ test('closing a fine-tune pad stops the hold timer immediately and commits once 
     assert.deepEqual(changes, [4]);
     await act(async () => h.finish());
     assert.equal(root.root.findAllByType('GlassMenu' as any).length, 0);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('a real selector updates its displayed value immediately and rejects old option handlers after reopening', async () => {
+  const h = harness(); let root!: ReactTestRenderer; const changes: string[] = [];
+  function Screen() {
+    const [value, setValue] = React.useState('system');
+    return React.createElement(h.UI.SelectList, { label: 'Theme', value,
+      options: [{ value: 'system', label: 'Automatic' }, { value: 'dark', label: 'Dark' }],
+      onChange: (next: string) => { changes.push(next); setValue(next); } });
+  }
+  const option = (label: string) => root.root.findAllByType('Pressable' as any).find((node) =>
+    node.props.accessibilityRole !== 'button' && node.findAllByType('Text' as any).some((text) => text.props.children === label))!;
+  const open = () => root.root.findAllByType('Pressable' as any).find((node) => node.props.accessibilityRole === 'button')!.props.onPress();
+  try {
+    await act(async () => { root = create(React.createElement(Screen), { createNodeMock: h.createNodeMock }); });
+    await act(async () => open());
+    const oldAutomatic = option('Automatic').props.onPress;
+    await act(async () => option('Dark').props.onPress());
+    assert.deepEqual(changes, ['dark']);
+    assert.ok(root.root.findAllByType('Text' as any).filter((node) => node.props.children === 'Dark').length >= 2,
+      'the selected value and popup both reflect the setting before native exit completes');
+    assert.equal(typeof root.root.findByType('Modal' as any).props.onRequestClose, 'function');
+    await act(async () => h.finish());
+    await act(async () => open());
+    await act(async () => oldAutomatic());
+    assert.deepEqual(changes, ['dark']);
+    assert.equal(h.exits.length, 0);
+    assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
+    await act(async () => root.root.findByType('Modal' as any).props.onRequestClose());
+    await act(async () => h.finish());
+    assert.deepEqual(changes, ['dark'], 'cancel only closes the reopened menu');
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('changed options and disabled state cannot be selected through retained press callbacks', async () => {
+  const h = harness(); let root!: ReactTestRenderer; const changes: string[] = [];
+  const props = { label: 'Theme', value: 'system', options: [{ value: 'system', label: 'Automatic' }, { value: 'dark', label: 'Dark' }],
+    onChange: (value: string) => changes.push(value) };
+  try {
+    await act(async () => { root = create(React.createElement(h.UI.SelectList, props), { createNodeMock: h.createNodeMock }); });
+    await act(async () => root.root.findByType('Pressable' as any).props.onPress());
+    const oldDark = root.root.findAllByType('Pressable' as any).find((node) =>
+      node.findAllByType('Text' as any).some((text) => text.props.children === 'Dark'))!.props.onPress;
+    await act(async () => root.update(React.createElement(h.UI.SelectList, { ...props, options: props.options.slice(0, 1) })));
+    await act(async () => oldDark());
+    await act(async () => root.update(React.createElement(h.UI.SelectList, { ...props, disabled: true })));
+    await act(async () => oldDark());
+    assert.deepEqual(changes, []);
+    assert.equal(h.exits.length, 0);
+    const scrim = root.root.findByType('AnimatedView' as any);
+    assert.equal(scrim.props.nativeID, 'resonus-menu-scrim');
+    assert.equal(flatten(scrim.props.style).backgroundColor, '#00000044');
   } finally { await act(async () => root?.unmount()); }
 });

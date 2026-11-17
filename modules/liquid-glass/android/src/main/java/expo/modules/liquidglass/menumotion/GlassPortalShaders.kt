@@ -109,20 +109,21 @@ float3 liquidFieldGradient(float2 point) {
 internal const val GlassForegroundPortalShader = """
 uniform shader content;
 uniform float2 nodeOrigin;
+uniform float rasterScale;
 uniform float height;
 uniform float amount;
 """ + FieldFunctions + """
 half4 main(float2 coord) {
-    float2 p = coord + nodeOrigin;
+    float2 p = coord / rasterScale + nodeOrigin;
     float3 field = liquidFieldGradient(p);
     float inside = -field.x;
-    float aa = max(abs(field.y) + abs(field.z), 0.0001);
+    float aa = max(abs(field.y) + abs(field.z), 0.0001) / rasterScale;
     float coverage = inside < -5.0 ? 0.0 : clamp(inside / aa + 0.5, 0.0, 1.0);
     if (coverage < 0.0039215686) return half4(0.0);
     float t = clamp(inside / max(height, 0.0001), 0.0, 1.0);
     float profile = sqrt(max(1.0 - (1.0 - t) * (1.0 - t), 0.0));
     float innerAA = clamp((height - inside) / aa + 0.5, 0.0, 1.0);
-    return content.eval(coord + amount * field.yz * (1.0 - profile) * innerAA) * half(coverage);
+    return content.eval(coord + (amount * rasterScale) * field.yz * (1.0 - profile) * innerAA) * half(coverage);
 }
 """
 

@@ -90,4 +90,18 @@ path found during the physical frame-time investigation. The 182 baseline and
 183 physical comparison are private local records, not screenshots or benchmarks
 uploaded to the public repository.
 
+### 184: remove blocking capture and bound transient filtering
+
+The 183 physical run failed the performance gate. For a recognized single-card
+scaffold, 184 records an acyclic Activity-plus-literal-scrim source without
+submitting an offscreen GPU capture or recording the card itself. Generation,
+scene, source, size and unique-owner checks protect that path; stacked or unknown
+windows use the original guarded capture. Nested controls within one trusted
+card share its source. Transient foreground filters use the actual shell region,
+at most about 0.72 MP, with physical-coordinate mapping and equivalent Gaussian
+variance; settled content returns to direct full-resolution drawing. The clock
+advances with elapsed wall time. Safe selections now apply at tap time, separately
+from retained exit cleanup; navigation, destructive/save and OS handoffs keep
+their existing ownership-safe completion behavior.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。

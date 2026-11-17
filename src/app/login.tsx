@@ -532,7 +532,7 @@ export default function LoginScreen() {
                 accessibilityRole="radio"
                 accessibilityState={{ checked: l.code === language }}
                 onPress={() => {
-                  languagesPopup.close(() => { setLanguage(l.code); setShowLanguages(false); });
+                  languagesPopup.select(() => setLanguage(l.code), () => setShowLanguages(false));
                 }}
               >
                 <Text style={styles.langRowText}>{l.name}</Text>

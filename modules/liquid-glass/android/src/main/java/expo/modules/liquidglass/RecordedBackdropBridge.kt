@@ -33,6 +33,12 @@ internal object RecordedBackdropEligibility {
   const val SOURCE_DRAWABLE = 1 shl 7
   const val RECORDED = 1 shl 8
   const val SYNC_OK = 1 shl 9
+  // A native menu records an explicit program (Activity + literal scrim), not
+  // the Modal tree. Its Activity may contain glass, but cannot contain that
+  // separate Dialog window, so this source is acyclic without alpha staging.
+  const val MODAL_PROGRAM = 1 shl 10
+  const val MODAL_TREE_OMITTED = 1 shl 11
+  const val DIFFERENT_UNDERLAY_WINDOW = 1 shl 12
   const val REQUIRED = ASYNC or ACTIVITY or NON_WINDOW_SOURCE or NO_SOURCE_CONSUMERS or
     NO_PROGRESSIVE or NO_PATCH or NO_IMAGE or SOURCE_DRAWABLE or RECORDED or SYNC_OK
 
@@ -40,7 +46,10 @@ internal object RecordedBackdropEligibility {
   // A completed display-list record remains mandatory at publication.
   private const val DIRECT_SAFETY = ASYNC or ACTIVITY or NON_WINDOW_SOURCE or NO_SOURCE_CONSUMERS or
     NO_PROGRESSIVE or NO_PATCH or SOURCE_DRAWABLE
-  fun allowsDirect(mask: Int): Boolean = (mask and DIRECT_SAFETY) == DIRECT_SAFETY
+  const val MODAL_DIRECT_SAFETY = ASYNC or MODAL_PROGRAM or MODAL_TREE_OMITTED or DIFFERENT_UNDERLAY_WINDOW or
+    NO_PROGRESSIVE or NO_PATCH or SOURCE_DRAWABLE
+  fun allowsDirect(mask: Int): Boolean = (mask and DIRECT_SAFETY) == DIRECT_SAFETY ||
+    (mask and MODAL_DIRECT_SAFETY) == MODAL_DIRECT_SAFETY
   fun allows(mask: Int): Boolean = (mask and REQUIRED) == REQUIRED
 }
 

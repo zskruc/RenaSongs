@@ -253,4 +253,28 @@ class RecordedBackdropBridgeTest {
     assertFalse(node.closed)
   }
 
+  @Test fun nativeMenuProgramRequiresEveryAcyclicProofAndCannotBroadenOrdinaryImageEligibility() {
+    val required = RecordedBackdropEligibility.MODAL_DIRECT_SAFETY
+    assertTrue(RecordedBackdropEligibility.allowsDirect(required))
+    assertFalse(RecordedBackdropEligibility.allows(required))
+    val proofs = listOf(RecordedBackdropEligibility.ASYNC, RecordedBackdropEligibility.MODAL_PROGRAM,
+      RecordedBackdropEligibility.MODAL_TREE_OMITTED, RecordedBackdropEligibility.DIFFERENT_UNDERLAY_WINDOW,
+      RecordedBackdropEligibility.NO_PROGRESSIVE, RecordedBackdropEligibility.NO_PATCH,
+      RecordedBackdropEligibility.SOURCE_DRAWABLE)
+    for (proof in proofs) assertFalse(RecordedBackdropEligibility.allowsDirect(required and proof.inv()))
+  }
+
+  @Test fun nativeMenuProgramKeepsEpochAndImageTicketOwnershipGuards() {
+    val bridge = RecordedBackdropBridge<BorrowedNode>()
+    val oldImage = bridge.beginRecord()
+    val serial = bridge.beginRecord()
+    val mask = RecordedBackdropEligibility.MODAL_DIRECT_SAFETY or RecordedBackdropEligibility.RECORDED
+    assertFalse(bridge.publish(BorrowedNode(), geometry, 3, 8, serial, 4, 8, true, mask, direct = true))
+    assertTrue(bridge.acceptsImage(oldImage))
+    assertTrue(bridge.publish(BorrowedNode(), geometry, 4, 8, serial, 4, 8, true, mask, direct = true))
+    assertFalse(bridge.acceptsImage(oldImage))
+    assertNull(bridge.current(3, 8, true))
+    assertNull(bridge.current(4, 8, false))
+  }
+
 }

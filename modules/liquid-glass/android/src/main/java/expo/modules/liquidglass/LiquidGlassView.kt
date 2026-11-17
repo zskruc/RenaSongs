@@ -285,11 +285,15 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   }
 
   /** Native-only fixed viewport for a menu; RN layout and optical settings stay unchanged. */
-  internal fun reserveMenuMorph(screenBounds: RectF) {
+  internal fun reserveMenuMorph(screenBounds: RectF, layerWidth: Int, layerHeight: Int) {
     getLocationOnScreen(sampleLocation)
     if (!menuMaterial.reserve(screenBounds.left - sampleLocation[0], screenBounds.top - sampleLocation[1],
         screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])) return
-    menuMaterialCapacity = IntSize(menuMaterial.captureWidth, menuMaterial.captureHeight)
+    // The viewport spans travel, but a material layer only needs its largest
+    // *size*, not the distance between source and destination. Reserving the
+    // entire screen here made small menus allocate full-window blur targets.
+    menuMaterialCapacity = IntSize(layerWidth.coerceIn(1, menuMaterial.captureWidth),
+      layerHeight.coerceIn(1, menuMaterial.captureHeight))
     menuMaterialVersion++
     menuPlacementVersion++
     geometryVersion++

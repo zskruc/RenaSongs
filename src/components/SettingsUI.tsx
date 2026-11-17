@@ -7,7 +7,7 @@ import { SettingAnchor, SettingsAnchorProvider } from './SettingAnchor';
  */
 import Icon from '@/components/Icon';
 import { GlassPressable, GlassSlider, GlassSwitch, GlassTextInput } from '@/components/glass';
-import { Children, Fragment, createContext, isValidElement, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { Children, Fragment, createContext, isValidElement, useContext, useEffect, useLayoutEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import {
   Modal,
   Pressable,
@@ -281,10 +281,14 @@ export function SelectList<T extends string | number | boolean>({
   const [anchor, setAnchor] = useState<{ y: number; h: number } | null>(null);
   const [menuH, setMenuH] = useState(0);
   const popup = usePopupMorphPresence(anchor != null, anchor);
-  const closeMenu = (after?: () => void) => popup.close(() => {
-    setAnchor(null);
-    after?.();
-  });
+  const closeMenu = () => popup.close(() => setAnchor(null));
+  const selection = useRef({ options, value, onChange, disabled });
+  useLayoutEffect(() => { selection.current = { options, value, onChange, disabled }; }, [options, value, onChange, disabled]);
+  const choose = (choice: T) => {
+    const current = selection.current;
+    if (current.disabled || !current.options.some((option) => option.value === choice)) return;
+    popup.select(() => { if (current.value !== choice) current.onChange(choice); }, () => setAnchor(null));
+  };
   const rowRef = useRef<View>(null);
   const active = options.find((o) => o.value === value) ?? options[0];
 
@@ -416,8 +420,9 @@ export function SelectList<T extends string | number | boolean>({
         <DynamicGlassBackdrop>
         <View style={{ flex: 1 }} onStartShouldSetResponderCapture={(event) => { captureMenuTouchStart(event); return false; }}
         onMoveShouldSetResponderCapture={(event) => { captureMenuTouchMove(event); return false; }}>
-        <Animated.View style={[StyleSheet.absoluteFill, popup.animation.backdropStyle]}>
-          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={() => closeMenu()} />
+        <Animated.View nativeID="resonus-menu-scrim" collapsable={false}
+          style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }, popup.animation.backdropStyle]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => closeMenu()} />
         </Animated.View>
         {menu != null ? (
           <MenuMorphSurface motion={{ ...popup.animation.motion, ready: popup.animation.motion.ready && menuH > 0 }}
@@ -454,9 +459,10 @@ export function SelectList<T extends string | number | boolean>({
                 return (
                   <Pressable
                     key={String(opt.value)}
+                    disabled={disabled}
                     style={({ pressed }) => [settingsStyles.menuItem, pressed && { opacity: 0.6 }]}
                     onPress={() => {
-                      closeMenu(() => { if (!isActive) onChange(opt.value); });
+                      choose(opt.value);
                     }}
                   >
                     <Text style={[settingsStyles.menuItemText, isActive && { color: accent }]}>
@@ -680,7 +686,7 @@ function FineTunePad({
    * running away in the first instant.
    */
   function tick(direction: number, count: number) {
-    if (holding.current !== direction) return;
+    if (!visible || !popup.canInteract() || holding.current !== direction) return;
     const moved = nudge(direction, count > 15 ? step * 3 : step);
     // Nothing left at the end of the range, and nobody else is going to stop
     // a timer that keeps firing under a finger that is still down.
@@ -689,6 +695,7 @@ function FineTunePad({
   }
 
   function hold(direction: number) {
+    if (!visible || !popup.canInteract()) return;
     stopTimer(); // a press that never got its release doesn't get to linger
     holding.current = direction;
     tick(direction, 0);
@@ -696,6 +703,7 @@ function FineTunePad({
 
   /** Nothing is saved until the finger lifts (or the pad closes). */
   function release() {
+    if (!visible || !popup.canInteract()) return;
     holding.current = 0;
     stopTimer();
     if (draftRef.current === saved.current) return;
@@ -736,8 +744,9 @@ function FineTunePad({
       <DynamicGlassBackdrop>
       <View style={{ flex: 1 }} onStartShouldSetResponderCapture={(event) => { captureMenuTouchStart(event); return false; }}
         onMoveShouldSetResponderCapture={(event) => { captureMenuTouchMove(event); return false; }}>
-      <Animated.View style={[StyleSheet.absoluteFill, popup.animation.backdropStyle]}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={close} />
+      <Animated.View nativeID="resonus-menu-scrim" collapsable={false}
+        style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }, popup.animation.backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={close} />
       </Animated.View>
       <View style={settingsStyles.padCenter} pointerEvents="box-none">
         <MenuMorphSurface accessibilityViewIsModal style={settingsStyles.padCard} motion={popup.animation.motion}
