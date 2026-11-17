@@ -166,7 +166,7 @@ function SortSheet({ visible, onClose }: { visible: boolean; onClose: () => void
   const t = useT();
   const sort = useSettings((s) => s.librarySort);
   const setSort = useSettings((s) => s.setLibrarySort);
-  const { dismiss, pan, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, pan, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     visible,
     onClose,
     'card',
@@ -174,8 +174,8 @@ function SortSheet({ visible, onClose }: { visible: boolean; onClose: () => void
   const close = () => dismiss(onClose);
   if (!visible) return null;
   return (
-    <Modal transparent statusBarTranslucent animationType="none" visible onRequestClose={close}>
-      <MenuGlassCardFrame onClose={close} backdropStyle={backdropStyle} cardStyle={sheetStyle} onLayout={onSheetLayout}>
+    <Modal onShow={onModalShow} transparent statusBarTranslucent animationType="none" visible onRequestClose={close}>
+      <MenuGlassCardFrame motion={motion} onClose={close} backdropStyle={backdropStyle} cardStyle={sheetStyle} onLayout={onSheetLayout}>
         {/* One drag around the whole sheet: what's in here never scrolls,
             so nothing else competes for the gesture. */}
         <GestureDetector gesture={pan}>

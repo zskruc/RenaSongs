@@ -116,12 +116,13 @@ export type LiquidGlassDiagnostics = {
 };
 
 const nativeModule = Platform.OS === 'android'
-  ? requireOptionalNativeModule<{ isSupported: boolean; themeTraceEnabled?: boolean; artistFocusTraceEnabled?: boolean; artistImageTraceEnabled?: boolean; getDiagnostics(): Promise<LiquidGlassDiagnostics>;
+  ? requireOptionalNativeModule<{ isSupported: boolean; menuMorphSupported?: boolean; themeTraceEnabled?: boolean; artistFocusTraceEnabled?: boolean; artistImageTraceEnabled?: boolean; getDiagnostics(): Promise<LiquidGlassDiagnostics>;
     updateTabsMotion: UpdateTabsMotion; updateDockProgress: UpdateDockProgress;
     updateButtonMotion: UpdateButtonMotion; readDockScrollIntent: ReadDockScrollIntent;
     expandDockScrollInput: ExpandDockScrollInput; restoreDockScrollTarget: RestoreDockScrollTarget;
     updatePlayerSurfaceClip?: UpdatePlayerSurfaceClip;
     disableViewFocusHighlight?: (viewTag: number, nativeId: string) => Promise<boolean>;
+    measureMenuOrigin?: (viewTag: number) => Promise<number[] | null>;
     setPlayerTransitionTrace?: (enabled: boolean) => void }>('ResonusLiquidGlass')
   : null;
 
@@ -145,6 +146,34 @@ export const disableNativeViewFocusHighlight = nativeModule?.disableViewFocusHig
 export const isArtistFocusTraceEnabled = Boolean(nativeModule?.artistFocusTraceEnabled);
 /** Off by default; opt-in image dimensions/cache timing without image URLs. */
 export const isArtistImageTraceEnabled = Boolean(nativeModule?.artistImageTraceEnabled);
+
+/** Capability gated so an old APK can keep the JS/Reanimated fallback safely. */
+export const isMenuMorphAvailable = Boolean(nativeModule?.menuMorphSupported);
+/** Screen DP [x, y, width, height, radius], measured on Android's UI thread. */
+export const measureNativeMenuOrigin = nativeModule?.measureMenuOrigin ?? null;
+
+export type MenuMorphViewProps = ViewProps & {
+  open: boolean;
+  ready: boolean;
+  sessionId: number;
+  sourceRect?: readonly number[] | null;
+  radius?: number;
+  onMotionStart?: (event: NativeSyntheticEvent<{ sessionId: number; open: boolean }>) => void;
+  onMotionComplete?: (event: NativeSyntheticEvent<{ sessionId: number; open: boolean }>) => void;
+};
+const NativeMenuMorph = isMenuMorphAvailable
+  ? requireNativeView<MenuMorphViewProps & React.RefAttributes<View>>('ResonusLiquidGlass', 'MenuMorph')
+  : null;
+
+/** First child: glass backdrop. Second child: fixed-layout, non-collapsed RN body. */
+export const MenuMorphView = React.forwardRef<View, MenuMorphViewProps>(function MenuMorphView(
+  { open, ready, sessionId, sourceRect = null, radius = 28, onMotionStart, onMotionComplete, ...props }, ref,
+) {
+  if (!NativeMenuMorph) return <View {...props} ref={ref} collapsable={false} />;
+  return <NativeMenuMorph {...props} ref={ref} collapsable={false} open={open} ready={ready}
+    sessionId={sessionId} sourceRect={sourceRect} radius={radius}
+    onMotionStart={onMotionStart} onMotionComplete={onMotionComplete} />;
+});
 
 export type PlayerSurfaceClipViewProps = ViewProps & {
   onClipHostReady?: (event: NativeSyntheticEvent<{ hostId: number; cornerRadius?: number }>) => void;

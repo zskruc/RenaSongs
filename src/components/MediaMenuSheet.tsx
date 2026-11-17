@@ -123,7 +123,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
   const toast = useToast((s) => s.show);
   const offline = useAuthStore((s) => s.offline);
   const local = useAuthStore((s) => s.offline && !s.auth);
-  const { dismiss: animateDismiss, dismissing, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss: animateDismiss, dismissing, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     true,
     closeAfterGesture,
     'card',
@@ -325,13 +325,13 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
   }
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={() => {
+    <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={() => {
       if (pending || pendingExport || confirmDelete !== null) cancelConfirmation();
       else close();
     }}>
       {/* Gestures inside an RN Modal need a root view of their own: the
           Modal renders in a native hierarchy outside the app's. */}
-      {!(pending || pendingExport || confirmDelete) && <MenuGlassCardFrame onClose={close}
+      {!(pending || pendingExport || confirmDelete) && <MenuGlassCardFrame motion={motion} onClose={close}
         backdropStyle={backdropStyle} cardStyle={sheetStyle} onLayout={onSheetLayout}>
         <ScrollView style={{ flexShrink: 1, minHeight: 0 }} showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">

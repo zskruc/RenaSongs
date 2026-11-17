@@ -30,6 +30,7 @@
  */
 import { GlassPressable } from '@/components/glass';
 import { MenuGlassCardFrame } from '@/components/MenuGlassCard';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { useEffect } from 'react';
 import {
   ActivityIndicator,
@@ -82,6 +83,8 @@ export function UpdatePrompt() {
   const start = useUpdate((s) => s.start);
   const resume = useUpdate((s) => s.resume);
   const close = useUpdate((s) => s.close);
+  const downloadPopup = usePopupMorphPresence(phase === 'downloading', release?.version);
+  const cancelDownload = () => downloadPopup.close(close);
 
   // Whatever a previous run downloaded is 57 MB of somebody's storage, and by
   // now it has either been installed or given up on. Not tied to the switch:
@@ -174,12 +177,15 @@ export function UpdatePrompt() {
       {/* Nothing to say while the system screen is open: it is on top of us and
           the prompt underneath would only be in the way when it closes. */}
       <Modal
-        visible={phase === 'downloading'}
+        visible={downloadPopup.mounted}
         transparent
-        animationType="fade"
-        onRequestClose={close}
+        animationType="none"
+        onRequestClose={cancelDownload}
+        onShow={downloadPopup.animation.onModalShow}
       >
-        <MenuGlassCardFrame onClose={close}>
+        <MenuGlassCardFrame onClose={cancelDownload} motion={downloadPopup.animation.motion}
+          backdropStyle={downloadPopup.animation.backdropStyle} cardStyle={downloadPopup.animation.sheetStyle}
+          onLayout={downloadPopup.animation.onSheetLayout}>
             <Text style={styles.title}>
               {t('Downloading {app} {version}', { app: PROJECT_NAME, version: version ?? '' })}
             </Text>
@@ -202,7 +208,7 @@ export function UpdatePrompt() {
             </View>
             <GlassPressable variant="subtle"
               accessibilityRole="button"
-              onPress={close}
+              onPress={cancelDownload}
               style={({ pressed }) => [styles.cancel, pressed && { opacity: 0.6 }]}
             >
               <Text style={styles.cancelLabel}>{t('Cancel')}</Text>

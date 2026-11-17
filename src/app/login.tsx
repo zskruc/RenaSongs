@@ -26,6 +26,7 @@ import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassC
 import { ensureAudioPermission, pickFolder } from '@/lib/localLibrary';
 import { useToast } from '@/store/toast';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { LANGUAGES } from '@/i18n/languages';
 import { useSettings } from '@/store/settings';
 import { colors, fontSize, radius, spacing, themed, useTheme, tracking } from '@/theme';
@@ -142,6 +143,10 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [showLanguages, setShowLanguages] = useState(false);
+  const profilesPopup = usePopupMorphPresence(showAll);
+  const languagesPopup = usePopupMorphPresence(showLanguages);
+  const closeProfiles = (after?: () => void) => profilesPopup.close(() => { setShowAll(false); after?.(); });
+  const closeLanguages = () => languagesPopup.close(() => setShowLanguages(false));
   const language = useSettings((s) => s.language);
   const setLanguage = useSettings((s) => s.setLanguage);
   // Flow for adding profile: home → choose server → credentials.
@@ -485,20 +490,21 @@ export default function LoginScreen() {
       <Modal
         transparent
         statusBarTranslucent
-        visible={showAll}
-        animationType="fade"
-        onRequestClose={() => setShowAll(false)}
+        visible={profilesPopup.mounted}
+        animationType="none"
+        onShow={profilesPopup.animation.onModalShow}
+        onRequestClose={() => closeProfiles()}
       >
-        <MenuGlassCardFrame onClose={() => setShowAll(false)} maxWidth={420}>
-          <MenuGlassCardHeader title={t('Saved profiles')} onClose={() => setShowAll(false)} />
+        <MenuGlassCardFrame onClose={() => closeProfiles()} maxWidth={420} motion={profilesPopup.animation.motion}
+          backdropStyle={profilesPopup.animation.backdropStyle} cardStyle={profilesPopup.animation.sheetStyle} onLayout={profilesPopup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={t('Saved profiles')} onClose={() => closeProfiles()} />
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalList} keyboardShouldPersistTaps="handled">
             {profiles.map((p, i) => (
               <ProfileRow
                 key={isOffline(p) ? `all-offline-${i}` : `all-${p.serverUrl}-${p.username}`}
                 profile={p}
                 onTap={() => {
-                  setShowAll(false);
-                  void onProfileTap(p);
+                  closeProfiles(() => { void onProfileTap(p); });
                 }}
                 onRemove={() => onProfileRemove(p)}
               />
@@ -510,12 +516,14 @@ export default function LoginScreen() {
       <Modal
         transparent
         statusBarTranslucent
-        visible={showLanguages}
-        animationType="fade"
-        onRequestClose={() => setShowLanguages(false)}
+        visible={languagesPopup.mounted}
+        animationType="none"
+        onShow={languagesPopup.animation.onModalShow}
+        onRequestClose={closeLanguages}
       >
-        <MenuGlassCardFrame onClose={() => setShowLanguages(false)}>
-          <MenuGlassCardHeader title={t('Language')} onClose={() => setShowLanguages(false)} />
+        <MenuGlassCardFrame onClose={closeLanguages} motion={languagesPopup.animation.motion}
+          backdropStyle={languagesPopup.animation.backdropStyle} cardStyle={languagesPopup.animation.sheetStyle} onLayout={languagesPopup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={t('Language')} onClose={closeLanguages} />
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalList} keyboardShouldPersistTaps="handled">
             {SORTED_LANGUAGES.map((l) => (
               <Pressable
@@ -524,8 +532,7 @@ export default function LoginScreen() {
                 accessibilityRole="radio"
                 accessibilityState={{ checked: l.code === language }}
                 onPress={() => {
-                  setLanguage(l.code);
-                  setShowLanguages(false);
+                  languagesPopup.close(() => { setLanguage(l.code); setShowLanguages(false); });
                 }}
               >
                 <Text style={styles.langRowText}>{l.name}</Text>

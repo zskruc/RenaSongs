@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 
 import { MenuRequestScope } from '@/lib/menuRequest';
+import { MenuMorphSession } from '@/lib/menuMorph';
 
 type Element = { type: any; key?: string; props: Record<string, any> };
 type Scope = { slots: any[]; cursor: number };
@@ -22,6 +23,8 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
   const edgeArgs: unknown[][] = [];
   const openRef = { current: () => {} };
   const hook: { current?: any } = {};
+  const nativeStates = new Map<string, { sessionId: number; open: boolean }>();
+  let dirty = false;
   const changed = (a?: unknown[], b?: unknown[]) => !a || !b || a.length !== b.length || a.some((value, index) => value !== b[index]);
   const slot = <T,>(create: () => T): T => current.slots[current.cursor++] ??= create();
   const memo = (create: () => unknown, deps: unknown[]) => {
@@ -33,8 +36,18 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
     memo: (component: unknown) => component, forwardRef: (component: unknown) => component,
     useState: (initial: unknown) => {
       const state = slot(() => ({ value: typeof initial === 'function' ? initial() : initial }));
-      return [state.value, (next: unknown) => { state.value = typeof next === 'function' ? next(state.value) : next; }];
+      return [state.value, (next: unknown) => {
+        const value = typeof next === 'function' ? next(state.value) : next;
+        if (!Object.is(state.value, value)) { state.value = value; dirty = true; }
+      }];
     },
+    useRef: (value: unknown) => slot(() => ({ current: value })),
+    createContext: (value: unknown) => {
+      const context = { current: value, Provider: null as any };
+      context.Provider = ({ value: next, children }: any) => { context.current = next; return children; };
+      return context;
+    },
+    useContext: (context: { current: unknown }) => context.current,
     useCallback: (callback: unknown, deps: unknown[]) => memo(() => callback, deps),
     useEffect: (create: () => unknown, deps: unknown[]) => {
       const state = slot(() => ({ deps: undefined as unknown[] | undefined, cleanup: undefined as any }));
@@ -42,17 +55,19 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
       effects.push(() => { state.cleanup?.(); state.deps = deps; state.cleanup = create(); });
     },
   };
+  const reactWithLayout = { ...react, useLayoutEffect: react.useEffect };
   const pan: Record<string, any> = {};
   for (const name of ['enabled', 'activeOffsetY', 'failOffsetY', 'onUpdate', 'onEnd']) pan[name] = () => pan;
   const colors = { text: '#FFF', textSecondary: '#CCC', accent: '#0F0', onAccent: '#000', surfaceHighlight: '#333' };
   const imports: Record<string, any> = {
-    react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
+    react: reactWithLayout, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
     'react-native': { Modal: 'Modal', ScrollView: 'ScrollView', Pressable: 'Pressable', View: 'View', Text: 'Text',
       Dimensions: { get: () => ({ width: 400, height: 800 }) }, useWindowDimensions: () => ({ width: 400, height: 800, fontScale: 1 }),
       StyleSheet: { absoluteFill: {}, create: (styles: object) => styles } },
     'react-native-gesture-handler': { Gesture: { Pan: () => pan }, GestureHandlerRootView: 'GestureRoot' },
-    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' },
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView', createAnimatedComponent: (component: unknown) => component },
       useSharedValue: (value: unknown) => slot(() => ({ value })), useAnimatedStyle: (read: () => unknown) => ({ read }),
+      cancelAnimation() {}, withSpring: (target: number) => target,
       withTiming: (target: number, _options: unknown, done?: (finished: boolean) => void) => { if (done) endings.push(done); return target; } },
     'react-native-worklets': { scheduleOnRN: (callback: (...args: any[]) => void, ...args: any[]) => {
       assert.equal(typeof callback, 'function', 'never schedule a native event as a callback'); rn.push(() => callback(...args));
@@ -61,9 +76,12 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
     '@/components/Icon': { __esModule: true, default: 'Icon' },
     '@/components/glass': { GlassPressable: 'GlassPressable' }, '@/components/MenuGlassBackdrop': { MenuGlassBackdrop: 'Glass' },
     '@/lib/menuRequest': { MenuRequestScope }, '@/i18n': { useT: () => (value: string) => value },
+    '@/lib/menuMorph': { MenuMorphSession },
+    '@/lib/menuOrigin': { takeMenuOrigin: () => null, captureMenuTouchStart() {}, captureMenuTouchMove() {} },
+    '../../modules/liquid-glass': { isMenuMorphAvailable: true, MenuMorphView: 'MenuMorph' },
     '@/theme': { useTheme: () => colors, useThemeMode: () => 'dark', themed: (make: (value: object) => unknown) => make(colors),
       spacing: { sm: 8 }, radius: { lg: 14 }, fontSize: { md: 16 } },
-    '@/theme/motion': { SHEET_IN: { duration: 240 }, SHEET_OUT: { duration: 160 } },
+    '@/theme/motion': { SHEET_IN: { duration: 240 }, SHEET_OUT: { duration: 160 }, motion: { reduceMotion: { essential: 0 } } },
     '@/store/player': { PLAYBACK_SPEEDS: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2],
       usePlayerStore: (select: (value: object) => unknown) => select({ speed: calls.speed, setSpeed: (value: number) => { calls.speed = value; } }) },
   };
@@ -81,7 +99,10 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
   const glass = load('components/MenuGlassCard.tsx'); imports['@/components/MenuGlassCard'] = glass;
   const modal = load('components/SheetModal.tsx'); imports['@/components/SheetModal'] = modal;
   const speed = load('components/SpeedSheet.tsx');
-  function HookOnly() { hook.current = animation.useBottomSheetAnim(true, () => { calls.defaultClose++; }, 'card'); return null; }
+  function HookOnly() {
+    hook.current = animation.useBottomSheetAnim(true, () => { calls.defaultClose++; }, 'card');
+    return jsx('MenuMorph', hook.current.motion);
+  }
   const edgeClose = (...args: unknown[]) => { edgeArgs.push(args); };
   const root = () => kind === 'edges' ? jsx(glass.MenuGlassCardFrame, { onClose: edgeClose,
     children: jsx(glass.MenuGlassCardHeader, { title: 'Edges', onClose: edgeClose }) })
@@ -104,9 +125,19 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
         current = scopes.get(key) ?? { slots: [], cursor: 0 }; scopes.set(key, current); current.cursor = 0;
         return visit(node.type(node.props), `${key}.result`);
       }
+      if (node.type === 'MenuMorph' && node.props.sessionId) {
+        const previous = nativeStates.get(path);
+        nativeStates.set(path, { sessionId: node.props.sessionId, open: node.props.open });
+        if (previous && previous.sessionId === node.props.sessionId && previous.open && !node.props.open) {
+          const { sessionId, onMotionComplete } = node.props;
+          node.props.onMotionStart?.({ nativeEvent: { sessionId, open: false } });
+          endings.push(() => onMotionComplete({ nativeEvent: { sessionId, open: false } }));
+        }
+      }
       return { ...node, props: { ...node.props, children: visit(node.props.children, `${path}.children`) } };
     }
-    tree = visit(root(), 'root'); while (effects.length) effects.shift()!(); return tree;
+    do { dirty = false; tree = visit(root(), 'root'); while (effects.length) effects.shift()!(); } while (dirty);
+    return tree;
   };
   const find = (type: string, predicate: (props: any) => boolean = () => true): Element[] => {
     function visit(node: any): Element[] {
@@ -118,8 +149,8 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
   };
   render(); if (kind !== 'hook' && kind !== 'edges') { openRef.current(); render(); }
   return { calls, hook, find, render, openRef, endings, edgeArgs,
-    press(type: string, predicate?: (props: any) => boolean) { const item = find(type, predicate)[0]; assert.ok(item); item.props.onPress(pressEvent()); },
-    finish() { for (const done of endings.splice(0)) done(true); while (rn.length) rn.shift()!(); render(); },
+    press(type: string, predicate?: (props: any) => boolean) { const item = find(type, predicate)[0]; assert.ok(item); item.props.onPress(pressEvent()); render(); },
+    finish() { render(); for (const done of endings.splice(0)) done(true); while (rn.length) rn.shift()!(); render(); },
     visible: () => find('Modal')[0]?.props.visible,
   };
 }
@@ -131,10 +162,13 @@ test('the actual SpeedSheet X accepts a native press event and closes without ex
 });
 
 test('the real shared X and backdrop discard native arguments before calling the public close callback', () => {
-  const h = harness('edges');
-  h.press('GlassPressable', (props) => props.accessibilityLabel === 'Close');
-  h.press('Pressable', (props) => props.accessibilityLabel === 'Close');
-  assert.deepEqual(h.edgeArgs, [[], []]);
+  for (const type of ['GlassPressable', 'Pressable']) {
+    const h = harness('edges');
+    h.press(type, (props) => props.accessibilityLabel === 'Close');
+    assert.deepEqual(h.edgeArgs, [], 'native exit must finish before notifying the owner');
+    h.finish();
+    assert.deepEqual(h.edgeArgs, [[]]);
+  }
 });
 
 test('shared sheets close from backdrop, system Back, direct onPress and options without a callback', () => {
@@ -164,7 +198,7 @@ test('an old exit completion cannot close a newly opened sheet or run its old ac
 
 test('the common animation hook ignores event objects and uses its explicit default close', () => {
   for (const value of [undefined, pressEvent(), null, 'not-a-function']) {
-    const h = harness('hook'); h.hook.current.dismiss(value); h.hook.current.dismiss(value);
+    const h = harness('hook'); h.hook.current.dismiss(value); h.hook.current.dismiss(value); h.render();
     assert.equal(h.endings.length, 1); assert.doesNotThrow(() => h.finish()); assert.equal(h.calls.defaultClose, 1);
   }
 });

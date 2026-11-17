@@ -1,109 +1,115 @@
-/**
- * Bottom sheet animation inside a `Modal` (animationType="none"):
- * the backdrop fades and the sheet slides up from the bottom on open (240 ms)
- * and slides down on close (160 ms). `dismiss(after)` plays the exit animation
- * and then runs the actual close (whoever closes the Modal), so the sheet
- * doesn't vanish abruptly. `pan` adds swipe-down-to-dismiss.
- */
-import { useEffect } from 'react';
+/** Native button-to-menu motion, with the original sheet path as a fallback.
+ * A native host owns frame timing and waits for its real window's first draw;
+ * JavaScript only starts a transaction and acknowledges its completed exit. */
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Dimensions, type LayoutChangeEvent } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
-import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { SHEET_IN, SHEET_OUT } from '@/theme/motion';
-
-// Sheets always animate, even when the system has "remove animations" enabled:
-// without a transition they appear abruptly with a visible layout jump. The
-// reason lives with the token now (see `motion.reduceMotion.essential`).
-const TIMING_IN = SHEET_IN;
-const TIMING_OUT = SHEET_OUT;
+import { isMenuMorphAvailable } from '../../modules/liquid-glass';
+import { MenuMorphSession, type MenuMorphController, type MenuMorphEvent } from '@/lib/menuMorph';
+import { takeMenuOrigin, type MenuOriginRect } from '@/lib/menuOrigin';
+import { SHEET_IN, SHEET_OUT, motion } from '@/theme/motion';
 
 const SCREEN_H = Dimensions.get('window').height;
-
-/** Fraction of the sheet's height to drag past for the release to close it. */
 const DISMISS_RATIO = 0.3;
-/** Downward fling (px/s) that closes it regardless of how far it was dragged. */
 const DISMISS_VELOCITY = 800;
+const FALLBACK_SPRING = { damping: 22, stiffness: 260, mass: 1, reduceMotion: motion.reduceMotion.essential };
+interface State { sessionId: number; open: boolean; ready: boolean; sourceRect: MenuOriginRect | null }
 
 export function useBottomSheetAnim(open: boolean, onClose?: () => void, presentation: 'sheet' | 'card' = 'sheet', sessionKey?: unknown) {
   const isCard = presentation === 'card';
-  const timingIn = isCard ? { ...TIMING_IN, duration: 180 } : TIMING_IN;
-  const timingOut = isCard ? { ...TIMING_OUT, duration: 120 } : TIMING_OUT;
+  const native = isCard && isMenuMorphAvailable;
+  const [session] = useState(() => new MenuMorphSession());
+  const [state, setState] = useState<State>({ sessionId: 0, open: false, ready: false, sourceRect: null });
+  const stateRef = useRef(state);
+  const closeRef = useRef(onClose);
+  useLayoutEffect(() => { closeRef.current = onClose; }, [onClose]);
   const progress = useSharedValue(0);
   const dismissing = useSharedValue(false);
-  // Actual sheet height (measured on first layout); until then, a full screen
-  // height so the first frame stays safely out of view.
   const sheetH = useSharedValue(SCREEN_H);
+  const update = useCallback((next: State) => { stateRef.current = next; setState(next); }, []);
 
-  useEffect(() => {
+  const complete = useCallback((id: number, expanded: boolean) => {
+    if (id !== session.id) return;
+    if (session.complete(id, expanded)) {
+      progress.value = expanded ? 1 : 0;
+      dismissing.value = false;
+    }
+  }, [session, progress, dismissing]);
+
+  useLayoutEffect(() => {
+    cancelAnimation(progress);
     dismissing.value = false;
     if (open) {
-      progress.value = withTiming(1, isCard ? { ...TIMING_IN, duration: 180 } : TIMING_IN);
+      const id = session.begin();
+      update({ sessionId: id, open: true, ready: false, sourceRect: takeMenuOrigin() });
+      progress.value = 0;
+      if (!native) {
+        const settled = (finished?: boolean) => { 'worklet'; if (finished) scheduleOnRN(complete, id, true); };
+        progress.value = isCard ? withSpring(1, FALLBACK_SPRING, settled) : withTiming(1, SHEET_IN, settled);
+      }
     } else {
+      session.invalidate();
+      update({ sessionId: session.id, open: false, ready: false, sourceRect: null });
       progress.value = 0;
     }
-  }, [open, progress, dismissing, isCard, sessionKey]);
+    return () => { session.invalidate(); cancelAnimation(progress); };
+  }, [open, sessionKey, native, isCard, session, update, progress, dismissing, complete]);
 
-  const dismiss = (after?: unknown) => {
-    if (dismissing.value) return;
-    // This imperative function is also safe as a native press/back handler:
-    // event objects are never callbacks handed across the worklet boundary.
-    const complete = typeof after === 'function' ? after as () => void : onClose;
+  const dismiss = useCallback((after?: unknown) => {
+    const callback = typeof after === 'function' ? after as () => void : closeRef.current;
+    if (!session.close(callback)) return;
+    const id = session.id;
     dismissing.value = true;
-    progress.value = withTiming(0, timingOut, (f) => {
-      if (f && typeof complete === 'function') scheduleOnRN(complete);
-    });
-  };
+    update({ ...stateRef.current, open: false, ready: true });
+    if (!native) {
+      progress.value = withTiming(0, { ...SHEET_OUT, duration: isCard ? 180 : SHEET_OUT.duration }, (finished) => {
+        if (finished) scheduleOnRN(complete, id, false);
+      });
+    }
+  }, [session, dismissing, update, native, progress, isCard, complete]);
 
+  const ready = useCallback(() => {
+    const current = stateRef.current;
+    if (current.sessionId === session.id && session.phase !== 'closed' && !current.ready)
+      update({ ...current, ready: true });
+  }, [session, update]);
+  const onMotionStart = useCallback((event: MenuMorphEvent) => {
+    const { sessionId: id, open: expanded } = event.nativeEvent;
+    if (id !== session.id || expanded !== stateRef.current.open) return;
+    progress.value = withTiming(expanded ? 1 : 0, { ...(expanded ? SHEET_IN : SHEET_OUT), duration: expanded ? 220 : 180 });
+  }, [session, progress]);
+  const onMotionComplete = useCallback((event: MenuMorphEvent) => {
+    complete(event.nativeEvent.sessionId, event.nativeEvent.open);
+  }, [complete]);
   const backdropStyle = useAnimatedStyle(() => ({ opacity: progress.value }));
-  const sheetStyle = useAnimatedStyle(() => isCard ? {
+  const sheetStyle = useAnimatedStyle(() => native ? {} : isCard ? {
     opacity: progress.value,
     transformOrigin: 'right top',
-    transform: [{ translateY: (1 - progress.value) * -8 }, { scale: 0.96 + progress.value * 0.04 }],
-  } : {
-    transform: [{ translateY: (1 - progress.value) * sheetH.value }],
-  }, [isCard]);
-  const onSheetLayout = (e: LayoutChangeEvent) => {
-    sheetH.value = e.nativeEvent.layout.height;
-  };
+    transform: [{ translateY: (1 - progress.value) * -14 }, { scale: 0.72 + progress.value * 0.28 }],
+  } : { transform: [{ translateY: (1 - progress.value) * sheetH.value }] }, [native, isCard]);
+  const onSheetLayout = useCallback((event: LayoutChangeEvent) => {
+    sheetH.value = event.nativeEvent.layout.height;
+    ready();
+  }, [sheetH, ready]);
 
-  /**
-   * Swipe down to dismiss. The drag drives the very same `progress` as the
-   * open/close animation, so the sheet follows the finger and the backdrop
-   * fades along with it; on release it either finishes closing or springs back
-   * to fully open. Without `onClose` it can be dragged but never closes, so
-   * whoever wants the gesture must pass it.
-   *
-   * A factory because one gesture instance can only be attached to one
-   * detector, and a sheet may need several: the song menu puts one on its
-   * grabber and another on the list below, so the grabber still closes it when
-   * the list is scrolled and owns the drag. Whichever one the finger lands on,
-   * they all drive the same `progress`.
-   */
   const makePan = () => Gesture.Pan()
     .enabled(!isCard)
-    // Downward only and after 10 px, so taps on the actions still get through
-    // and an upward drag never lifts the sheet above its place.
     .activeOffsetY(10)
     .failOffsetY(-10)
-    .onUpdate((e) => {
+    .onUpdate((event) => {
       if (dismissing.value) return;
-      progress.value = Math.min(1, Math.max(0, 1 - e.translationY / sheetH.value));
+      progress.value = Math.min(1, Math.max(0, 1 - event.translationY / sheetH.value));
     })
-    .onEnd((e) => {
+    .onEnd((event) => {
       if (dismissing.value) return;
-      const closes =
-        e.translationY > sheetH.value * DISMISS_RATIO || e.velocityY > DISMISS_VELOCITY;
-      if (closes && onClose) {
-        dismissing.value = true;
-        progress.value = withTiming(0, timingOut, (f) => {
-          if (f) scheduleOnRN(onClose);
-        });
-      } else {
-        progress.value = withTiming(1, timingIn);
-      }
+      const closes = event.translationY > sheetH.value * DISMISS_RATIO || event.velocityY > DISMISS_VELOCITY;
+      if (closes && onClose) scheduleOnRN(dismiss);
+      else progress.value = withTiming(1, SHEET_IN);
     });
-
-  return { dismiss, dismissing, pan: makePan(), makePan, backdropStyle, sheetStyle, onSheetLayout };
+  const controller: MenuMorphController = { ...state, fallbackStyle: sheetStyle, onMotionStart, onMotionComplete, onLayoutReady: ready };
+  return { dismiss, dismissing, pan: makePan(), makePan, backdropStyle, sheetStyle, onSheetLayout,
+    motion: controller, onModalShow: ready };
 }

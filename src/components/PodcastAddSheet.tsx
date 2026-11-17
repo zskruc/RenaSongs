@@ -22,6 +22,7 @@ import { Cover } from '@/components/Cover';
 import { Message } from '@/components/Message';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { listPerf } from '@/lib/listPerf';
 import { colors, fontSize, radius, spacing, themed } from '@/theme';
 
@@ -35,6 +36,8 @@ interface Props {
 
 export function PodcastAddSheet({ visible, subscribed, onCancel, onSubscribed }: Props) {
   const t = useT();
+  const popup = usePopupMorphPresence(visible);
+  const cancel = () => popup.close(onCancel);
   const [term, setTerm] = useState('');
   const [feedUrl, setFeedUrl] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,8 +66,7 @@ export function PodcastAddSheet({ visible, subscribed, onCancel, onSubscribed }:
     setError(null);
     try {
       await subscribe(subscribeTo);
-      onSubscribed();
-      onCancel();
+      popup.close(() => { onSubscribed(); onCancel(); });
     } catch {
       setError(t("Couldn't read that feed."));
     } finally {
@@ -77,18 +79,20 @@ export function PodcastAddSheet({ visible, subscribed, onCancel, onSubscribed }:
 
   return (
     <Modal
-      visible={visible}
+      visible={popup.mounted}
       transparent
-      animationType="fade"
+      animationType="none"
       presentationStyle="overFullScreen"
-      onRequestClose={onCancel}
+      onShow={popup.animation.onModalShow}
+      onRequestClose={cancel}
     >
       <KeyboardAvoidingView
         style={styles.modal}
         behavior={Platform.OS === 'ios' ? 'height' : undefined}
       >
-        <MenuGlassCardFrame maxWidth={384} onClose={onCancel}>
-          <MenuGlassCardHeader title={t('Add podcast')} onClose={onCancel} />
+        <MenuGlassCardFrame maxWidth={384} onClose={cancel} motion={popup.animation.motion}
+          backdropStyle={popup.animation.backdropStyle} cardStyle={popup.animation.sheetStyle} onLayout={popup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={t('Add podcast')} onClose={cancel} />
           {/* One bounded virtualized scroll includes both text fields, so a
               keyboard or a short window cannot hide the feed subscription. */}
           <FlatList
@@ -187,7 +191,7 @@ export function PodcastAddSheet({ visible, subscribed, onCancel, onSubscribed }:
                     )}
                   </GlassPressable>
                 </View>
-                <GlassPressable onPress={onCancel} style={styles.cancel} accessibilityRole="button">
+                <GlassPressable onPress={cancel} style={styles.cancel} accessibilityRole="button">
                   <Text style={styles.cancelText}>{t('Cancel')}</Text>
                 </GlassPressable>
               </View>

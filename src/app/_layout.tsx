@@ -33,6 +33,7 @@ import { BottomScrollEdge } from '@/components/BottomScrollEdge';
 import { GlobalTabBar } from '@/components/GlobalTabBar';
 import { LiquidDockProvider } from '@/hooks/useLiquidDock';
 import { MediaMenuSheet } from '@/components/MediaMenuSheet';
+import { MenuOriginBoundary } from '@/components/MenuOriginBoundary';
 import { ArtistMenuSheet } from '@/components/ArtistMenuSheet';
 import { PodcastMenuSheet } from '@/components/PodcastMenuSheet';
 import { GlobalPlaylistPicker } from '@/components/PlaylistPickerSheet';
@@ -50,6 +51,7 @@ import { initHomeWidget } from '@/lib/homeWidget';
 import { loadCustomFont } from '@/lib/customFont';
 import { removeLegacyRadioCovers } from '@/lib/legacyRadioCovers';
 import { startPerfLog } from '@/lib/perfLog';
+import { captureMenuTouchMove, captureMenuTouchStart } from '@/lib/menuOrigin';
 import { queryClient } from '@/lib/query';
 import { primaryUrl } from '@/lib/serverUrls';
 import { playerModalAnimation } from '@/lib/amllPlayerTransition';
@@ -366,7 +368,10 @@ export default function RootLayout() {
   }, [keepScreenAwake]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}
+      onStartShouldSetResponderCapture={(event) => { captureMenuTouchStart(event); return false; }}
+      onMoveShouldSetResponderCapture={(event) => { captureMenuTouchMove(event); return false; }}>
+      <MenuOriginBoundary />
       <QueryClientProvider client={queryClient}>
         <LyricsTypographyProvider>
         <LiquidDockProvider>

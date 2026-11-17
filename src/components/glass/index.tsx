@@ -16,6 +16,7 @@ import { getKyantGlassProfile } from '@/theme/glassDefaults';
 import { glassMaterialTuningMask } from '@/lib/glassMaterialTuning';
 import { traceResolvedGlassTheme } from '@/lib/glassThemeTrace';
 import { GLASS_SWITCH_SIZE } from '@/lib/glassSwitchSize';
+import { captureMenuTrigger } from '@/lib/menuOrigin';
 import { DynamicGlassBackdrop } from './StaticGlassBackdropContext';
 
 export type GlassVariant = 'regular' | 'prominent' | 'subtle' | 'button';
@@ -224,6 +225,10 @@ export const GlassPressable = forwardRef<View, GlassPressableProps>(function Gla
   const nativeProps = { ...props };
   for (const key of MATERIAL_PROPS) delete nativeProps[key];
   delete nativeProps.buttonMaterial;
+  nativeProps.onPressIn = (event) => {
+    captureMenuTrigger(event);
+    props.onPressIn?.(event);
+  };
   return <Pressable {...nativeProps} ref={ref} />;
 });
 

@@ -95,7 +95,7 @@ function ShareContent({ target, session }: { target: ShareTarget; session: numbe
   // Only Navidrome can be told this, and only through its own API. Elsewhere
   // the row isn't there rather than being there and doing nothing.
   const canDownloads = canShareDownloads();
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     true,
     closeNow,
     'card',
@@ -173,8 +173,9 @@ function ShareContent({ target, session }: { target: ShareTarget; session: numbe
   }
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={close}>
+    <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={close}>
       <MenuGlassCardFrame
+        motion={motion}
         onClose={close}
         backdropStyle={backdropStyle}
         cardStyle={sheetStyle}

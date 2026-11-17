@@ -17,13 +17,16 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaFrame, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated from 'react-native-reanimated';
 
 import { useAccent } from '@/hooks/useAccent';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
+import { captureMenuTouchMove, captureMenuTouchStart } from '@/lib/menuOrigin';
 import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
 import { CONTENT_MAX_WIDTH } from '@/hooks/useScreenSize';
 import { colors, fontSize, radius, spacing, SCREEN_BOTTOM_PADDING, themed, tracking, useTheme, useThemeMode } from '@/theme';
 import { BackChevron } from './BackChevron';
-import { MenuGlassPanel, menuGlassScrimColor } from './MenuGlassCard';
+import { MenuMorphSurface, menuGlassScrimColor } from './MenuGlassCard';
 import { DynamicGlassBackdrop, StaticGlassBackdropProvider } from './glass/StaticGlassBackdropContext';
 import { SettingsScrollPaddingContext } from './SettingsScrollPaddingContext';
 
@@ -277,6 +280,11 @@ export function SelectList<T extends string | number | boolean>({
   // height (measured on render): with both we anchor exactly, flush to the row.
   const [anchor, setAnchor] = useState<{ y: number; h: number } | null>(null);
   const [menuH, setMenuH] = useState(0);
+  const popup = usePopupMorphPresence(anchor != null, anchor);
+  const closeMenu = (after?: () => void) => popup.close(() => {
+    setAnchor(null);
+    after?.();
+  });
   const rowRef = useRef<View>(null);
   const active = options.find((o) => o.value === value) ?? options[0];
 
@@ -286,7 +294,10 @@ export function SelectList<T extends string | number | boolean>({
     // did not always: before edge-to-edge the window began under the status bar
     // and the row's `y` had to have `insets.top` added to it to reach the
     // Modal's space. Adding it now moves the menu down by a status bar.
-    rowRef.current?.measureInWindow((_x, y, _w, h) => setAnchor({ y, h }));
+    rowRef.current?.measureInWindow((_x, y, _w, h) => {
+      setMenuH(0);
+      setAnchor({ y, h });
+    });
   }
 
   /**
@@ -397,14 +408,20 @@ export function SelectList<T extends string | number | boolean>({
       <Modal
         transparent
         statusBarTranslucent
-        animationType="fade"
-        visible={anchor != null}
-        onRequestClose={() => setAnchor(null)}
+        animationType="none"
+        visible={popup.mounted}
+        onShow={popup.animation.onModalShow}
+        onRequestClose={() => closeMenu()}
       >
         <DynamicGlassBackdrop>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={() => setAnchor(null)} />
+        <View style={{ flex: 1 }} onStartShouldSetResponderCapture={(event) => { captureMenuTouchStart(event); return false; }}
+        onMoveShouldSetResponderCapture={(event) => { captureMenuTouchMove(event); return false; }}>
+        <Animated.View style={[StyleSheet.absoluteFill, popup.animation.backdropStyle]}>
+          <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={() => closeMenu()} />
+        </Animated.View>
         {menu != null ? (
-          <MenuGlassPanel
+          <MenuMorphSurface motion={{ ...popup.animation.motion, ready: popup.animation.motion.ready && menuH > 0 }}
+            onLayout={popup.animation.onSheetLayout}
             accessibilityViewIsModal
             // Invisible on the first frame (before height is measured): avoids
             // seeing it jump when it opens upward.
@@ -439,8 +456,7 @@ export function SelectList<T extends string | number | boolean>({
                     key={String(opt.value)}
                     style={({ pressed }) => [settingsStyles.menuItem, pressed && { opacity: 0.6 }]}
                     onPress={() => {
-                      setAnchor(null);
-                      if (!isActive) onChange(opt.value);
+                      closeMenu(() => { if (!isActive) onChange(opt.value); });
                     }}
                   >
                     <Text style={[settingsStyles.menuItemText, isActive && { color: accent }]}>
@@ -451,8 +467,9 @@ export function SelectList<T extends string | number | boolean>({
                 );
               })}
             </ScrollView>
-          </MenuGlassPanel>
+          </MenuMorphSurface>
         ) : null}
+        </View>
         </DynamicGlassBackdrop>
       </Modal>
     </SettingAnchor>
@@ -607,6 +624,7 @@ function FineTunePad({
 }) {
   const accent = useAccent();
   const dark = useThemeMode() === 'dark';
+  const popup = usePopupMorphPresence(visible, title);
   const [draft, setDraft] = useState(value);
   /** The same value, readable from inside the repeat timer. */
   const draftRef = useRef(value);
@@ -631,6 +649,12 @@ function FineTunePad({
   }, [visible, value]);
 
   useEffect(() => () => stopTimer(), []);
+  useEffect(() => {
+    if (!visible) {
+      holding.current = 0;
+      stopTimer();
+    }
+  }, [visible]);
 
   function stopTimer() {
     if (timer.current) clearTimeout(timer.current);
@@ -681,7 +705,7 @@ function FineTunePad({
 
   function close() {
     release();
-    onClose();
+    popup.close(onClose);
   }
 
   // Greyed out at the end of the range, but never `disabled`: turning that on
@@ -707,11 +731,18 @@ function FineTunePad({
   };
 
   return (
-    <Modal transparent statusBarTranslucent visible={visible} animationType="fade" onRequestClose={close}>
+    <Modal transparent statusBarTranslucent visible={popup.mounted} animationType="none" onRequestClose={close}
+      onShow={popup.animation.onModalShow}>
       <DynamicGlassBackdrop>
-      <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={close} />
+      <View style={{ flex: 1 }} onStartShouldSetResponderCapture={(event) => { captureMenuTouchStart(event); return false; }}
+        onMoveShouldSetResponderCapture={(event) => { captureMenuTouchMove(event); return false; }}>
+      <Animated.View style={[StyleSheet.absoluteFill, popup.animation.backdropStyle]}>
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: menuGlassScrimColor(dark) }]} onPress={close} />
+      </Animated.View>
       <View style={settingsStyles.padCenter} pointerEvents="box-none">
-        <MenuGlassPanel accessibilityViewIsModal style={settingsStyles.padCard}>
+        <MenuMorphSurface accessibilityViewIsModal style={settingsStyles.padCard} motion={popup.animation.motion}
+          onLayout={popup.animation.onSheetLayout}>
+          <View style={{ alignItems: 'center' }}>
           <Text style={settingsStyles.padTitle}>{title}</Text>
           {arrow(1, 'chevron-up')}
           <Text style={settingsStyles.padValue}>{formatValue(draft)}</Text>
@@ -719,7 +750,9 @@ function FineTunePad({
           <GlassPressable variant="subtle" hitSlop={8} style={settingsStyles.padDone} onPress={close}>
             <Text style={[settingsStyles.padDoneLabel, { color: accent }]}>{doneLabel}</Text>
           </GlassPressable>
-        </MenuGlassPanel>
+          </View>
+        </MenuMorphSurface>
+      </View>
       </View>
       </DynamicGlassBackdrop>
     </Modal>

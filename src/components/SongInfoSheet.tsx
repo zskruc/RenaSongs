@@ -96,7 +96,7 @@ function SongInfoContent({ song, session }: { song: Song; session: number }) {
   const losslessOnly = useSettings((s) => s.streamLosslessOnly);
   const dlUri = useDownloads((s) => (song ? s.files[song.id] : undefined));
   const dlBitRate = useDownloads((s) => (song ? s.dlBitRates[song.id] : undefined));
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     true,
     closeNow,
     'card',
@@ -212,8 +212,8 @@ function SongInfoContent({ song, session }: { song: Song; session: number }) {
   add('ISRC', song.isrc?.join(', '));
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={close}>
-      {!coverOpen && <MenuGlassCardFrame onClose={close} backdropStyle={backdropStyle}
+    <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={close}>
+      {!coverOpen && <MenuGlassCardFrame motion={motion} onClose={close} backdropStyle={backdropStyle}
         cardStyle={sheetStyle} onLayout={onSheetLayout} maxWidth={328}>
         <MenuGlassCardHeader title={t('Song information')} onClose={close} />
         <View style={styles.headerRow}>

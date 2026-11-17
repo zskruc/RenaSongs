@@ -13,6 +13,20 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.2] - 2026-11-18
+
+### Added
+
+- 移植 expo-glass-custom-menu 原生弹簧、形变和液态轮廓，将歌曲／专辑／艺人菜单、分享、输出设备、设置选择器、编辑及确认窗口统一接入从触发位置展开和收回的动效。
+- 面板实际完成布局后才开始运动；退出完成后移除窗口并执行选项，防止快速重复点击、重开窗口时误执行旧操作。
+- 保留当前页面布局、播放器／底栏动效与已保存的玻璃材质参数；不增加逐帧 JavaScript 通知或逐帧页面截图。
+
+### English
+
+- Port the pinned expo-glass-custom-menu spring and field implementation into the existing Android glass module, using native frame callbacks and separate material/content tracks.
+- Share retained popup lifetimes and one-shot trigger geometry across functional menus, settings selectors and dialogs, with a Reanimated fallback on older native builds and other platforms.
+- Local Samsung preview; no GitHub publication or release. Scope and validation: [menu morph integration](./docs/MENU-MORPH-181.md).
+
 ## [0.8.8.1-preview.1] - 2026-11-17
 
 ### Added

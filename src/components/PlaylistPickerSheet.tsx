@@ -139,7 +139,7 @@ function PlaylistPickerSession({ songs, excludeId, onClose, request }: PlaylistP
     if (ticket === null || !owns(ticket)) return;
     closing.current = true; request.invalidate(); onClose();
   };
-  const { dismiss, dismissing, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(visible, closeAfterGesture, 'card');
+  const { dismiss, dismissing, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(visible, closeAfterGesture, 'card');
   const canAct = () => mounted.current && !closing.current && !dismissing.value && request.isActive();
   const close = () => {
     if (!canAct()) return;
@@ -232,8 +232,8 @@ function PlaylistPickerSession({ songs, excludeId, onClose, request }: PlaylistP
     } catch (error) { if (owns(ticket)) failure(error); }
     finally { busyRow.current = null; if (owns(ticket)) setBusy(null); }
   }
-  return <Modal transparent animationType="none" visible onRequestClose={() => creating !== null ? cancelCreating() : close()}>
-    {creating === null && <MenuGlassCardFrame onClose={close} backdropStyle={backdropStyle} cardStyle={sheetStyle} onLayout={onSheetLayout}>
+  return <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={() => creating !== null ? cancelCreating() : close()}>
+    {creating === null && <MenuGlassCardFrame motion={motion} onClose={close} backdropStyle={backdropStyle} cardStyle={sheetStyle} onLayout={onSheetLayout}>
       <MenuGlassCardHeader title={t('Manage playlists')} onClose={close} />
       <Text style={styles.description}>{t('Add missing songs or remove all matching entries from a selected playlist.')}</Text>
       <View style={{ maxHeight: playlistsMaxH(screenH), flexShrink: 1, minHeight: 0 }}>

@@ -1,5 +1,24 @@
 # Third-party notices
 
+## Native button-to-menu liquid morph
+
+Menu and popup motion adapts [rit3zh/expo-glass-custom-menu](https://github.com/rit3zh/expo-glass-custom-menu),
+pinned revision `0021efd8ab0d068f155bbdac62c5f673ccc39a24`.
+Its MIT copyright notice is Copyright (c) 2015-present 650 Industries, Inc. (aka Expo).
+The complete original license is preserved in
+[modules/liquid-glass/EXPO_GLASS_CUSTOM_MENU_LICENSE](./modules/liquid-glass/EXPO_GLASS_CUSTOM_MENU_LICENSE).
+
+`GlassSpring`, `GlassMotion`, `GlassMorphTuning`, `GlassMorphFrame`,
+`GlassGaussianField` and `RoundedField` are ported to
+`modules/liquid-glass/android/src/main/java/expo/modules/liquidglass/menumotion/`
+with package/import adjustments. `GlassMorphOutline` and `MenuMorphView` adapt
+the upstream field and motion to arbitrary React Native content and the existing
+Resonus glass renderer. Source geometry, default spring channels, shape fusion
+and independent content reveal run on Android's frame callback. The upstream
+demo app, menu data model and material shader are not bundled; existing material
+profiles, saved optical parameters and final popup layouts remain in use.
+See [integration notes](./docs/MENU-MORPH-181.md) for coverage and limitations.
+
 ## Optional official artist-name artwork
 
 Artist-name wordmarks are optional runtime artwork from the verified artist's

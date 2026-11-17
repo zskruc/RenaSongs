@@ -12,6 +12,7 @@ class LiquidGlassModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("ResonusLiquidGlass")
     Constant("isSupported") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
+    Constant("menuMorphSupported") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
     Constant("themeTraceEnabled") { GlassThemeTrace.enabled }
     Constant("artistFocusTraceEnabled") { Log.isLoggable("ResonusArtistFocus", Log.DEBUG) }
     Constant("artistImageTraceEnabled") { Log.isLoggable("ResonusArtistImage", Log.DEBUG) }
@@ -23,6 +24,10 @@ class LiquidGlassModule : Module() {
     OnActivityEntersBackground { StaticDecorationRasters.trimUnused() }
     AsyncFunction("getDiagnostics") {
       WindowBackdrops.diagnostics() + TabsMotionHosts.diagnostics()
+    }.runOnQueue(Queues.MAIN)
+    AsyncFunction("measureMenuOrigin") { tag: Int ->
+      if (tag <= 0) null else try { measureMenuOrigin(appContext.findView<View>(tag)) }
+      catch (_: Exception) { null }
     }.runOnQueue(Queues.MAIN)
     // Android's default keyboard-focus drawable dims the entire artist photo.
     // Keep focus/click/accessibility semantics and disable only that drawable.
@@ -172,6 +177,17 @@ class LiquidGlassModule : Module() {
       Events("onClipHostReady")
       Prop("initialOpacity") { view: PlayerSurfaceClipView, value: Double -> view.setInitialOpacity(value) }
       Prop("interactive") { view: PlayerSurfaceClipView, value: Boolean -> view.setInteractive(value) }
+    }
+
+    View(MenuMorphView::class) {
+      Name("MenuMorph")
+      Events("onMotionStart", "onMotionComplete")
+      Prop("open") { view: MenuMorphView, value: Boolean -> view.setOpen(value) }
+      Prop("ready") { view: MenuMorphView, value: Boolean -> view.setReady(value) }
+      Prop("sessionId") { view: MenuMorphView, value: Int -> view.setSessionId(value) }
+      Prop("sourceRect") { view: MenuMorphView, value: List<Double>? -> view.setSourceRect(value) }
+      Prop("radius") { view: MenuMorphView, value: Double -> view.setRadius(value) }
+      OnViewDidUpdateProps { view: MenuMorphView -> view.commitProps() }
     }
 
   }

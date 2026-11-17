@@ -15,6 +15,7 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 const xml = '<opml><body><outline title="Old" xmlUrl="https://feeds.test/old"/><outline title="New" xmlUrl="https://feeds.test/new"/></body></opml>';
 
 function harness() {
+  const exits: (() => void)[] = [];
   const auth = createStore(() => ({ auth: { username: 'one', password: 'never-export-account-password' }, offline: false, autoOffline: false }));
   const calls = { picked: [] as unknown[], stats: [] as string[], reads: [] as string[], deleted: [] as string[], writes: [] as { file: string; text: string }[], shares: [] as any[], subscribed: [] as string[], imported: 0, closed: 0 };
   let pick = async (): Promise<any> => ({ canceled: false, assets: [{ uri: 'file:///cache/DocumentPicker/shows.opml', name: 'shows.opml', size: xml.length }] });
@@ -26,6 +27,10 @@ function harness() {
     ...data.map((item: any) => React.createElement(React.Fragment, { key: item.entry.feedUrl }, renderItem({ item }))));
   const imports: Record<string, unknown> = {
     react: React, 'react/jsx-runtime': JSXRuntime,
+    './useBottomSheetAnim': { useBottomSheetAnim: (open: boolean, _close: unknown, _kind: string, sessionId: number) => ({
+      dismiss: (after: () => void) => exits.push(after), motion: { open, ready: true, sessionId },
+      onModalShow() {}, onSheetLayout() {}, backdropStyle: {}, sheetStyle: {},
+    }) },
     'react-native': { ActivityIndicator: 'Spinner', FlatList, Modal: 'Modal', Text: 'Text', View: 'View' },
     'expo-document-picker': { getDocumentAsync: (options: unknown) => { calls.picked.push(options); return pick(); } },
     'expo-file-system/legacy': { cacheDirectory: 'file:///cache/', EncodingType: { UTF8: 'utf8' },
@@ -44,6 +49,11 @@ function harness() {
     '@/theme': { colors: palette, useTheme: () => palette, themed: (make: (colors: unknown) => unknown) => make(palette),
       fontSize: { sm: 13 }, radius: { pill: 100 }, spacing: { sm: 8, md: 12 } },
   };
+  const presence: Record<string, any> = {};
+  runInNewContext(ts.transpileModule(readFileSync(new URL('../src/hooks/usePopupMorphPresence.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText, { exports: presence, require(id: string) { assert.ok(Object.hasOwn(imports, id), id); return imports[id]; } });
+  imports['@/hooks/usePopupMorphPresence'] = presence;
   const exports: Record<string, any> = {};
   runInNewContext(ts.transpileModule(readFileSync(new URL('../src/components/podcast/PodcastOPMLManager.tsx', import.meta.url), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
@@ -54,7 +64,8 @@ function harness() {
     return React.createElement(exports.PodcastOPMLManager, { visible, onClose: () => { calls.closed++; show(false); }, onImported: () => { calls.imported++; } });
   }
   const button = (label: string) => root.root.findAllByType('Button' as any).find((node) => node.props.accessibilityLabel === label);
-  return { auth, calls, button, tree: () => root,
+  return { auth, calls, button, tree: () => root, exits,
+    async finishExit() { await act(async () => { for (const done of exits.splice(0)) done(); }); },
     setPick(value: typeof pick) { pick = value; }, setSize(value: number) { size = value; }, setAdded(value: typeof added) { added = value; }, setSubscriber(value: typeof subscribe) { subscribe = value; },
     async mount() { await act(async () => { root = create(React.createElement(Host)); }); },
     async press(label: string) { await act(async () => { button(label)!.props.onPress(); await turn(); }); },
@@ -85,6 +96,8 @@ test('late picker returns cannot cross an account ABA and only their generated c
   await h.press('Choose OPML file'); const first = h.auth.getState().auth;
   await act(async () => { h.auth.setState({ auth: { ...first, username: 'two' } }); h.auth.setState({ auth: first }); });
   await act(async () => { picked.resolve({ canceled: false, assets: [{ uri: 'file:///cache/DocumentPicker/late.opml', size: xml.length }] }); await turn(); });
+  assert.equal(h.calls.closed, 0, 'the ownership change cancels work immediately but retains the exiting surface');
+  await h.finishExit();
   assert.equal(h.calls.closed, 1); assert.equal(h.calls.reads.length, 0); assert.equal(h.calls.subscribed.length, 0);
   assert.deepEqual(h.calls.deleted, ['file:///cache/DocumentPicker/late.opml']); await h.close();
 });
@@ -114,4 +127,19 @@ test('rapid double import taps admit one batch and keep the running operation vi
   assert.equal(h.calls.subscribed.length, 1); assert.ok(h.button('Stop import'));
   await act(async () => { read.resolve({ id: 'new' }); await turn(); });
   assert.equal(h.calls.imported, 1); await h.close();
+});
+
+
+test('closing OPML cancels pending reads immediately and retains its panel only until native exit completes', async () => {
+  const h = harness(), picked = deferred<any>(); h.setPick(() => picked.promise); await h.mount();
+  await h.press('Choose OPML file');
+  await act(async () => { h.tree().root.findByType('Header' as any).props.onClose(); h.tree().root.findByType('Modal' as any).props.onRequestClose(); });
+  assert.equal(h.calls.closed, 0); assert.equal(h.exits.length, 1);
+  assert.equal(h.tree().root.findAllByType('Frame' as any).length, 1);
+  await act(async () => { picked.resolve({ canceled: false, assets: [{ uri: 'file:///cache/DocumentPicker/closing.opml', size: xml.length }] }); await turn(); });
+  assert.equal(h.calls.reads.length, 0); assert.equal(h.calls.subscribed.length, 0);
+  assert.deepEqual(h.calls.deleted, ['file:///cache/DocumentPicker/closing.opml']);
+  await h.finishExit();
+  assert.equal(h.calls.closed, 1); assert.equal(h.tree().root.findAllByType('Frame' as any).length, 0);
+  await h.close();
 });

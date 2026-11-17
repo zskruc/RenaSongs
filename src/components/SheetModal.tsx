@@ -49,7 +49,7 @@ export function SheetModal({
     onClosed?.();
     if (typeof after === 'function') after();
   }, [session, onClosed, lifecycle]);
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     open,
     closeNow,
     'card',
@@ -66,8 +66,8 @@ export function SheetModal({
   };
 
   return (
-    <Modal transparent animationType="none" visible={open} onRequestClose={() => close()}>
-      <MenuGlassCardFrame onClose={() => close()} backdropStyle={backdropStyle}
+    <Modal onShow={onModalShow} transparent animationType="none" visible={open} onRequestClose={() => close()}>
+      <MenuGlassCardFrame motion={motion} onClose={() => close()} backdropStyle={backdropStyle}
         cardStyle={sheetStyle} onLayout={onSheetLayout}>
         {/* Detail cards already own their scroll view. Legacy short action
             sheets share the same shell and gain a bounded scrolling body. */}

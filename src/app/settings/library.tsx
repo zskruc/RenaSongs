@@ -13,6 +13,7 @@ import { formatDateTime } from '@/lib/format';
 import { getScanStatus, startScan } from '@/api/backend';
 import { Field, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { clearExportCache } from '@/lib/exportSong';
 import { ensureAudioPermission, folderNameFromUri, pickFolder } from '@/lib/localLibrary';
 import { queryClient } from '@/lib/query';
@@ -61,12 +62,14 @@ export default function LibrarySettings() {
   const info = useQuery({ queryKey: ['localInfo', source], queryFn: localInfo, enabled: local });
   const [rescanning, setRescanning] = useState(false);
   const [changing, setChanging] = useState(false);
+  const sourcePopup = usePopupMorphPresence(changing);
+  const closeSource = () => sourcePopup.close(() => setChanging(false));
 
   async function chooseFolder() {
     const uri = await pickFolder();
     if (!uri) return;
     await setSource({ mode: 'folder', uris: [uri] });
-    setChanging(false);
+    closeSource();
     toast(t('Source updated'));
   }
 
@@ -77,7 +80,7 @@ export default function LibrarySettings() {
       return;
     }
     await setSource({ mode: 'device' });
-    setChanging(false);
+    closeSource();
     toast(t('Source updated'));
   }
 
@@ -230,12 +233,14 @@ export default function LibrarySettings() {
       <Modal
         transparent
         statusBarTranslucent
-        animationType="fade"
-        visible={changing}
-        onRequestClose={() => setChanging(false)}
+        animationType="none"
+        visible={sourcePopup.mounted}
+        onShow={sourcePopup.animation.onModalShow}
+        onRequestClose={closeSource}
       >
-        <MenuGlassCardFrame onClose={() => setChanging(false)}>
-          <MenuGlassCardHeader title={t('Where should we get your music?')} onClose={() => setChanging(false)} />
+        <MenuGlassCardFrame onClose={closeSource} motion={sourcePopup.animation.motion}
+          backdropStyle={sourcePopup.animation.backdropStyle} cardStyle={sourcePopup.animation.sheetStyle} onLayout={sourcePopup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={t('Where should we get your music?')} onClose={closeSource} />
           <ScrollView style={{ flexShrink: 1, minHeight: 0 }} contentContainerStyle={{ gap: spacing.md }} keyboardShouldPersistTaps="handled">
             <GlassPressable buttonMaterial={false} radius={radius.md} variant="regular" style={sheetStyles.option} onPress={chooseFolder}>
               <Icon name="folder-outline" size={26} color={colors.accent} />

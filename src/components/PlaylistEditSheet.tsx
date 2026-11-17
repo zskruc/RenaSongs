@@ -20,6 +20,7 @@ import { Cover } from '@/components/Cover';
 import { Dialog } from '@/components/Dialog';
 import { useServerCover } from '@/hooks/useServerCover';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { colors, fontSize, radius, spacing, themed } from '@/theme';
 
 export interface PlaylistEdit {
@@ -59,6 +60,8 @@ export function PlaylistEditSheet({
   onSave,
 }: Props) {
   const t = useT();
+  const popup = usePopupMorphPresence(visible, JSON.stringify([coverUploadId, localCoverId, initial.name, initial.comment, initial.public]));
+  const cancel = () => popup.close(onCancel);
   const [name, setName] = useState(initial.name);
   const [comment, setComment] = useState(initial.comment);
   const [isPublic, setIsPublic] = useState(initial.public);
@@ -82,18 +85,20 @@ export function PlaylistEditSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={popup.mounted}
       transparent
-      animationType="fade"
+      animationType="none"
       presentationStyle="overFullScreen"
-      onRequestClose={cover.askPassword ? cover.cancelPassword : onCancel}
+      onShow={popup.animation.onModalShow}
+      onRequestClose={cover.askPassword ? cover.cancelPassword : cancel}
     >
       <KeyboardAvoidingView
         style={styles.modal}
         behavior={Platform.OS === 'ios' ? 'height' : undefined}
       >
-        <MenuGlassCardFrame maxWidth={384} onClose={onCancel}>
-          <MenuGlassCardHeader title={t('Edit playlist')} onClose={onCancel} />
+        <MenuGlassCardFrame maxWidth={384} onClose={cancel} motion={popup.animation.motion}
+          backdropStyle={popup.animation.backdropStyle} cardStyle={popup.animation.sheetStyle} onLayout={popup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={t('Edit playlist')} onClose={cancel} />
           <ScrollView style={styles.scroll} contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={styles.coverWrap}>
@@ -171,12 +176,12 @@ export function PlaylistEditSheet({
               </GlassPressable>
             )}
             <View style={styles.actions}>
-              <GlassPressable onPress={onCancel} style={styles.action} accessibilityRole="button">
+              <GlassPressable onPress={cancel} style={styles.action} accessibilityRole="button">
                 <Text style={styles.headerAction}>{t('Cancel')}</Text>
               </GlassPressable>
               <GlassPressable variant="subtle" style={styles.action} accessibilityRole="button"
                 disabled={!canSave}
-                onPress={() => onSave({ name: name.trim(), comment: comment.trim(), public: isPublic })}
+                onPress={() => popup.close(() => onSave({ name: name.trim(), comment: comment.trim(), public: isPublic }))}
               >
                 <Text style={[styles.headerAction, { color: colors.accent }, !canSave && styles.disabled]}>{t('Save')}</Text>
               </GlassPressable>

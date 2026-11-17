@@ -35,7 +35,7 @@ function ArtistPickerContent({ artists, session }: { artists: ArtistTarget[]; se
     current.close();
     return true;
   };
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     true,
     closeNow,
     'card',
@@ -50,8 +50,9 @@ function ArtistPickerContent({ artists, session }: { artists: ArtistTarget[]; se
   };
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={close}>
+    <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={close}>
       <MenuGlassCardFrame
+        motion={motion}
         onClose={close}
         backdropStyle={backdropStyle}
         cardStyle={sheetStyle}

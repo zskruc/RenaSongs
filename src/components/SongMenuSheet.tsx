@@ -253,7 +253,7 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
   const showLyrics = useSongMenu((s) => s.showLyrics);
   const startInSleep = useSongMenu((s) => s.sleep);
   const extras = useSongMenu((s) => s.extras);
-  const { dismiss: animateDismiss, dismissing, makePan, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss: animateDismiss, dismissing, makePan, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     true,
     closeAfterGesture,
     'card',
@@ -440,13 +440,13 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
   }
 
   return (
-    <Modal transparent animationType="none" visible onRequestClose={() => {
+    <Modal onShow={onModalShow} transparent animationType="none" visible onRequestClose={() => {
       if (confirmDelete !== null) cancelConfirmation();
       else close();
     }}>
       {/* Gestures inside an RN Modal need a root view of their own: the
           Modal renders in a native hierarchy outside the app's. */}
-      {confirmDelete === null && <MenuGlassCardFrame onClose={close}
+      {confirmDelete === null && <MenuGlassCardFrame motion={motion} onClose={close}
         backdropStyle={backdropStyle} cardStyle={[sheetStyle, { padding: 0 }]} onLayout={onSheetLayout}>
           <MenuCardContext.Provider value={isCard}>
           <MenuContent card={isCard} maxHeight={cardMaxHeight} contentKey={`${song.id}:${mode}`}>

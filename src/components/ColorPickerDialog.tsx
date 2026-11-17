@@ -13,6 +13,7 @@ import ColorPicker, { HueSlider, Panel1 } from 'reanimated-color-picker';
 import { GlassPressable } from '@/components/glass';
 import { MenuGlassCardFrame, MenuGlassCardHeader } from './MenuGlassCard';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { colors, fontSize, radius, spacing, themed, tracking } from '@/theme';
 
 const HEX = /^#?[0-9a-f]{6}$/i;
@@ -28,17 +29,22 @@ export function ColorPickerDialog({
   onSave: (hex: string) => void;
 }) {
   const t = useT();
+  const popup = usePopupMorphPresence(true);
+  const { animation } = popup;
+  const cancel = () => popup.close(onCancel);
   // What the picker shows; only moved from outside by typing a hex.
   const [pickerValue, setPickerValue] = useState(initialColor);
   const [hex, setHex] = useState(initialColor.toUpperCase());
   const [text, setText] = useState(initialColor.toUpperCase());
 
+  if (!popup.mounted) return null;
   return (
-    <Modal transparent visible animationType="fade" onRequestClose={onCancel}>
-      <MenuGlassCardFrame onClose={onCancel} maxWidth={384}>
+    <Modal transparent visible animationType="none" onRequestClose={cancel} onShow={animation.onModalShow}>
+      <MenuGlassCardFrame onClose={cancel} maxWidth={384} motion={animation.motion}
+        backdropStyle={animation.backdropStyle} cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
         <ScrollView style={{ flexShrink: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: spacing.md }}>
-            <MenuGlassCardHeader title={t('Custom color')} onClose={onCancel} />
+            <MenuGlassCardHeader title={t('Custom color')} onClose={cancel} />
             <ColorPicker
               value={pickerValue}
               thumbSize={24}
@@ -74,10 +80,10 @@ export function ColorPickerDialog({
               />
             </View>
             <View style={styles.actions}>
-              <GlassPressable variant="subtle" hitSlop={8} onPress={onCancel}>
+              <GlassPressable variant="subtle" hitSlop={8} onPress={cancel}>
                 <Text style={styles.cancel}>{t('Cancel')}</Text>
               </GlassPressable>
-              <GlassPressable hitSlop={8} onPress={() => onSave(hex)}>
+              <GlassPressable hitSlop={8} onPress={() => popup.close(() => onSave(hex))}>
                 <Text style={[styles.confirm, { color: colors.accent }]}>{t('Save')}</Text>
               </GlassPressable>
             </View>

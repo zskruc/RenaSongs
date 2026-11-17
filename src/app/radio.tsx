@@ -41,6 +41,7 @@ import { Message } from '@/components/Message';
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
 import { RadioEditSheet, type RadioEdit } from '@/components/RadioEditSheet';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { useAppleMusicStyle } from '@/hooks/useAppleMusicStyle';
 import { appleMusicStyles } from '@/theme/appleMusic';
 import { queryClient } from '@/lib/query';
@@ -97,6 +98,11 @@ function RadioBrowserContent({ embedded, actionRef, searchOpen }: BrowserProps) 
   // actions menu open; `deleting` the one awaiting confirmation.
   const [editForm, setEditForm] = useState<{ station: RadioStation | null; local?: boolean } | null>(null);
   const [menu, setMenu] = useState<RadioStation | null>(null);
+  const [retainedMenu, setRetainedMenu] = useState(menu);
+  if (menu && menu !== retainedMenu) setRetainedMenu(menu);
+  const shownMenu = menu ?? retainedMenu;
+  const menuPopup = usePopupMorphPresence(!!menu, menu?.id);
+  const closeMenu = (after?: () => void) => menuPopup.close(() => { setMenu(null); after?.(); });
   const [deleting, setDeleting] = useState<RadioStation | null>(null);
   const [query, setQuery] = useState('');
   const pins = usePins((s) => s.pins);
@@ -362,42 +368,42 @@ function RadioBrowserContent({ embedded, actionRef, searchOpen }: BrowserProps) 
       <Modal
         transparent
         statusBarTranslucent
-        visible={!!menu || !!deleting}
-        animationType="fade"
-        onRequestClose={() => deleting ? setDeleting(null) : setMenu(null)}
+        visible={menuPopup.mounted}
+        animationType="none"
+        onShow={menuPopup.animation.onModalShow}
+        onRequestClose={() => closeMenu()}
       >
-        {!deleting ? (
-          <MenuGlassCardFrame onClose={() => setMenu(null)}>
-            <MenuGlassCardHeader title={menu?.name ?? ''} onClose={() => setMenu(null)} />
+        {menuPopup.mounted ? (
+          <MenuGlassCardFrame onClose={() => closeMenu()} motion={menuPopup.animation.motion}
+            backdropStyle={menuPopup.animation.backdropStyle} cardStyle={menuPopup.animation.sheetStyle} onLayout={menuPopup.animation.onSheetLayout}>
+            <MenuGlassCardHeader title={shownMenu?.name ?? ''} onClose={() => closeMenu()} />
             <ScrollView style={{ flexShrink: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled">
               <Pressable
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
-                  const station = menu;
-                  setMenu(null);
+                  const station = shownMenu;
                   if (!station) return;
-                  if (!togglePin(`radio:${station.id}`)) {
-                    toast(t('You can pin up to {n} items.', { n: MAX_PINS }));
-                  }
+                  closeMenu(() => {
+                    if (!togglePin(`radio:${station.id}`)) toast(t('You can pin up to {n} items.', { n: MAX_PINS }));
+                  });
                 }}
               >
                 <Icon
-                  name={menu && pins[`radio:${menu.id}`] ? 'pin' : 'pin-outline'}
+                  name={shownMenu && pins[`radio:${shownMenu.id}`] ? 'pin' : 'pin-outline'}
                   size={24}
                   color={colors.text}
                 />
                 <Text style={styles.actionText}>
-                  {menu && pins[`radio:${menu.id}`] ? t('Unpin') : t('Pin to top')}
+                  {shownMenu && pins[`radio:${shownMenu.id}`] ? t('Unpin') : t('Pin to top')}
                 </Text>
               </Pressable>
-              {canManage || menu?.id.startsWith('localradio:') ? (
+              {canManage || shownMenu?.id.startsWith('localradio:') ? (
                 <>
                   <Pressable
                     style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                     onPress={() => {
-                      const station = menu;
-                      setMenu(null);
-                      setEditForm({ station });
+                      const station = shownMenu;
+                      closeMenu(() => setEditForm({ station }));
                     }}
                   >
                     <Icon name="create-outline" size={24} color={colors.text} />
@@ -406,9 +412,8 @@ function RadioBrowserContent({ embedded, actionRef, searchOpen }: BrowserProps) 
                   <Pressable
                     style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                     onPress={() => {
-                      const station = menu;
-                      setMenu(null);
-                      setDeleting(station);
+                      const station = shownMenu;
+                      closeMenu(() => setDeleting(station));
                     }}
                   >
                     <Icon name="trash-outline" size={24} color={colors.danger} />
@@ -422,8 +427,9 @@ function RadioBrowserContent({ embedded, actionRef, searchOpen }: BrowserProps) 
           </MenuGlassCardFrame>
         ) : null}
 
+      </Modal>
+
         <Dialog
-          inline
           visible={!!deleting}
           title={t('Delete station')}
           message={t('Remove “{name}” from your server?', { name: deleting?.name ?? '' })}
@@ -432,7 +438,6 @@ function RadioBrowserContent({ embedded, actionRef, searchOpen }: BrowserProps) 
           onCancel={() => setDeleting(null)}
           onConfirm={() => void confirmDelete()}
         />
-      </Modal>
     </BrowseFrame>
   );
 }

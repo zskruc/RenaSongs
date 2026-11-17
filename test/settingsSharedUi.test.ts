@@ -16,6 +16,9 @@ function flatten(style: any): any {
 
 function harness() {
   let version = 0;
+  const exits: (() => void)[] = [];
+  let timerId = 0;
+  const timers = new Map<number, () => void>();
   const listeners = new Set<() => void>();
   const palette = { background: '#141619', surface: '#1e2026', surfaceHighlight: '#2a2c33', border: '#2b2d34',
     text: '#ffffff', textSecondary: '#a0a3ab', textMuted: '#72757d', accent: '#1db954', control: '#2b2d34', knob: '#ffffff', danger: '#e03131' };
@@ -35,7 +38,13 @@ function harness() {
       GlassSurface: () => { throw new Error('Settings panels must not allocate another glass renderer'); } },
     './SettingAnchor': { SettingAnchor: passthrough, SettingsAnchorProvider: passthrough },
     './BackChevron': { BackChevron: 'Back' },
-    './MenuGlassCard': { MenuGlassPanel: 'GlassMenu', menuGlassScrimColor: () => '#00000044' },
+    './MenuGlassCard': { MenuMorphSurface: 'GlassMenu', menuGlassScrimColor: () => '#00000044' },
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' } },
+    '@/lib/menuOrigin': { captureMenuTouchStart() {}, captureMenuTouchMove() {} },
+    './useBottomSheetAnim': { useBottomSheetAnim: (open: boolean, _close: unknown, _kind: string, sessionId: number) => ({
+      dismiss: (after: () => void) => exits.push(after), motion: { open, sessionId, ready: true },
+      onModalShow() {}, onSheetLayout() {}, backdropStyle: {},
+    }) },
     './glass/StaticGlassBackdropContext': { DynamicGlassBackdrop: passthrough, StaticGlassBackdropProvider: 'StaticSource' },
     './SettingsScrollPaddingContext': { SettingsScrollPaddingContext: React.createContext(0) },
     '@/hooks/useAccent': { useAccent: () => useTheme().accent },
@@ -45,13 +54,20 @@ function harness() {
       fontSize: { xs: 12, sm: 14, md: 16, lg: 20, xl: 24 }, tracking: { heading: -0.1, title: -0.3 }, SCREEN_BOTTOM_PADDING: 160,
       themed: (factory: (colors: typeof palette) => any) => new Proxy({}, { get: (_, key) => factory(palette)[key] }) },
   };
-  const exports: Record<string, any> = {};
-  runInNewContext(ts.transpileModule(readFileSync(new URL('../src/components/SettingsUI.tsx', import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { exports, setTimeout, clearTimeout, require(name: string) {
-    assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name];
-  } });
-  return { UI: exports, palette,
+  function load(file: string) {
+    const exports: Record<string, any> = {};
+    runInNewContext(ts.transpileModule(readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+    }).outputText, { exports,
+      setTimeout: (callback: () => void) => { const id = ++timerId; timers.set(id, callback); return id; },
+      clearTimeout: (id: number) => timers.delete(id),
+      require(name: string) { assert.ok(Object.hasOwn(dependencies, name), name); return dependencies[name]; },
+    });
+    return exports;
+  }
+  dependencies['@/hooks/usePopupMorphPresence'] = load('hooks/usePopupMorphPresence.ts');
+  return { UI: load('components/SettingsUI.tsx'), palette, exits, timers,
+    finish() { for (const done of exits.splice(0)) done(); },
     light() { Object.assign(palette, { surface: '#f2f3f5', text: '#111111', textSecondary: '#555555' }); version++; listeners.forEach((listener) => listener()); },
     createNodeMock: () => ({ measureInWindow: (done: (...values: number[]) => void) => done(16, 90, 368, 60) }),
   };
@@ -118,6 +134,9 @@ test('selectors still open their anchored glass menu and apply only the selected
     assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
     const dark = root.root.findAllByType('Pressable' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Dark'))!;
     await act(async () => dark.props.onPress());
+    assert.deepEqual(changes, [], 'a setting is applied after its popup has closed');
+    assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
+    await act(async () => h.finish());
     assert.deepEqual(changes, ['dark']);
     assert.equal(root.root.findAllByType('GlassMenu' as any).length, 0);
   } finally { await act(async () => root?.unmount()); }
@@ -139,5 +158,47 @@ test('slider drag previews without saving every frame and text input preserves i
     assert.deepEqual(edits, ['我的音乐']); assert.deepEqual(commits, []);
     await act(async () => input.props.onEndEditing({ nativeEvent: { text: '我的音乐' } }));
     assert.deepEqual(commits, ['我的音乐']);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+
+test('anchored selector waits for natural height, keeps its target during exit and ignores repeated selections', async () => {
+  const h = harness(); let root!: ReactTestRenderer; const changes: string[] = [];
+  try {
+    await act(async () => { root = create(React.createElement(h.UI.SelectList, { label: 'Theme', value: 'system',
+      options: [{ value: 'system', label: 'Automatic' }, { value: 'dark', label: 'Dark' }], onChange: (value: string) => changes.push(value) }), { createNodeMock: h.createNodeMock }); });
+    await act(async () => root.root.findByType('Pressable' as any).props.onPress());
+    assert.equal(root.root.findByType('GlassMenu' as any).props.motion.ready, false);
+    await act(async () => root.root.findByType('Scroll' as any).props.onContentSizeChange(180, 100));
+    assert.equal(root.root.findByType('GlassMenu' as any).props.motion.ready, true);
+    const option = root.root.findAllByType('Pressable' as any).find((node) => node.findAllByType('Text' as any).some((text) => text.props.children === 'Dark'))!;
+    await act(async () => { option.props.onPress(); option.props.onPress(); root.root.findByType('Modal' as any).props.onRequestClose(); });
+    assert.equal(h.exits.length, 1);
+    assert.deepEqual(changes, []);
+    assert.equal(flatten(root.root.findByType('GlassMenu' as any).props.style).top, 146);
+    await act(async () => h.finish());
+    assert.deepEqual(changes, ['dark']);
+    assert.equal(root.root.findAllByType('GlassMenu' as any).length, 0);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('closing a fine-tune pad stops the hold timer immediately and commits once while its exit remains mounted', async () => {
+  const h = harness(); let root!: ReactTestRenderer; const changes: number[] = [];
+  try {
+    await act(async () => { root = create(React.createElement(h.UI.SliderRow, { label: 'Gain', value: 3, max: 10,
+      step: 1, fineTune: { step: 1, doneLabel: 'Done' }, formatValue: (value: number) => `${value}`, onChange: (value: number) => changes.push(value) })); });
+    await act(async () => root.root.findByType('Pressable' as any).props.onPress());
+    const up = root.root.findAllByType('GlassButton' as any).find((node) => typeof node.props.onPressIn === 'function')!;
+    await act(async () => up.props.onPressIn());
+    assert.equal(h.timers.size, 1);
+    assert.deepEqual(changes, []);
+    await act(async () => root.root.findByType('Modal' as any).props.onRequestClose());
+    assert.deepEqual(changes, [4]);
+    assert.equal(h.timers.size, 0);
+    assert.equal(root.root.findAllByType('GlassMenu' as any).length, 1);
+    await act(async () => up.props.onPressOut());
+    assert.deepEqual(changes, [4]);
+    await act(async () => h.finish());
+    assert.equal(root.root.findAllByType('GlassMenu' as any).length, 0);
   } finally { await act(async () => root?.unmount()); }
 });

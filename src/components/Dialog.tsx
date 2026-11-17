@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 
 import { useT } from '@/i18n';
-import { useBottomSheetAnim } from '@/hooks/useBottomSheetAnim';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { colors, fontSize, radius, spacing, themed, tracking } from '@/theme';
 import { MENU_GLASS_RADIUS, MenuGlassCardFrame, MenuGlassCardHeader } from './MenuGlassCard';
 
@@ -55,21 +55,18 @@ interface Props {
   inline?: boolean;
 }
 
-export function Dialog({
-  visible,
-  title,
-  message,
-  messageColor,
-  children,
-  input,
-  confirmLabel,
-  neutral,
-  destructive,
-  onCancel,
-  onConfirm,
-  inlineMenu = false,
-  inline = false,
-}: Props) {
+export function Dialog(props: Props) {
+  // Keep the last visible content through an externally requested exit. Some
+  // callers clear the selected item at the same time as hiding the dialog.
+  const [retainedProps, setRetainedProps] = useState(props);
+  if (props.visible && retainedProps !== props) setRetainedProps(props);
+  const {
+    title, message, messageColor, children, input, confirmLabel, neutral,
+    destructive, onCancel, onConfirm, inlineMenu = false, inline = false,
+  } = props.visible ? props : retainedProps;
+  const visible = props.visible;
+  const popup = usePopupMorphPresence(visible, JSON.stringify([title, message, input?.initialValue, input?.secure, confirmLabel]));
+  const { animation } = popup;
   const t = useT();
   const [value, setValue] = useState(input?.initialValue ?? '');
   const inputRef = useRef<TextInput>(null);
@@ -81,26 +78,33 @@ export function Dialog({
   }, [visible, input?.initialValue]);
 
   useEffect(() => {
-    if (!visible || !inline || inlineMenu || !hasInput) return;
+    if (!visible || !popup.mounted || (!inline && !inlineMenu) || !hasInput) return;
     // The parent Modal already owns focus. Wait for this field to attach,
     // without opening another window whose backdrop loses the editor below.
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [visible, inline, inlineMenu, hasInput]);
+  }, [visible, inline, inlineMenu, hasInput, popup.mounted, popup.session]);
 
   const canConfirm = input ? value.trim().length > 0 : true;
+  const close = (after: () => void) => {
+    inputRef.current?.blur();
+    popup.close(after);
+  };
+
+  if (!popup.mounted) return null;
 
   if (inlineMenu) {
-    return visible ? <MenuDialog title={title} message={message} messageColor={messageColor} input={input} inputRef={inputRef}
+    return <MenuDialog animation={animation} close={close} title={title} message={message} messageColor={messageColor} input={input} inputRef={inputRef}
       value={value} onChangeText={setValue} onCancel={onCancel} onConfirm={() => onConfirm(value.trim())}
       confirmLabel={confirmLabel} destructive={destructive} canConfirm={canConfirm} neutral={neutral}>
       {children}
-    </MenuDialog> : null;
+    </MenuDialog>;
   }
 
   const content = (
-    <MenuGlassCardFrame onClose={onCancel}>
-      <MenuGlassCardHeader title={title} onClose={onCancel} />
+    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion}
+      backdropStyle={animation.backdropStyle} cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
+      <MenuGlassCardHeader title={title} onClose={() => close(onCancel)} />
       <ScrollView style={styles.menuBody} contentContainerStyle={{ gap: spacing.md }}
         keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {message ? <Text style={[styles.message, messageColor != null && { color: messageColor }]}>{message}</Text> : null}
@@ -124,7 +128,7 @@ export function Dialog({
                 styles.neutral,
                 neutral.align === 'end' && { alignSelf: 'flex-end' },
               ]}
-              onPress={neutral.onPress}
+              onPress={() => close(neutral.onPress)}
             >
               <Text style={styles.cancel}>{neutral.label}</Text>
               {neutral.icon ? (
@@ -133,14 +137,14 @@ export function Dialog({
             </GlassPressable>
           ) : null}
           <View style={styles.actions}>
-            <GlassPressable variant="subtle" hitSlop={8} onPress={onCancel}>
+            <GlassPressable variant="subtle" hitSlop={8} onPress={() => close(onCancel)}>
               <Text style={styles.cancel}>{t('Cancel')}</Text>
             </GlassPressable>
             <GlassPressable
               variant="regular"
               hitSlop={8}
               disabled={!canConfirm}
-              onPress={() => onConfirm(value.trim())}
+              onPress={() => close(() => onConfirm(value.trim()))}
             >
               <Text
                 style={[
@@ -158,48 +162,29 @@ export function Dialog({
     </MenuGlassCardFrame>
   );
 
-  if (inline) return visible ? content : null;
+  if (inline) return content;
   return (
-    <Modal transparent visible={visible} animationType="fade" onRequestClose={onCancel}
+    <Modal transparent visible={popup.mounted} animationType="none" onRequestClose={() => close(onCancel)}
       // Native windows take focus only after showing; inline fields use the
       // existing window and focus after attachment instead.
-      onShow={() => inputRef.current?.focus()}>
+      onShow={() => { animation.onModalShow(); inputRef.current?.focus(); }}>
       {content}
     </Modal>
   );
 }
 
 /** A subdialog shares the menu window, so one glass capture remains sufficient. */
-function MenuDialog({ title, message, messageColor, input, inputRef, value, onChangeText, onCancel, onConfirm,
+function MenuDialog({ animation, close, title, message, messageColor, input, inputRef, value, onChangeText, onCancel, onConfirm,
   confirmLabel, destructive, canConfirm, neutral, children }: {
+  animation: ReturnType<typeof usePopupMorphPresence>['animation']; close: (after: () => void) => void;
   title: string; message?: string; messageColor?: Props['messageColor']; input?: Props['input']; inputRef: RefObject<TextInput | null>;
   value: string; onChangeText: (value: string) => void; onCancel: () => void; onConfirm: () => void;
   confirmLabel: string; destructive?: boolean; canConfirm: boolean; neutral?: Props['neutral']; children?: ReactNode;
 }) {
   const t = useT();
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(true, onCancel, 'card');
-  const closing = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
-  useEffect(() => {
-    // The existing menu window already owns focus; wait for this new field to attach.
-    const frame = requestAnimationFrame(() => inputRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [inputRef]);
-  const close = (after: () => void) => {
-    if (closing.current) return;
-    closing.current = true;
-    inputRef.current?.blur();
-    dismiss(() => {
-      if (mounted.current) after();
-    });
-  };
   return (
-    <MenuGlassCardFrame onClose={() => close(onCancel)} backdropStyle={backdropStyle}
-      cardStyle={sheetStyle} onLayout={onSheetLayout}>
+    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion} backdropStyle={animation.backdropStyle}
+      cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
       <ScrollView style={styles.menuBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <MenuGlassCardHeader title={title} onClose={() => close(onCancel)} />
         {message ? <Text style={[styles.menuMessage, messageColor != null && { color: messageColor }]}>{message}</Text> : null}

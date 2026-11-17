@@ -11,6 +11,7 @@ import { GlassPressable } from '@/components/glass';
 import Icon from '@/components/Icon';
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { listPerf } from '@/lib/listPerf';
 import { createPodcastOPMLImporter, exportPodcastOPML, parsePodcastOPML, PODCAST_OPML_MAX_BYTES,
   type PodcastOPMLImportPlan, type PodcastOPMLImportSnapshot } from '@/lib/podcastOPML';
@@ -19,11 +20,13 @@ import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
 
 export interface PodcastOPMLManagerProps { visible: boolean; onClose(): void; onImported?(): void }
 export function PodcastOPMLManager({ visible, ...props }: PodcastOPMLManagerProps) {
-  return visible ? <PodcastOPMLSession {...props} /> : null;
+  const popup = usePopupMorphPresence(visible);
+  return popup.mounted ? <PodcastOPMLSession key={popup.session} {...props} visible={visible}
+    animation={popup.animation} onClose={() => popup.close(props.onClose)} /> : null;
 }
 const EMPTY: PodcastOPMLImportSnapshot = { rows: [], running: false, stopped: false };
 
-function PodcastOPMLSession({ onClose, onImported }: Omit<PodcastOPMLManagerProps, 'visible'>) {
+function PodcastOPMLSession({ visible, animation, onClose, onImported }: PodcastOPMLManagerProps & { animation: ReturnType<typeof usePopupMorphPresence>['animation'] }) {
   useTheme(); const t = useT();
   const offline = useAuthStore((state) => state.offline && !state.autoOffline);
   const [owner] = useState(() => ({ auth: useAuthStore.getState().auth, profile: profileScopeId() }));
@@ -47,9 +50,12 @@ function PodcastOPMLSession({ onClose, onImported }: Omit<PodcastOPMLManagerProp
     });
     return () => { live.current = false; importer.cancel(); unsubscribe(); };
   }, [importer, owner]);
-  const dismiss = () => { revision.current++; importer.cancel(); onClose(); };
+  useEffect(() => {
+    if (!visible) { live.current = false; revision.current++; importer.cancel(); }
+  }, [visible, importer]);
+  const dismiss = () => { live.current = false; revision.current++; importer.cancel(); onClose(); };
   const begin = (kind: NonNullable<typeof busy>) => {
-    if (busyRef.current) return null;
+    if (!live.current || busyRef.current) return null;
     busyRef.current = kind; setBusy(kind); return ++revision.current;
   };
   const finish = (ticket: number) => { if (current(ticket)) { busyRef.current = null; setBusy(null); } };
@@ -121,8 +127,10 @@ function PodcastOPMLSession({ onClose, onImported }: Omit<PodcastOPMLManagerProp
   const count = (status: string) => snapshot.rows.filter((row) => row.status === status).length;
   const done = count('existing') + count('imported') + count('failed');
   const labels = { pending: 'Ready to import', existing: 'Already subscribed', working: 'Importing', imported: 'Imported', failed: 'Failed' };
-  return <Modal visible transparent animationType="fade" presentationStyle="overFullScreen" onRequestClose={dismiss}>
-    <MenuGlassCardFrame maxWidth={430} onClose={dismiss}>
+  return <Modal visible transparent animationType="none" presentationStyle="overFullScreen" onRequestClose={dismiss}
+    onShow={animation.onModalShow}>
+    <MenuGlassCardFrame maxWidth={430} onClose={dismiss} motion={animation.motion}
+      backdropStyle={animation.backdropStyle} cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
       <MenuGlassCardHeader title={t('Podcast subscriptions')} onClose={dismiss}
         subtitle={t('Import or export OPML. Importing adds shows without downloading audio.')} />
       <FlatList {...listPerf} style={styles.list} data={snapshot.rows} keyExtractor={(row) => row.entry.feedUrl}

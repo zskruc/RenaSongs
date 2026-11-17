@@ -21,6 +21,7 @@ import { Cover } from '@/components/Cover';
 import { Dialog } from '@/components/Dialog';
 import { useServerCover } from '@/hooks/useServerCover';
 import { useT } from '@/i18n';
+import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
 import { colors, fontSize, radius, spacing, themed } from '@/theme';
 
 export interface RadioEdit {
@@ -62,6 +63,8 @@ export function RadioEditSheet({
   onSave,
 }: Props) {
   const t = useT();
+  const popup = usePopupMorphPresence(visible, JSON.stringify([coverId, initial.name, initial.streamUrl, initial.homePageUrl]));
+  const cancel = () => popup.close(onCancel);
   const [name, setName] = useState(initial.name);
   const [streamUrl, setStreamUrl] = useState(initial.streamUrl);
   const [homePageUrl, setHomePageUrl] = useState(initial.homePageUrl);
@@ -120,18 +123,20 @@ export function RadioEditSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={popup.mounted}
       transparent
-      animationType="fade"
+      animationType="none"
       presentationStyle="overFullScreen"
-      onRequestClose={cover.askPassword ? cover.cancelPassword : onCancel}
+      onShow={popup.animation.onModalShow}
+      onRequestClose={cover.askPassword ? cover.cancelPassword : cancel}
     >
       <KeyboardAvoidingView
         style={styles.modal}
         behavior={Platform.OS === 'ios' ? 'height' : undefined}
       >
-        <MenuGlassCardFrame maxWidth={384} onClose={onCancel}>
-          <MenuGlassCardHeader title={editing ? t('Edit station') : t('Add station')} onClose={onCancel} />
+        <MenuGlassCardFrame maxWidth={384} onClose={cancel} motion={popup.animation.motion}
+          backdropStyle={popup.animation.backdropStyle} cardStyle={popup.animation.sheetStyle} onLayout={popup.animation.onSheetLayout}>
+          <MenuGlassCardHeader title={editing ? t('Edit station') : t('Add station')} onClose={cancel} />
           <ScrollView style={styles.scroll} contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             {/* Nothing to show and no way to add one: skip it entirely. */}
@@ -213,12 +218,12 @@ export function RadioEditSheet({
               inputMode="url"
             />
             <View style={styles.actions}>
-              <GlassPressable onPress={onCancel} style={styles.action} accessibilityRole="button">
+              <GlassPressable onPress={cancel} style={styles.action} accessibilityRole="button">
                 <Text style={styles.headerAction}>{t('Cancel')}</Text>
               </GlassPressable>
               <GlassPressable variant="subtle" style={styles.action} accessibilityRole="button"
                 disabled={!canSave}
-                onPress={() =>
+                onPress={() => popup.close(() =>
                   onSave(
                     {
                       name: name.trim(),
@@ -226,8 +231,8 @@ export function RadioEditSheet({
                       homePageUrl: homePageUrl.trim(),
                     },
                     coverId ? undefined : (pendingCover ?? undefined),
-                  )
-                }
+                  ),
+                )}
               >
                 <Text
                   style={[styles.headerAction, { color: colors.accent }, !canSave && styles.disabled]}

@@ -96,7 +96,7 @@ export function OutputSheet({ visible, onClose }: { visible: boolean; onClose: (
   const jukeboxAvailable = useJukebox((s) => s.available);
   const phoneActive = !upnpId && !jukeboxActive;
   const mediaControls = useMediaControls(visible);
-  const { dismiss, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
+  const { dismiss, backdropStyle, sheetStyle, onSheetLayout, motion, onModalShow } = useBottomSheetAnim(
     visible,
     onClose,
     'card',
@@ -271,8 +271,9 @@ export function OutputSheet({ visible, onClose }: { visible: boolean; onClose: (
   }
 
   return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={close}>
+    <Modal onShow={onModalShow} transparent visible={visible} animationType="none" onRequestClose={close}>
       <MenuGlassCardFrame
+        motion={motion}
         onClose={close}
         backdropStyle={backdropStyle}
         cardStyle={sheetStyle}
