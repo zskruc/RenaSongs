@@ -65,7 +65,9 @@ export function Dialog(props: Props) {
     destructive, onCancel, onConfirm, inlineMenu = false, inline = false,
   } = props.visible ? props : retainedProps;
   const visible = props.visible;
-  const popup = usePopupMorphPresence(visible, JSON.stringify([title, message, input?.initialValue, input?.secure, confirmLabel]));
+  // Progress/status messages may update while a dialog is open. They update
+  // its body in place, rather than replaying the entire opening transaction.
+  const popup = usePopupMorphPresence(visible, JSON.stringify([title, input?.initialValue, input?.secure, confirmLabel]));
   const { animation } = popup;
   const t = useT();
   const [value, setValue] = useState(input?.initialValue ?? '');

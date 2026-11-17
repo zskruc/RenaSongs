@@ -136,3 +136,16 @@ test('color edits are captured for Save and kept local until exit acknowledgemen
     assert.equal(root.toJSON(), null);
   } finally { await act(async () => root?.unmount()); }
 });
+
+test('live dialog status text updates do not replace or restart its popup session', async () => {
+  const h = harness(); let root!: ReactTestRenderer;
+  const props = { visible: true, title: 'Download', message: '1 of 20', confirmLabel: 'Cancel', onCancel() {}, onConfirm() {} };
+  try {
+    await act(async () => { root = create(React.createElement(h.Dialog, props)); });
+    const session = root.root.findByType('Frame' as any).props.motion.sessionId;
+    await act(async () => root.update(React.createElement(h.Dialog, { ...props, message: '2 of 20' })));
+    assert.equal(root.root.findByType('Frame' as any).props.motion.sessionId, session);
+    assert.ok(root.root.findAllByType('Text' as any).some((node) => node.props.children === '2 of 20'));
+    assert.equal(h.exits.length, 0);
+  } finally { await act(async () => root?.unmount()); }
+});
