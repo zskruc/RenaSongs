@@ -298,8 +298,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     }
     (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
       target.left + materialBounds.left, target.top + materialBounds.top,
-      target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY)
-    getChildAt(0)?.alpha = if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)
+      target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY,
+      // A completely closed host is not drawn. Leave its bounded layers in
+      // place until teardown rather than allocating a hidden full-size frame.
+      !settled || !requestedOpen, if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f))
     val sx = localIncoming.width() / max(width.toFloat(), 1f)
     val sy = localIncoming.height() / max(height.toFloat(), 1f)
     val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
@@ -312,7 +314,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       child.translationY = localIncoming.centerY() - height / 2f
       child.scaleX = sx * zoom
       child.scaleY = sy * zoom
-      child.alpha = reveal
+      // The portal composites reveal in its bounded rows RenderNode. Setting
+      // native body alpha first promotes the original full-layout RN view to
+      // a second physical-size offscreen layer before it reaches that node.
+      child.alpha = if (foregroundPortal != null && isHardwareAccelerated) 1f else reveal
       val contentBlur = if (settled) 0f else frame.contentBlur
       if (foregroundPortal != null) foregroundPortal.setContentBlur(child, contentBlur, child.scaleX, child.scaleY)
       else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -398,7 +403,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     completedOpen = open
     if (motionTrace) Log.d("ResonusGlass", "menuMotion session=$activeSession open=$open " +
       "durationMs=${SystemClock.uptimeMillis() - motionStartedAt} frames=$motionFrames " +
-      "portal=${foregroundPortal?.diagnostics()}")
+      "portal=${foregroundPortal?.diagnostics()} " +
+      "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()}")
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }

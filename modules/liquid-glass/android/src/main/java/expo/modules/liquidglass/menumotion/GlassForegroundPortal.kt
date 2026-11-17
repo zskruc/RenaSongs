@@ -78,7 +78,12 @@ internal class GlassForegroundPortal(density: Float) {
     outgoing.set(frame.sourceLobe)
     outgoing.offset(-originX, -originY)
     this.hasSource = hasSource
-    rowsVisible = frame.rowsOpacity > .001f
+    val rowsOpacity = frame.rowsOpacity.coerceIn(0f, 1f)
+    rowsVisible = rowsOpacity > .001f
+    // Opacity belongs to the bounded raster node. Applying it to the full-size
+    // RN body promotes that native View to a full physical hardware alpha layer
+    // before this portal's sampling transform, defeating the pixel budget.
+    rowsNode.setAlpha(rowsOpacity)
     generation++
     // Invisible rows are skipped by GlassMenuSession before foreground draw.
     if (!rowsVisible) return
@@ -213,6 +218,7 @@ internal class GlassForegroundPortal(density: Float) {
 
   private fun clearTransientNodes() {
     if (!wasWarping) return
+    rowsNode.setAlpha(1f)
     rowsNode.setRenderEffect(null)
     foregroundNode.setRenderEffect(null)
     rowsNode.discardDisplayList()

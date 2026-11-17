@@ -9,10 +9,10 @@ import kotlin.math.sqrt
 
 /**
  * Menu texture coordinates are physical screen pixels, never morph scale.
- * The Compose viewport reserves the full travel envelope once; only its glass
- * child is measured/placed at the live shell rectangle. Capture ROI remains
- * fixed while that child moves, so the source producer need not resize its
- * images. This alone does not reserve the material's filtered drawing layers.
+ * Capture ROI reserves the full physical travel envelope once; only its glass
+ * child is measured/placed at the live shell rectangle. MenuMaterialRaster
+ * separately maps that geometry into a fixed animation density, leaving these
+ * source coordinates independent of transient material resolution.
  */
 internal class MenuMaterialGeometry {
   var active = false

@@ -130,4 +130,33 @@ native overlay avoids the additional Modal readiness exchange used here.
 Physical performance receipts are separate from build and unit-test receipts;
 a successful build is not treated as evidence of smooth animation.
 
+### 186: bound material raster work and group-opacity layers
+
+The 185 physical run reduced GPU time but still failed overall frame-time and
+user acceptance. Its RenderThread continued allocating filtered intermediate
+images; the UI thread spent most traversal time waiting for that work. Ordinary
+view group opacity could also promote the full native material/body bounds to
+hardware layers before the foreground portal's downsample.
+
+Menu-only transient material drawing now uses one reserved raster scale. The
+native viewport, Compose density, material-layer capacity, Gaussian radius and
+backdrop recording share the same physical-to-raster transform. Float placement
+remainders compensate integer layout rounding; ceil only reserves transparent
+capacity and never fits/stretches the source image. Material group opacity is
+applied to the bounded Compose child, and body opacity to the bounded portal
+rows node. Open-and-settled drawing restores the original full resolution;
+closed invisible hosts do not allocate that final full-size layer. Saved glass
+profiles and non-menu drawing keep their original behavior.
+
+Offline checks include 131,051 motion/geometry assertions, 15,213 portal checks,
+and 9,901 material mapping checks with 3,240 high-contrast checkerboard samples.
+They establish transform/resource invariants, not measured Samsung frame rate.
+The user deferred further physical testing until after receiving this APK.
+
+Known lifecycle difference: these are retained RN Modal windows. Unlike the
+demo's in-window overlay, a closing transparent Modal continues to own input
+until its native close acknowledgement. Changing that safely requires a
+separate input/session handoff review; the current candidate does not silently
+enable cross-window touch-through or shorten the original spring.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。

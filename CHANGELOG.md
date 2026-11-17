@@ -13,6 +13,22 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.7] - 2026-11-18
+
+### Fixed
+
+- 菜单动画的主玻璃与透明度合成使用固定容量的临时绘制层，稳定展开后恢复完整分辨率；保持背景取样的屏幕坐标及现有玻璃参数。
+- 正文透明度在 Portal 小图层中合成，避免 Android 为整张正文再次建立完整尺寸的透明图层。
+- 补偿临时缩放的像素舍入与模糊半径，避免背景原点漂移；关闭结束时跳过不可见的全分辨率恢复。
+
+### English
+
+- Bound menu-only material raster work during animation and move group opacity into the bounded drawing layers; restore original resolution after expansion settles.
+- Preserve physical sampling coordinates, Gaussian blur scale and resting optical settings, with checkerboard coverage for placement rounding and start/end transitions.
+
+This is a locally verified candidate APK. Physical frame-time and interaction
+acceptance are deferred until the user's next Samsung test.
+
 ## [0.8.8.1-preview.6] - 2026-11-18
 
 ### Fixed
