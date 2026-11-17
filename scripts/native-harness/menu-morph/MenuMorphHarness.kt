@@ -10,7 +10,7 @@ private fun verify(value: Boolean, message: String) { checks++; check(value) { m
 private fun near(a: Float, b: Float, epsilon: Float = 0.5f) = abs(a - b) <= epsilon
 private fun initialized(source: RectF = RectF(900f, 120f, 1020f, 240f),
   target: RectF = RectF(330f, 280f, 1050f, 1580f), density: Float = 3f): GlassMotion = GlassMotion().also {
-  it.initialize(source, target, 28f * density, density, source, true, GlassMorphTuning(null, null))
+  it.initialize(source, target, 28f * density, density, source, false, GlassMorphTuning(null, null))
 }
 private fun settle(motion: GlassMotion, fps: Float): Int {
   for (frame in 1..(fps * 5f).toInt()) if (motion.advanceBy(1f / fps)) return frame
@@ -27,6 +27,14 @@ private fun finite(frame: GlassMorphFrame) {
 fun main() {
   val target = RectF(330f, 280f, 1050f, 1580f)
   val source = RectF(900f, 120f, 1020f, 240f)
+  val clock = GlassFrameClock()
+  clock.restart(1f)
+  verify(near(clock.advance(1L, 120f), 1f / 240f, 0.000001f), "First visible frame must advance immediately, as upstream")
+  clock.restart(0.5f)
+  verify(near(clock.advance(1L, 120f), 1f / 120f, 0.000001f), "System half-duration animation setting was ignored")
+  verify(clock.advance(1_000_000_001L, 120f) <= 1f / 60f + 0.000001f, "Startup hitch caused an unbounded geometry jump")
+  clock.restart(0f)
+  verify(clock.advance(1L, 120f) == 10f, "Disabled animations did not finish immediately")
   val elapsed = ArrayList<Float>()
   for (fps in listOf(24f, 60f, 90f, 120f, 144f)) {
     val motion = initialized()
@@ -66,10 +74,16 @@ fun main() {
   val motion = initialized()
   motion.retarget(true)
   val contour = GlassMorphOutline(3f)
+  var fieldFrames = 0
   repeat(100) {
     val settled = motion.advanceBy(1f / 120f)
     finite(motion.frame)
-    contour.update(motion.frame, target.left, target.top, settled)
+    contour.update(motion.frame, target.left, target.top, settled, false, 30f)
+    contour.smoothedField?.let { field ->
+      fieldFrames++
+      verify(field.step == 30f, "Gaussian grid changed while shell moved")
+      verify(field.width <= 72 && field.height <= 72, "Field exceeded its bounded upstream grid")
+    }
     verify(!contour.path.isEmpty, "The liquid mask disappeared")
     verify(contour.path.points.all { (x, y) -> x.isFinite() && y.isFinite() }, "The field contour is invalid")
   }
@@ -77,6 +91,12 @@ fun main() {
   contour.update(motion.frame, target.left, target.top, true)
   verify(contour.path.rectangles == 1 && contour.path.points.isEmpty(), "Settled menu must use one cheap native rounded clip")
   verify(near(contour.path.lastRoundRect!!.left, 0f), "Screen-to-Modal origin is not removed")
+  verify(fieldFrames > 0, "Shared Gaussian portal field was not generated")
+  val closedPlain = initialized()
+  contour.update(closedPlain.frame, 0f, 0f, false)
+  verify(contour.path.rectangles == 1, "A plain button fabricated an opaque secondary glass circle")
+  contour.update(closedPlain.frame, 0f, 0f, false, true)
+  verify(contour.path.rectangles == 2, "An actual glass trigger lost its secondary lobe")
 
   // A moving glass shell must reveal stationary page pixels. Model the actual
   // native viewport/child placement and sampling origin, with a separate Modal
@@ -118,6 +138,10 @@ fun main() {
   val previous = geometry.left
   verify(!geometry.update(Float.NaN, 0f, 1f, 1f) && geometry.left == previous, "Invalid geometry entered material layout")
   verify(geometry.clear() && !geometry.active, "Native menu capacity leaked after closing")
+  geometry.reserve(0f, 0f, 1000f, 1000f)
+  geometry.update(0f, 0f, 100f, 200f)
+  geometry.update(20f, 30f, 120f, 230f)
+  verify(geometry.placementChanged && !geometry.sizeChanged, "Pure motion forced full blur/lens measurement")
 
   // Tiny buttons, wide list rows, phone/tablet cards, different display density.
   val random = Random(927)

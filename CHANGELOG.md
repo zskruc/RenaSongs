@@ -13,6 +13,19 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.4] - 2026-11-18
+
+### Fixed
+
+- 普通按钮不再被额外画成玻璃圆块；补齐上游材质淡出、原控件显隐与复原，避免文字已经消失但圆影仍停留。
+- 使用原项目默认的触发控件轨迹、固定采样步长、系统动效倍率及正文 RenderNode 折射／连续模糊；保持展开完成后的玻璃配置。
+- 减少平移动画中的材质子树测量，并标记弹窗采样造成的跨窗口重绘，避免底层页面将采样恢复误判为新内容而重复捕获。
+
+### English
+
+- Match upstream nonglass-trigger opacity, trigger-origin motion, fixed field grid and duration scale; add the upstream foreground portal rendering phases.
+- Restore the original trigger safely, reduce translation remeasurement, and prevent foreign capture staging from feeding redundant backdrop captures.
+
 ## [0.8.8.1-preview.3] - 2026-11-18
 
 ### Changed

@@ -1,7 +1,6 @@
 package expo.modules.liquidglass
 
 import android.annotation.SuppressLint
-import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Outline
@@ -10,6 +9,7 @@ import android.graphics.RectF
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
+import android.provider.Settings
 import android.view.Choreographer
 import android.view.MotionEvent
 import android.view.View
@@ -20,12 +20,13 @@ import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import expo.modules.liquidglass.menumotion.GlassMorphOutline
+import expo.modules.liquidglass.menumotion.GlassForegroundPortal
+import expo.modules.liquidglass.menumotion.GlassFrameClock
 import expo.modules.liquidglass.menumotion.GlassMorphTuning
 import expo.modules.liquidglass.menumotion.GlassMotion
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * A fixed Fabric layout with the source-to-menu motion from
@@ -50,7 +51,13 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private val through = RectF()
   private val location = IntArray(2)
   private val rootLocation = IntArray(2)
-  private val blurEffects = arrayOfNulls<RenderEffect>(19)
+  private val frameClock = GlassFrameClock()
+  private val foregroundPortal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) GlassForegroundPortal(density) else null
+  private val foregroundBounds = RectF()
+  private var triggerSnapshot: MenuTriggerSnapshot? = null
+  // App buttons deliberately retain their original plain Pressable material.
+  // Upstream only adds a second glass lobe when the actual trigger is glass.
+  private val sourceHasGlass = false
   private var requestedOpen = false
   private var requestedReady = false
   private var requestedSession = 0
@@ -63,12 +70,11 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private var callbackPosted = false
   private var settled = false
   private var interactive = false
-  private var lastFrameNanos = 0L
-  private var lastBlurStep = -1
+  private var animationScale = 1f
+  private var lockedFieldStep = 0f
   private var emittedStart = false
   private var completedOpen: Boolean? = null
   private var targetRadius = 0f
-  private var sourceRadiusRatio = 1f
 
   override val pointerEvents: PointerEvents
     get() = if (interactive) PointerEvents.BOX_NONE else PointerEvents.NONE
@@ -101,9 +107,11 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       settled = false
       emittedStart = false
       completedOpen = null
-      lastFrameNanos = 0L
+      frameClock.restart(animationScale)
       setInteractive(false)
       (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
+      releaseTrigger()
+      foregroundPortal?.release()
       // A reused native view must not flash the preceding menu's display list.
       resetContent()
       invalidate()
@@ -113,7 +121,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       settled = false
       completedOpen = null
       emittedStart = false
-      lastFrameNanos = 0L
+      frameClock.restart(animationScale)
       setInteractive(false)
       beginMotion()
       applyFrame()
@@ -149,6 +157,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     activeSession = Int.MIN_VALUE
     setInteractive(false)
     (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
+    releaseTrigger()
+    foregroundPortal?.release()
     resetContent()
     super.onDetachedFromWindow()
   }
@@ -156,7 +166,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onWindowVisibilityChanged(visibility: Int) {
     super.onWindowVisibilityChanged(visibility)
     if (visibility != VISIBLE) stopFrames() else if (isAttachedToWindow) {
-      lastFrameNanos = 0L
+      frameClock.restart(animationScale)
       requestStart()
       if (initialized && !settled) beginMotion()
     }
@@ -196,21 +206,19 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       val side = min(44f * density, min(target.width(), target.height()))
       source.set(target.centerX() - side / 2f, target.top, target.centerX() + side / 2f, target.top + side)
     }
-    // Through is the pressed part of a wide trigger, as in upstream's ejection.
-    // Keep it bounded to a button-sized square rather than the whole list row.
-    val side = min(source.width(), source.height())
-    sourceRadiusRatio = if (rect != null && rect.size > 4)
-      ((rect[4] * density).toFloat() / max(side / 2f, 0.1f)).coerceIn(0f, 1f) else 1f
-    through.set(source.centerX() - side / 2f, source.centerY() - side / 2f,
-      source.centerX() + side / 2f, source.centerY() + side / 2f)
+    // The library's default is morphOrigin="trigger", not press-following.
+    // Forcing followsPress multiplies spring position by growth and introduces
+    // an initially sticky, then sudden leap for distant right-aligned cards.
+    through.set(source)
+    triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.take(source) else null
     reserveMaterialEnvelope()
     targetRadius = requestedRadius * density
-    motion.initialize(source, target, targetRadius, density, through, true, GlassMorphTuning(null, null))
+    motion.initialize(source, target, targetRadius, density, through, false, GlassMorphTuning(null, null))
     motion.retarget(true)
     initialized = true
     settled = false
     completedOpen = null
-    lastFrameNanos = 0L
+    frameClock.restart(animationScale)
     beginMotion()
     applyFrame()
     // Initial source geometry is drawn in this pre-draw before the first tick.
@@ -239,6 +247,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (!isAttachedToWindow || windowVisibility != VISIBLE) return
     if (!emittedStart) {
       emittedStart = true
+      animationScale = try { Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) }
+        catch (_: RuntimeException) { 1f }
+      frameClock.restart(animationScale)
       onMotionStart(mapOf("sessionId" to activeSession, "open" to requestedOpen))
     }
     if (!callbackPosted) {
@@ -250,15 +261,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   override fun doFrame(frameTimeNanos: Long) {
     callbackPosted = false
     if (!initialized || !isAttachedToWindow || windowVisibility != VISIBLE) return
-    if (lastFrameNanos == 0L) {
-      lastFrameNanos = frameTimeNanos
-      // Do not spend the animation in Modal/window setup before its first frame.
-      beginMotion()
-      return
-    }
-    val seconds = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !ValueAnimator.areAnimatorsEnabled()) 5f
-      else ((frameTimeNanos - lastFrameNanos) / 1_000_000_000.0).toFloat().coerceIn(0f, 0.05f)
-    lastFrameNanos = frameTimeNanos
+    val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
     settled = motion.advanceBy(seconds)
     applyFrame()
     if (settled) {
@@ -270,17 +273,14 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private fun applyFrame() {
     if (!initialized) return
     val frame = motion.frame
-    // Upstream's default trigger is a capsule. Preserve the actual trigger's
-    // corner ratio when a rectangular action supplied a measured radius.
-    // publish() restores its unmodified radius on every spring advance.
-    frame.sourceRadius *= sourceRadiusRatio
-    outline.update(frame, target.left, target.top, settled)
+    outline.update(frame, target.left, target.top, settled, sourceHasGlass, lockedFieldStep)
+    foregroundPortal?.update(frame, target.left, target.top, sourceHasGlass, outline.smoothedField)
     localIncoming.set(frame.bounds)
     localIncoming.offset(-target.left, -target.top)
     contentClip.rewind()
     contentClip.addRoundRect(localIncoming, frame.radiusX, frame.radiusY, Path.Direction.CW)
     materialBounds.set(localIncoming)
-    if (!settled) {
+    if (!settled && sourceHasGlass) {
       materialBounds.union(frame.sourceLobe.left - target.left, frame.sourceLobe.top - target.top,
         frame.sourceLobe.right - target.left, frame.sourceLobe.bottom - target.top)
       // The Gaussian neck can gently bulge outside either lobe's rectangle.
@@ -289,6 +289,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
       target.left + materialBounds.left, target.top + materialBounds.top,
       target.left + materialBounds.right, target.top + materialBounds.bottom)
+    getChildAt(0)?.alpha = if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)
     val sx = localIncoming.width() / max(width.toFloat(), 1f)
     val sy = localIncoming.height() / max(height.toFloat(), 1f)
     val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
@@ -302,13 +303,12 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       child.scaleX = sx * zoom
       child.scaleY = sy * zoom
       child.alpha = reveal
-    }
-    val blurStep = if (settled) 0 else (frame.contentBlur / density).roundToInt().coerceIn(0, 18)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && blurStep != lastBlurStep) {
-      lastBlurStep = blurStep
-      val effect = if (blurStep == 0) null else blurEffects[blurStep] ?: RenderEffect.createBlurEffect(
-        blurStep * density, blurStep * density, Shader.TileMode.CLAMP).also { blurEffects[blurStep] = it }
-      for (index in 1 until childCount) getChildAt(index).setRenderEffect(effect)
+      val contentBlur = if (settled) 0f else frame.contentBlur
+      if (foregroundPortal != null) foregroundPortal.setContentBlur(child, contentBlur, child.scaleX, child.scaleY)
+      else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val corrected = contentBlur / max(min(abs(child.scaleX), abs(child.scaleY)), 0.25f)
+        child.setRenderEffect(if (corrected > 0.01f) RenderEffect.createBlurEffect(corrected, corrected, Shader.TileMode.DECAL) else null)
+      }
     }
     // Native child transforms also transform Android/RN touch coordinates.
     setInteractive(requestedOpen && reveal > 0.78f)
@@ -326,9 +326,28 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // pixels and samples its true screen origin. Never scale a captured page
       // into the changing shell: that makes the page slide/zoom inside glass.
       drawChild(canvas, material, drawingTime)
+    } finally { canvas.restoreToCount(save) }
+    val portal = foregroundPortal
+    if (portal != null && canvas.isHardwareAccelerated && !settled) {
+      portal.draw(canvas, foregroundBounds, true) { recording ->
+        for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
+      }
+    } else if (portal != null && canvas.isHardwareAccelerated) {
+      val contentSave = canvas.save()
+      canvas.clipPath(contentClip)
+      portal.draw(canvas, foregroundBounds, false) { recording ->
+        for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
+      }
+      canvas.restoreToCount(contentSave)
+    } else {
+      val contentSave = canvas.save()
       canvas.clipPath(contentClip)
       for (index in 1 until childCount) drawChild(canvas, getChildAt(index), drawingTime)
-    } finally { canvas.restoreToCount(save) }
+      canvas.restoreToCount(contentSave)
+    }
+    // A nonglass trigger's foreground is drawn outside the glass portal, as in
+    // GlassMenuSession. Its real view is restored exactly at session cleanup.
+    triggerSnapshot?.draw(canvas, motion.frame, target.left, target.top)
   }
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -353,26 +372,31 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (!captureEnvelope.intersect(rootLocation[0].toFloat(), rootLocation[1].toFloat(),
         rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
     material.reserveMenuMorph(captureEnvelope)
+    lockedFieldStep = max(5f * density, max(captureEnvelope.width(), captureEnvelope.height()) / 64f)
+    foregroundBounds.set(captureEnvelope)
+    foregroundBounds.offset(-target.left, -target.top)
   }
   private fun stopFrames() {
     if (callbackPosted) Choreographer.getInstance().removeFrameCallback(this)
     callbackPosted = false
-    lastFrameNanos = 0L
+    frameClock.restart(animationScale)
   }
   private fun emitComplete(open: Boolean) {
     if (completedOpen == open) return
     completedOpen = open
+    if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }
   private fun resetContent() {
-    lastBlurStep = -1
     for (index in 1 until childCount) {
       val child = getChildAt(index)
       child.translationX = 0f; child.translationY = 0f
       child.scaleX = 1f; child.scaleY = 1f; child.alpha = 1f
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) child.setRenderEffect(null)
     }
+    getChildAt(0)?.alpha = 1f
   }
+  private fun releaseTrigger() { triggerSnapshot?.release(); triggerSnapshot = null }
 }
 
 /** Window-independent screen coordinates, measured on MAIN across RN Modals. */
@@ -387,6 +411,9 @@ internal fun measureMenuOrigin(view: View?): List<Float>? {
     view.outlineProvider?.getOutline(view, outline)
     outline.radius.takeIf { it.isFinite() && it > 0f } ?: min(view.width, view.height) / 2f
   } catch (_: Exception) { min(view.width, view.height) / 2f }
+  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.register(view,
+    RectF(location[0].toFloat(), location[1].toFloat(),
+      location[0] + view.width * abs(view.scaleX), location[1] + view.height * abs(view.scaleY)))
   return listOf(location[0] / density, location[1] / density,
     view.width * abs(view.scaleX) / density, view.height * abs(view.scaleY) / density, corner / density)
 }

@@ -11,7 +11,9 @@ import kotlin.math.max
  * arrays are reused; no bitmap uploads or full-window offscreen layer is needed.
  */
 internal class GlassMorphOutline(density: Float) {
-  private val field = GlassGaussianField(max(density, 1f))
+  // GlassMenuAndroidView.FieldStep: keep the upstream 4dp minimum, not a
+  // one-pixel grid that grows expensive exactly as the menu pinches closed.
+  private val field = GlassGaussianField(max(4f * density, 1f))
   private var first = IntArray(0)
   private var second = IntArray(0)
   private var visited = BooleanArray(0)
@@ -21,20 +23,26 @@ internal class GlassMorphOutline(density: Float) {
   private val outgoing = RectF()
   private val edges = IntArray(4)
   val path = Path()
+  var smoothedField: GlassGaussianField? = null
+    private set
 
-  fun update(frame: GlassMorphFrame, originX: Float, originY: Float, settled: Boolean) {
+  fun update(frame: GlassMorphFrame, originX: Float, originY: Float, settled: Boolean,
+    hasSource: Boolean = false, lockedFieldStep: Float = 0f) {
     path.rewind()
+    smoothedField = null
     incoming.set(frame.bounds)
     incoming.offset(-originX, -originY)
     outgoing.set(frame.sourceLobe)
     outgoing.offset(-originX, -originY)
     if (!settled && frame.smoothing > 0.25f &&
-      field.update(incoming, frame.radiusX, frame.radiusY, outgoing, frame.sourceRadius, frame.smoothing)) {
+      field.update(incoming, frame.radiusX, frame.radiusY, if (hasSource) outgoing else null,
+        frame.sourceRadius, frame.smoothing, lockedFieldStep)) {
+      smoothedField = field
       contour()
       if (!path.isEmpty) return
     }
     path.addRoundRect(incoming, frame.radiusX, frame.radiusY, Path.Direction.CW)
-    if (!settled) path.addRoundRect(outgoing, frame.sourceRadius, frame.sourceRadius, Path.Direction.CW)
+    if (!settled && hasSource) path.addRoundRect(outgoing, frame.sourceRadius, frame.sourceRadius, Path.Direction.CW)
   }
 
   private fun contour() {

@@ -169,6 +169,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private val menuMaterial = MenuMaterialGeometry()
   private var menuMaterialCapacity by mutableStateOf(IntSize.Zero)
   private var menuMaterialVersion by mutableIntStateOf(0)
+  private var menuPlacementVersion by mutableIntStateOf(0)
   private val composeOffsetX get() = if (menuMaterial.active) menuMaterial.captureLeft else 0
   private val composeOffsetY get() = if (menuMaterial.active) menuMaterial.captureTop else 0
   internal val opticalMaterialOffsetX get() = composeOffsetX + materialOffsetX
@@ -290,6 +291,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
         screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])) return
     menuMaterialCapacity = IntSize(menuMaterial.captureWidth, menuMaterial.captureHeight)
     menuMaterialVersion++
+    menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
     if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
@@ -301,7 +303,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     if (!menuMaterial.update(screenLeft - sampleLocation[0], screenTop - sampleLocation[1],
         screenRight - sampleLocation[0], screenBottom - sampleLocation[1])) return
     // Measurement owns only this Compose drawing child, as with the native dock.
-    menuMaterialVersion++
+    if (menuMaterial.sizeChanged) menuMaterialVersion++
+    if (menuMaterial.placementChanged) menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
     // The measurement snapshot observer requests the one required remeasure.
@@ -314,6 +317,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     if (!menuMaterial.clear()) return
     menuMaterialCapacity = IntSize.Zero
     menuMaterialVersion++
+    menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
     if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
@@ -938,12 +942,17 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       val fullHeight = constraints.maxHeight
       @Suppress("UNUSED_VARIABLE") val menuVersion = menuMaterialVersion
       if (menuMaterial.active) {
-        materialOffsetX = menuMaterial.placementX
-        materialOffsetY = menuMaterial.placementY
         materialWidth = menuMaterial.width
         materialHeight = menuMaterial.height
         val child = measurables.single().measure(Constraints.fixed(materialWidth, materialHeight))
-        return@Layout layout(fullWidth, fullHeight) { child.place(materialOffsetX, materialOffsetY) }
+        return@Layout layout(fullWidth, fullHeight) {
+          // Pure movement re-places the existing material; it does not measure
+          // the complete blur/lens subtree again once its size is unchanged.
+          @Suppress("UNUSED_VARIABLE") val placementVersion = menuPlacementVersion
+          materialOffsetX = menuMaterial.placementX
+          materialOffsetY = menuMaterial.placementY
+          child.place(materialOffsetX, materialOffsetY)
+        }
       }
       val enabled = dockCompactWidth > 0f
       val amPlus = materialPreset == "amPlus"

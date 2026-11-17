@@ -17,6 +17,9 @@ Resonus glass renderer. Source geometry, default spring channels, shape fusion
 and independent content reveal run on Android's frame callback. The upstream
 demo app, menu data model and material shader are not bundled; existing material
 profiles, saved optical parameters and final popup layouts remain in use.
+The follow-up also ports the upstream foreground portal shader, field texture,
+scale-corrected content blur and frame-clock policy, with a RenderNode bridge
+for arbitrary RN content and an ownership-safe snapshot of plain triggers.
 See [integration notes](./docs/MENU-MORPH-181.md) for coverage and limitations.
 
 ## Optional official artist-name artwork

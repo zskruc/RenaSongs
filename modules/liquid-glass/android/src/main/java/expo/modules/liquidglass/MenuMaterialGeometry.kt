@@ -35,6 +35,10 @@ internal class MenuMaterialGeometry {
   val height get() = max(bottom - top, 1)
   val placementX get() = left - captureLeft
   val placementY get() = top - captureTop
+  var sizeChanged = false
+    private set
+  var placementChanged = false
+    private set
 
   fun reserve(l: Float, t: Float, r: Float, b: Float): Boolean {
     if (!finiteRect(l, t, r, b)) return false
@@ -51,12 +55,16 @@ internal class MenuMaterialGeometry {
   }
 
   fun update(l: Float, t: Float, r: Float, b: Float): Boolean {
+    sizeChanged = false
+    placementChanged = false
     if (!active || !finiteRect(l, t, r, b)) return false
     val nextLeft = floor(l).toInt()
     val nextTop = floor(t).toInt()
     val nextRight = ceil(r).toInt()
     val nextBottom = ceil(b).toInt()
-    val changed = left != nextLeft || top != nextTop || right != nextRight || bottom != nextBottom
+    sizeChanged = width != max(nextRight - nextLeft, 1) || height != max(nextBottom - nextTop, 1)
+    placementChanged = left != nextLeft || top != nextTop
+    val changed = sizeChanged || placementChanged
     left = nextLeft; top = nextTop; right = nextRight; bottom = nextBottom
     return changed
   }

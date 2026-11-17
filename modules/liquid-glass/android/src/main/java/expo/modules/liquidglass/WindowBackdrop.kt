@@ -150,6 +150,14 @@ internal object WindowBackdrops {
     val wasCapturing = isCapturing
     isCapturing = true
     try {
+      // A Modal also stages/restores glass in its Activity underlay. Those
+      // mutations invalidate that other window's hosts, not just this capture's
+      // root. Give the existing backing owner the same finite redraw ownership
+      // before staging, so its resulting pre-draw cannot start another capture
+      // (and a trailing 42ms timer) solely because this window sampled it.
+      capturedSurfaces.forEach { surface ->
+        if (surface.rootView !== root) windows[surface.rootView]?.onForeignCaptureStaging()
+      }
       // INVISIBLE clears TextInput focus. Transition alpha avoids changing the
       // visibility property, ordinary alpha, or dispatching ordinary visibility
       // events. Android's isVisibleToUser can still report false while it is zero.
@@ -455,6 +463,12 @@ internal class WindowBackdrop(
     materialVersion++
     requestFrameClock()
     root.invalidate()
+  }
+
+  /** Mark capture-caused invalidations without erasing genuine dirty versions. */
+  internal fun onForeignCaptureStaging() {
+    if (closed) return
+    ownRedrawsToSkip = maxOf(ownRedrawsToSkip, OWN_REDRAW_TRAVERSALS)
   }
 
   /** Invalidate displayed pixels, retaining their buffers until newer frames retire them. */

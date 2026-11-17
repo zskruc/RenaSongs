@@ -71,4 +71,23 @@ that verifies absence of a scaled/translated material canvas. Physical visual
 verification is required separately; mathematical checks alone did not establish
 that the initial preview looked correct.
 
+### 183: match the missing rendering stages
+
+`0.8.8.1-preview.4` fixes the mismatched nonglass source treatment: ordinary
+buttons do not gain an extra glass lobe, and the material follows upstream
+content-progress opacity. Trigger glyph capture/restoration is owned by one
+presentation. The default trigger-origin trajectory, stable presentation grid,
+duration scaling, and RenderNode foreground portal (continuous, scale-corrected
+DECAL blur and lens shader) replace the incomplete initial bindings. Translation
+and size observation are separated so a simple translation does not remeasure
+the material subtree. Native checks now cover 32,849 cases.
+
+Modal capture staging gives existing affected background-window owners a bounded
+own-redraw allowance before temporarily changing source alpha. It neither clears
+real dirty flags nor changes capture sources; genuine scrolling, scene and material
+updates retain the existing guard. This addresses a cross-window capture feedback
+path found during the physical frame-time investigation. The 182 baseline and
+183 physical comparison are private local records, not screenshots or benchmarks
+uploaded to the public repository.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。
