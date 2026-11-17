@@ -2,6 +2,15 @@
 
 Version: `0.8.8.1-preview.2` / Android code `181`.
 
+Follow-up: `0.8.8.1-preview.3` / code `182`, under the new RenaSongs name.
+The first physical preview exposed a material-space bug: scaling an already
+sampled card image caused its background to stretch with the shell. The follow-up
+removes that canvas transform. A fixed source-to-card capture envelope and a
+menu-only material viewport place/draw the glass at its actual physical screen
+rectangle on each frame; the RN/Yoga content layout remains fixed. Both bitmap
+and RenderNode sampling paths keep the same screen origin. No WindowBackdrop
+ownership policy or optical profile is changed.
+
 Source: [expo-glass-custom-menu](https://github.com/rit3zh/expo-glass-custom-menu/tree/0021efd8ab0d068f155bbdac62c5f673ccc39a24),
 MIT, revision `0021efd8ab0d068f155bbdac62c5f673ccc39a24`.
 An independent checkout is kept locally outside this repository; no demo dependencies were installed.
@@ -56,5 +65,10 @@ arbitrary RN content, not the entire upstream demo or Apple's private framework.
 - Full repository regression, signed APK verification and physical Samsung
   checks are recorded in local build/device receipts. Harness cadences are not
   measurements of the actual phone's frame rate.
+
+The stationary-material follow-up passes 32,741 JVM checks and a source contract
+that verifies absence of a scaled/translated material canvas. Physical visual
+verification is required separately; mathematical checks alone did not establish
+that the initial preview looked correct.
 
 本预览仅在本机构建，不推送 GitHub，不发布 Release。

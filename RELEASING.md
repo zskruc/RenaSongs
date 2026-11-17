@@ -1,6 +1,6 @@
-# 发布 Resonus Glass Android APK
+# 发布 RenaSongs Android APK
 
-正式版本发布到 [zskruc/resonus-glass Releases](https://github.com/zskruc/resonus-glass/releases)，默认源码分支为 `glass`。App 的版本检查、更新摘要与 APK 下载读取本仓库已发布的最新正式 Release；草稿和预发布不会触发正式更新提示。
+正式版本发布到 [zskruc/RenaSongs Releases](https://github.com/zskruc/RenaSongs/releases)，默认源码分支为 `glass`。App 的版本检查、更新摘要与 APK 下载读取本仓库已发布的最新正式 Release；草稿和预发布不会触发正式更新提示。
 
 目前正式 APK 在维护者本机使用既有签名构建，再上传到 GitHub Release。保留的上游 `Release APK` 和 iOS IPA 工作流只在原项目仓库运行，不负责发布 Glass。`Glass ARM64 test APK` 工作流每次生成临时测试签名，**不能替代当前手机安装使用的签名，也不能作为覆盖更新的正式安装包**。
 
@@ -75,7 +75,7 @@ git push origin v0.8.4
 
 ```bash
 gh release create v0.8.4 \
-  --repo zskruc/resonus-glass \
+  --repo zskruc/RenaSongs \
   --verify-tag \
   --draft \
   --title 'Resonus Glass 0.8.4' \
@@ -83,14 +83,14 @@ gh release create v0.8.4 \
   artifacts/Resonus-Glass-v0.8.4-arm64-v8a.apk \
   artifacts/Resonus-Glass-v0.8.4-arm64-v8a.apk.sha256
 
-gh release view v0.8.4 --repo zskruc/resonus-glass --json tagName,targetCommitish,isDraft,isPrerelease,body,assets
+gh release view v0.8.4 --repo zskruc/RenaSongs --json tagName,targetCommitish,isDraft,isPrerelease,body,assets
 ```
 
 确认 tag 指向预期源码、说明只描述本分支实际改动、APK 文件名和大小正确，并从草稿下载附件到本地缓存比对 SHA-256。确认文件可访问后发布为正式 Release：
 
 ```bash
-gh release edit v0.8.4 --repo zskruc/resonus-glass --draft=false --prerelease=false --latest
-gh release view --repo zskruc/resonus-glass --json tagName,url,assets
+gh release edit v0.8.4 --repo zskruc/RenaSongs --draft=false --prerelease=false --latest
+gh release view --repo zskruc/RenaSongs --json tagName,url,assets
 ```
 
-最后检查 [最新 Release 地址](https://github.com/zskruc/resonus-glass/releases/latest) 及 GitHub 的 `/repos/zskruc/resonus-glass/releases/latest` API：应为刚发布的版本，包含正式 APK 和正确的更新说明。App 已安装同版本时，“检查更新”正常结果是没有更高版本；不应通过临时发布虚假高版本来测试更新提示。
+最后检查 [最新 Release 地址](https://github.com/zskruc/RenaSongs/releases/latest) 及 GitHub 的 `/repos/zskruc/RenaSongs/releases/latest` API：应为刚发布的版本，包含正式 APK 和正确的更新说明。App 已安装同版本时，“检查更新”正常结果是没有更高版本；不应通过临时发布虚假高版本来测试更新提示。

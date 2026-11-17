@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Resonus Glass 问题与反馈
-    url: https://github.com/zskruc/resonus-glass/issues/new?template=bug_report.yml
+  - name: RenaSongs 问题与反馈
+    url: https://github.com/zskruc/RenaSongs/issues/new?template=bug_report.yml
     about: 本分支的玻璃、导航和定制问题请提交到这里。
-  - name: Resonus Glass FAQ
-    url: https://github.com/zskruc/resonus-glass/blob/glass/docs/FAQ.md
+  - name: RenaSongs FAQ
+    url: https://github.com/zskruc/RenaSongs/blob/glass/docs/FAQ.md
     about: 本分支的常见问题与安装说明。

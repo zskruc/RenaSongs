@@ -4,9 +4,9 @@
   <string name="widget_stats_name">Listening statistics</string>
   <string name="widget_lyrics_name">Current lyrics</string>
   <string name="widget_name">Now playing</string>
-  <string name="widget_description">What Resonus is playing, with play, pause and skip.</string>
-  <string name="widget_idle">Tap to open Resonus</string>
-  <string name="tile_label">Resonus</string>
+  <string name="widget_description">What RenaSongs is playing, with play, pause and skip.</string>
+  <string name="widget_idle">Tap to open RenaSongs</string>
+  <string name="tile_label">RenaSongs</string>
   <string name="widget_previous">Previous</string>
   <string name="widget_play_pause">Play or pause</string>
   <string name="widget_next">Next</string>

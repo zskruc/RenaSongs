@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -165,8 +166,13 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var materialOffsetY = 0
   private var materialWidth = 0
   private var materialHeight = 0
-  internal val opticalMaterialOffsetX get() = materialOffsetX
-  internal val opticalMaterialOffsetY get() = materialOffsetY
+  private val menuMaterial = MenuMaterialGeometry()
+  private var menuMaterialCapacity by mutableStateOf(IntSize.Zero)
+  private var menuMaterialVersion by mutableIntStateOf(0)
+  private val composeOffsetX get() = if (menuMaterial.active) menuMaterial.captureLeft else 0
+  private val composeOffsetY get() = if (menuMaterial.active) menuMaterial.captureTop else 0
+  internal val opticalMaterialOffsetX get() = composeOffsetX + materialOffsetX
+  internal val opticalMaterialOffsetY get() = composeOffsetY + materialOffsetY
   internal val progressiveMaterialId = System.identityHashCode(this)
 
   internal fun configureDockScrollInput(enabled: Boolean? = null, scope: String? = null, collapsed: Boolean? = null) {
@@ -267,9 +273,51 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   /** Actual physical child bounds, rather than the fixed RN host. */
   internal fun getMaterialBoundsOnScreen(bounds: Rect) {
     getLocationOnScreen(sampleLocation)
-    bounds.set(sampleLocation[0] + materialOffsetX, sampleLocation[1] + materialOffsetY,
-      sampleLocation[0] + materialOffsetX + if (materialWidth > 0) materialWidth else width,
-      sampleLocation[1] + materialOffsetY + if (materialHeight > 0) materialHeight else height)
+    if (menuMaterial.active) {
+      // This is the capture capacity, not the current moving optical child.
+      // Keeping it fixed prevents a stale narrow ROI following the animation.
+      bounds.set(sampleLocation[0] + menuMaterial.captureLeft, sampleLocation[1] + menuMaterial.captureTop,
+        sampleLocation[0] + menuMaterial.captureRight, sampleLocation[1] + menuMaterial.captureBottom)
+    } else bounds.set(sampleLocation[0] + materialOffsetX, sampleLocation[1] + materialOffsetY,
+        sampleLocation[0] + materialOffsetX + if (materialWidth > 0) materialWidth else width,
+        sampleLocation[1] + materialOffsetY + if (materialHeight > 0) materialHeight else height)
+  }
+
+  /** Native-only fixed viewport for a menu; RN layout and optical settings stay unchanged. */
+  internal fun reserveMenuMorph(screenBounds: RectF) {
+    getLocationOnScreen(sampleLocation)
+    if (!menuMaterial.reserve(screenBounds.left - sampleLocation[0], screenBounds.top - sampleLocation[1],
+        screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])) return
+    menuMaterialCapacity = IntSize(menuMaterial.captureWidth, menuMaterial.captureHeight)
+    menuMaterialVersion++
+    geometryVersion++
+    Snapshot.sendApplyNotifications()
+    if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
+    snapshot?.onMaterialChanged()
+  }
+
+  internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float) {
+    getLocationOnScreen(sampleLocation)
+    if (!menuMaterial.update(screenLeft - sampleLocation[0], screenTop - sampleLocation[1],
+        screenRight - sampleLocation[0], screenBottom - sampleLocation[1])) return
+    // Measurement owns only this Compose drawing child, as with the native dock.
+    menuMaterialVersion++
+    geometryVersion++
+    Snapshot.sendApplyNotifications()
+    // The measurement snapshot observer requests the one required remeasure.
+    // An extra requestLayout here would enqueue a second Android layout per tick.
+    composeView.invalidate()
+    invalidate()
+  }
+
+  internal fun clearMenuMorph() {
+    if (!menuMaterial.clear()) return
+    menuMaterialCapacity = IntSize.Zero
+    menuMaterialVersion++
+    geometryVersion++
+    Snapshot.sendApplyNotifications()
+    if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
+    snapshot?.onMaterialChanged()
   }
 
   /** The pressed lens is allowed beyond the bar, so its source ROI must follow it too. */
@@ -513,11 +561,22 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
       return
     }
+    if (menuMaterial.active) {
+      setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
+      composeView.measure(MeasureSpec.makeMeasureSpec(menuMaterial.captureWidth, MeasureSpec.EXACTLY),
+        MeasureSpec.makeMeasureSpec(menuMaterial.captureHeight, MeasureSpec.EXACTLY))
+      return
+    }
     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
   }
 
   override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
     if (!composeView.isAttachedToWindow) return
+    if (menuMaterial.active) {
+      composeView.layout(menuMaterial.captureLeft, menuMaterial.captureTop,
+        menuMaterial.captureRight, menuMaterial.captureBottom)
+      return
+    }
     super.onLayout(changed, left, top, right, bottom)
     composeView.layout(0, 0, width, height)
     amPlusSelectionOverlay.layout()
@@ -639,13 +698,13 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
         getLocationOnScreen(sampleLocation)
         drawIntoCanvas { composeCanvas ->
           drawCapturedBackdrop(composeCanvas.nativeCanvas, captured,
-            sampleLocation[0] + materialOffsetX, sampleLocation[1] + materialOffsetY)
+            sampleLocation[0] + opticalMaterialOffsetX, sampleLocation[1] + opticalMaterialOffsetY)
         }
       } else if (enabled && recorded != null) {
         getLocationOnScreen(sampleLocation)
         drawIntoCanvas { composeCanvas ->
           drawRecordedBackdrop(composeCanvas.nativeCanvas, recorded,
-            sampleLocation[0] + materialOffsetX, sampleLocation[1] + materialOffsetY)
+            sampleLocation[0] + opticalMaterialOffsetX, sampleLocation[1] + opticalMaterialOffsetY)
         }
       }
     }
@@ -844,6 +903,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   /** Fixed outer constraints supply capacity; the child still measures its live outline. */
   @Composable
   private fun DockMaterialCapacity(content: @Composable (IntSize) -> Unit) {
+    val menuCapacity = menuMaterialCapacity
+    if (menuCapacity != IntSize.Zero) {
+      content(menuCapacity)
+      return
+    }
     if (materialPreset != "amPlus" || dockCompactWidth <= 0f || progressiveBlur) {
       content(IntSize.Zero)
       return
@@ -872,6 +936,15 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     Layout(content = content, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
       val fullWidth = constraints.maxWidth
       val fullHeight = constraints.maxHeight
+      @Suppress("UNUSED_VARIABLE") val menuVersion = menuMaterialVersion
+      if (menuMaterial.active) {
+        materialOffsetX = menuMaterial.placementX
+        materialOffsetY = menuMaterial.placementY
+        materialWidth = menuMaterial.width
+        materialHeight = menuMaterial.height
+        val child = measurables.single().measure(Constraints.fixed(materialWidth, materialHeight))
+        return@Layout layout(fullWidth, fullHeight) { child.place(materialOffsetX, materialOffsetY) }
+      }
       val enabled = dockCompactWidth > 0f
       val amPlus = materialPreset == "amPlus"
       val progress = if (!enabled) 0f else if (amPlus) AmPlusDockGeometry.rawProgress(dockProgress)

@@ -49,12 +49,12 @@ hook.deregister();
 
 const originalFetch = globalThis.fetch;
 const CHECK_KEY = `update_last_check:${GITHUB_REPOSITORY}`;
-const APK_URL = 'https://github.com/zskruc/resonus-glass/releases/download/v0.8.5/Resonus-Glass-v0.8.5-arm64-v8a.apk';
+const APK_URL = 'https://github.com/zskruc/RenaSongs/releases/download/v0.8.5/Resonus-Glass-v0.8.5-arm64-v8a.apk';
 
 function publishedRelease(version = '0.8.5') {
   return {
     tag_name: `v${version}`,
-    html_url: `https://github.com/zskruc/resonus-glass/releases/tag/v${version}`,
+    html_url: `https://github.com/zskruc/RenaSongs/releases/tag/v${version}`,
     body: '### Changed\n- Glass fork update.\n\n### Fixed\n- Keep the custom player.',
     assets: [
       { name: 'SHA256SUMS.txt', browser_download_url: 'https://example.invalid/checksums' },
@@ -92,13 +92,13 @@ describe('updates from the Glass repository', () => {
       return Response.json(publishedRelease());
     };
     const release = await checkForUpdate(true);
-    assert.deepEqual(calls, ['https://api.github.com/repos/zskruc/resonus-glass/releases/latest']);
+    assert.deepEqual(calls, ['https://api.github.com/repos/zskruc/RenaSongs/releases/latest']);
     assert.equal(RELEASES_API, calls[0]);
     assert.deepEqual(release, {
       version: '0.8.5',
       apkUrl: APK_URL,
       size: 12345,
-      pageUrl: 'https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5',
+      pageUrl: 'https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5',
       notes: { added: [], changed: ['Glass fork update.'], fixed: ['Keep the custom player.'] },
     });
   });
@@ -119,7 +119,7 @@ describe('updates from the Glass repository', () => {
     globalThis.fetch = async () => Response.json({ tag_name: 'v0.8.5' });
     const release = await checkForUpdate(true);
     assert.equal(release?.pageUrl, RELEASES_PAGE);
-    assert.equal(RELEASES_PAGE, 'https://github.com/zskruc/resonus-glass/releases/latest');
+    assert.equal(RELEASES_PAGE, 'https://github.com/zskruc/RenaSongs/releases/latest');
     assert.equal(release?.apkUrl, undefined);
     assert.equal(release?.notes, undefined);
   });

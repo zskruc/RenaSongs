@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Resonus",
+    "name": "RenaSongs",
     "slug": "resonus",
-    "version": "0.8.8.1-preview.2",
+    "version": "0.8.8.1-preview.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "resonus",
@@ -10,7 +10,7 @@
     "ios": {
       "bundleIdentifier": "com.juananzzz.resonus",
       "supportsTablet": true,
-      "icon": "./assets/images/resonus-ios.icon",
+      "icon": "./assets/images/ios-icon.png",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -19,9 +19,9 @@
     },
     "android": {
       "package": "com.juananzzz.resonus",
-      "versionCode": 181,
+      "versionCode": 182,
       "adaptiveIcon": {
-        "backgroundColor": "#1CD667",
+        "backgroundColor": "#650019",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },

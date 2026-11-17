@@ -1818,7 +1818,7 @@ you are actually typing into, which is easier than reading it here.
 | `Home screen widgets` |  |
 | `Listening statistics` |  |
 | `Listening time, play count and most listened track over the last 30 days.` |  |
-| `Long press your home screen, choose Widgets, then Resonus Glass.` |  |
+| `Long press your home screen, choose Widgets, then RenaSongs.` |  |
 | `Open the app once after adding a widget to refresh it. No new network or catalog work runs for widgets that are not installed.` |  |
 | `Three nearby lines, using your current lyric source, edits and timing offset. Updates when the lyric line changes.` |  |
 | `Three unfinished episodes with remaining time. Tap an episode to continue listening.` |  |

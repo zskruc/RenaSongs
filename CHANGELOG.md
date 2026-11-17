@@ -13,6 +13,21 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.3] - 2026-11-18
+
+### Changed
+
+- 应用名称改为 RenaSongs，使用用户选定的酒红／米白 R 音符图标；关于、更新地址、中英介绍与 GitHub 仓库名称同步更换。保持现有包名、签名、深链接和媒体目录，支持保留数据的覆盖更新。
+
+### Fixed
+
+- 菜单形变时不再缩放、拖动已采样的整张背景；玻璃材质在实际屏幕位置按物理尺寸绘制，捕获范围固定，轮廓与内容独立运动，避免背景像贴在面板里一起拉伸。
+
+### English
+
+- Rename the app and repository to RenaSongs with the approved artwork, preserving existing application identities and installed data.
+- Keep menu backdrop pixels aligned to the screen throughout the morph, without scaling the sampled image or changing the saved optical settings. Local Android test build, no new Release.
+
 ## [0.8.8.1-preview.2] - 2026-11-18
 
 ### Added

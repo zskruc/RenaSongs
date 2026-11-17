@@ -256,7 +256,7 @@ export default function LoginScreen() {
               </View>
               <View style={styles.hero}>
                 <Image source={APP_ICON} style={styles.appIcon} contentFit="cover" />
-                <Text style={styles.logo}>Resonus</Text>
+                <Text style={styles.logo}>RenaSongs</Text>
               </View>
 
               {profiles.length > 0 ? (

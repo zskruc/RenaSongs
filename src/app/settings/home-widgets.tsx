@@ -10,8 +10,8 @@ const native = requireOptionalNativeModule<{ pinExtraWidget(kind: string): boole
 export default function HomeWidgetsScreen() {
   useTheme();
   const t = useT(), toast = useToast((state) => state.show);
-  const pin = (kind: string) => { try { if (!native?.pinExtraWidget(kind)) toast(t('Long press your home screen, choose Widgets, then Resonus Glass.')); }
-    catch { toast(t('Long press your home screen, choose Widgets, then Resonus Glass.')); } };
+  const pin = (kind: string) => { try { if (!native?.pinExtraWidget(kind)) toast(t('Long press your home screen, choose Widgets, then RenaSongs.')); }
+    catch { toast(t('Long press your home screen, choose Widgets, then RenaSongs.')); } };
   return <SettingsPage title={t('Home screen widgets')}><DockScrollView contentContainerStyle={settingsStyles.content}>
     <Text style={settingsStyles.sectionDescription}>{t('Add a widget to your launcher. These use Android widgets and keep their own readable light and dark appearance.')}</Text>
     <SettingsGroup>

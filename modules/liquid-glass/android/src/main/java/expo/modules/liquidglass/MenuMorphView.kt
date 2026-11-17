@@ -44,10 +44,12 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private val contentClip = Path()
   private val localIncoming = RectF()
   private val materialBounds = RectF()
+  private val captureEnvelope = RectF()
   private val target = RectF()
   private val source = RectF()
   private val through = RectF()
   private val location = IntArray(2)
+  private val rootLocation = IntArray(2)
   private val blurEffects = arrayOfNulls<RenderEffect>(19)
   private var requestedOpen = false
   private var requestedReady = false
@@ -101,6 +103,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       completedOpen = null
       lastFrameNanos = 0L
       setInteractive(false)
+      (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
       // A reused native view must not flash the preceding menu's display list.
       resetContent()
       invalidate()
@@ -145,6 +148,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     completedOpen = null
     activeSession = Int.MIN_VALUE
     setInteractive(false)
+    (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
     resetContent()
     super.onDetachedFromWindow()
   }
@@ -199,6 +203,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       ((rect[4] * density).toFloat() / max(side / 2f, 0.1f)).coerceIn(0f, 1f) else 1f
     through.set(source.centerX() - side / 2f, source.centerY() - side / 2f,
       source.centerX() + side / 2f, source.centerY() + side / 2f)
+    reserveMaterialEnvelope()
     targetRadius = requestedRadius * density
     motion.initialize(source, target, targetRadius, density, through, true, GlassMorphTuning(null, null))
     motion.retarget(true)
@@ -222,6 +227,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       abs(target.width() - width) < 0.5f && abs(target.height() - height) < 0.5f &&
       abs(targetRadius - radius) < 0.5f) return
     target.set(left, top, left + width, top + height)
+    reserveMaterialEnvelope()
     targetRadius = radius
     motion.updateTarget(target, radius)
     settled = false
@@ -280,6 +286,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // The Gaussian neck can gently bulge outside either lobe's rectangle.
       materialBounds.inset(-frame.smoothing, -frame.smoothing)
     }
+    (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
+      target.left + materialBounds.left, target.top + materialBounds.top,
+      target.left + materialBounds.right, target.top + materialBounds.bottom)
     val sx = localIncoming.width() / max(width.toFloat(), 1f)
     val sy = localIncoming.height() / max(height.toFloat(), 1f)
     val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
@@ -313,13 +322,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val save = canvas.save()
     try {
       canvas.clipPath(outline.path)
-      val materialSave = canvas.save()
-      canvas.translate(materialBounds.left, materialBounds.top)
-      canvas.scale(materialBounds.width() / max(material.width.toFloat(), 1f),
-        materialBounds.height() / max(material.height.toFloat(), 1f))
-      canvas.translate(-material.left.toFloat(), -material.top.toFloat())
+      // The background's native drawing child moves/measures in physical
+      // pixels and samples its true screen origin. Never scale a captured page
+      // into the changing shell: that makes the page slide/zoom inside glass.
       drawChild(canvas, material, drawingTime)
-      canvas.restoreToCount(materialSave)
       canvas.clipPath(contentClip)
       for (index in 1 until childCount) drawChild(canvas, getChildAt(index), drawingTime)
     } finally { canvas.restoreToCount(save) }
@@ -335,6 +341,18 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (interactive == value) return
     interactive = value
     importantForAccessibility = if (value) IMPORTANT_FOR_ACCESSIBILITY_AUTO else IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+  }
+  private fun reserveMaterialEnvelope() {
+    val material = getChildAt(0) as? LiquidGlassView ?: return
+    captureEnvelope.set(target)
+    captureEnvelope.union(source)
+    // Reserve movement/rebound once, bounded by this Modal's actual window.
+    val guard = max(80f * density, max(target.width(), target.height()) * 0.18f)
+    captureEnvelope.inset(-guard, -guard)
+    rootView.getLocationOnScreen(rootLocation)
+    if (!captureEnvelope.intersect(rootLocation[0].toFloat(), rootLocation[1].toFloat(),
+        rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
+    material.reserveMenuMorph(captureEnvelope)
   }
   private fun stopFrames() {
     if (callbackPosted) Choreographer.getInstance().removeFrameCallback(this)

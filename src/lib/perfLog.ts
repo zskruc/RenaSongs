@@ -581,7 +581,7 @@ export function perfReport(): string {
   const mins = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
   const t = perfTime();
   const lines: string[] = [
-    `Resonus diagnostics, ${mins} min of use`,
+    `RenaSongs diagnostics, ${mins} min of use`,
     `  on screen ${formatMs(t.foregroundMs)} · away ${formatMs(t.backgroundMs)} · ` +
       `${t.trips} trips · JS ran ${formatMs(t.jsAwayMs)} of the time away`,
     '',

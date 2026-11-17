@@ -3,6 +3,7 @@ package expo.modules.liquidglass.menumotion
 import android.graphics.RectF
 import kotlin.math.abs
 import kotlin.random.Random
+import expo.modules.liquidglass.MenuMaterialGeometry
 
 private var checks = 0
 private fun verify(value: Boolean, message: String) { checks++; check(value) { message } }
@@ -76,6 +77,47 @@ fun main() {
   contour.update(motion.frame, target.left, target.top, true)
   verify(contour.path.rectangles == 1 && contour.path.points.isEmpty(), "Settled menu must use one cheap native rounded clip")
   verify(near(contour.path.lastRoundRect!!.left, 0f), "Screen-to-Modal origin is not removed")
+
+  // A moving glass shell must reveal stationary page pixels. Model the actual
+  // native viewport/child placement and sampling origin, with a separate Modal
+  // origin and a capture envelope extending beyond its final RN card layout.
+  val geometry = MenuMaterialGeometry()
+  verify(geometry.reserve(-300f, -250f, 900f, 1700f), "Menu capture envelope did not reserve")
+  val capacity = listOf(geometry.captureLeft, geometry.captureTop, geometry.captureRight, geometry.captureBottom)
+  val moving = initialized()
+  val hostX = 330f
+  val hostY = 280f
+  val marks = listOf(420f to 400f, 600f to 800f, 900f to 1200f)
+  moving.retarget(true)
+  repeat(2) { phase ->
+    if (phase == 1) moving.retarget(false)
+    repeat(120) {
+      moving.advanceBy(1f / 120f)
+      val f = moving.frame
+      val l = minOf(f.bounds.left, f.sourceLobe.left) - hostX - f.smoothing
+      val t = minOf(f.bounds.top, f.sourceLobe.top) - hostY - f.smoothing
+      val r = maxOf(f.bounds.right, f.sourceLobe.right) - hostX + f.smoothing
+      val b = maxOf(f.bounds.bottom, f.sourceLobe.bottom) - hostY + f.smoothing
+      geometry.update(l, t, r, b)
+      verify(listOf(geometry.captureLeft, geometry.captureTop, geometry.captureRight, geometry.captureBottom) == capacity,
+        "Animation changed capture ROI and could reuse a cropped image")
+      for ((screenX, screenY) in marks) {
+        val sampleOriginX = hostX + geometry.captureLeft + geometry.placementX
+        val sampleOriginY = hostY + geometry.captureTop + geometry.placementY
+        val sampledX = screenX - sampleOriginX
+        val sampledY = screenY - sampleOriginY
+        val paintedX = hostX + geometry.captureLeft + geometry.placementX + sampledX
+        val paintedY = hostY + geometry.captureTop + geometry.placementY + sampledY
+        verify(near(paintedX, screenX, 0.001f) && near(paintedY, screenY, 0.001f),
+          "Backdrop marker moved with its shell")
+        val neighbourX = hostX + geometry.captureLeft + geometry.placementX + sampledX + 10f
+        verify(near(neighbourX - paintedX, 10f, 0.001f), "Background image was scaled instead of sampled at 1:1")
+      }
+    }
+  }
+  val previous = geometry.left
+  verify(!geometry.update(Float.NaN, 0f, 1f, 1f) && geometry.left == previous, "Invalid geometry entered material layout")
+  verify(geometry.clear() && !geometry.active, "Native menu capacity leaked after closing")
 
   // Tiny buttons, wide list rows, phone/tablet cards, different display density.
   val random = Random(927)

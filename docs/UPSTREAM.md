@@ -4,7 +4,7 @@
 
 ## 在 GitHub 查看更新
 
-1. 打开 [Actions → Check upstream updates](https://github.com/zskruc/resonus-glass/actions/workflows/upstream-check.yml)。
+1. 打开 [Actions → Check upstream updates](https://github.com/zskruc/RenaSongs/actions/workflows/upstream-check.yml)。
 2. 选择 **Run workflow**，分支选择 `glass`，运行检查。
 3. 完成后查看该次运行的 **Summary**，下载 `upstream-comparison-…` 附件。
 
@@ -19,8 +19,8 @@
 首次获取源码：
 
 ```bash
-git clone https://github.com/zskruc/resonus-glass.git
-cd resonus-glass
+git clone https://github.com/zskruc/RenaSongs.git
+cd RenaSongs
 git switch glass
 git remote add upstream https://github.com/juananzzz/resonus.git
 ```
@@ -64,8 +64,8 @@ pnpm i18n:check
 
 涉及 Android 播放解码时补跑 `pnpm harness:extractor`。涉及界面或原生模块时，构建后在设备检查滚动、菜单、mini player、折叠/展开、后台返回、在线播放与离线歌曲；通过测试不代表所有手机都已获得相同帧率。
 
-[Actions → Glass ARM64 test APK](https://github.com/zskruc/resonus-glass/actions/workflows/glass-apk.yml) 提供手动 ARM64 构建，运行时选择要验证的分支；产物位于该次运行的附件中，包含 APK、校验值和测试说明。流程使用 Glass 独立包名，并在每次运行时生成一次性测试签名，密钥只在临时 runner 使用，结束后清理；不需要上传个人签名密钥，也不会创建 GitHub Release。
+[Actions → Glass ARM64 test APK](https://github.com/zskruc/RenaSongs/actions/workflows/glass-apk.yml) 提供手动 ARM64 构建，运行时选择要验证的分支；产物位于该次运行的附件中，包含 APK、校验值和测试说明。流程使用 Glass 独立包名，并在每次运行时生成一次性测试签名，密钥只在临时 runner 使用，结束后清理；不需要上传个人签名密钥，也不会创建 GitHub Release。
 
-**CI 测试 APK 无法覆盖手机上现有的 Resonus Glass，也无法覆盖其他次 CI 构建。** 测试应使用独立设备或测试配置。不要为了绕过签名不一致卸载现有 App，否则会丢失登录、设置和离线下载。要保留资料覆盖更新，需由维护者在本机使用与当前安装相同的签名生成 APK；签名密钥不随源码公开。
+**CI 测试 APK 无法覆盖手机上现有的 RenaSongs，也无法覆盖其他次 CI 构建。** 测试应使用独立设备或测试配置。不要为了绕过签名不一致卸载现有 App，否则会丢失登录、设置和离线下载。要保留资料覆盖更新，需由维护者在本机使用与当前安装相同的签名生成 APK；签名密钥不随源码公开。
 
 原上游签名发布、原版测试 APK 和 iOS IPA 流程仍保留，但仅在 `juananzzz/resonus` 仓库运行。在本仓库它们会跳过，避免把原版应用或上游标签误作 Glass 发布。
