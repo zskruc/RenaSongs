@@ -2177,5 +2177,10 @@
   "{n} plays": "{n} 次",
   "Hours": "小时",
   "Minutes": "分钟",
-  "Seconds": "秒"
+  "Seconds": "秒",
+  "{n} episodes deleted": "已删除 {n} 集节目",
+  "Playlist exported": "播放列表已导出",
+  "Export as M3U": "导出为 M3U",
+  "Last checked": "上次检查",
+  "Not checked yet": "尚未检查"
 }

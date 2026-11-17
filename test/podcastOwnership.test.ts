@@ -173,3 +173,58 @@ test('refresh-all stops the old batch after A to B to A instead of fetching its 
   h.switchTo('B'); h.switchTo('A'); gate.resolve(); const result = await work;
   assert.equal(result.stopped, true); assert.equal(result.failed, 0); assert.equal(h.requests.length, before + 1);
 });
+
+
+test('daily favorites and six-hour auto downloads share one serial due pass and keep other shows untouched', async () => {
+  const h = harness();
+  const favorite = await h.Api.subscribe('https://favorite.test/rss');
+  const automatic = await h.Api.subscribe('https://automatic.test/rss');
+  const ordinary = await h.Api.subscribe('https://ordinary.test/rss');
+  await h.Db.toggleFavorite(h.profile, favorite.id, 'channel', favorite.id);
+  await h.Db.toggleFavorite(h.profile, automatic.id, 'channel', automatic.id);
+  await h.Db.setAutoDownload(h.profile, automatic.id, true);
+  for (const channel of [favorite, automatic, ordinary]) await h.Db.saveChannel(h.profile,
+    { ...channel, refreshedAt: Date.now() - 25 * 60 * 60 * 1000 });
+  const before = h.requests.length, gate = deferred(); h.body(gate.promise);
+  const first = h.Api.refreshStaleFavoriteShows(), second = h.Api.refreshAutoDownloadShows();
+  assert.equal(first, second, 'both policies share the same owned pass');
+  await turn(); assert.equal(h.requests.length, before + 1, 'one host read at a time');
+  gate.resolve(); await first;
+  const urls = h.requests.slice(before).map((request) => request.url).sort();
+  assert.deepEqual(urls, ['https://automatic.test/rss', 'https://favorite.test/rss']);
+  await h.Api.refreshStaleFavoriteShows(); assert.equal(h.requests.length, before + 2, 'completed feeds are not fetched again');
+  const stored = await h.Db.getChannel(h.profile, automatic.id);
+  await h.Db.saveChannel(h.profile, { ...stored, refreshedAt: Date.now() - 7 * 60 * 60 * 1000 });
+  await h.Api.refreshStaleFavoriteShows(); assert.equal(h.requests.length, before + 3, 'automatic policy keeps its six-hour cadence');
+});
+
+test('daily refresh stops on account ABA, cancellation and manual offline without reading the remaining favorites', async () => {
+  for (const transition of ['account', 'cancel', 'offline']) {
+    const h = harness();
+    for (const url of ['https://one.test/rss', 'https://two.test/rss']) {
+      const channel = await h.Api.subscribe(url); await h.Db.toggleFavorite(h.profile, channel.id, 'channel', channel.id);
+      await h.Db.saveChannel(h.profile, { ...channel, refreshedAt: 1 });
+    }
+    const before = h.requests.length, gate = deferred(), controller = new AbortController(); h.body(gate.promise);
+    const work = h.Api.refreshStaleFavoriteShows({ signal: controller.signal }); await turn();
+    assert.equal(h.requests.length, before + 1);
+    if (transition === 'account') { h.switchTo('B'); h.switchTo('A'); }
+    if (transition === 'cancel') controller.abort();
+    if (transition === 'offline') h.auth.setState({ offline: true, autoOffline: false });
+    gate.resolve(); await work;
+    assert.equal(h.requests.length, before + 1);
+    const stale = await h.Db.listFavoriteChannels(h.profile);
+    assert.ok(stale.every((channel: any) => channel.refreshedAt === 1), 'cancelled work cannot commit new timestamps');
+  }
+});
+
+test('a dead favorite costs one attempt a day and does not block the other due favorites', async () => {
+  const h = harness();
+  for (const url of ['https://one.test/rss', 'https://two.test/rss']) {
+    const channel = await h.Api.subscribe(url); await h.Db.toggleFavorite(h.profile, channel.id, 'channel', channel.id);
+    await h.Db.saveChannel(h.profile, { ...channel, refreshedAt: 1 });
+  }
+  const before = h.requests.length; h.setXml('not an RSS feed');
+  await h.Api.refreshStaleFavoriteShows(); assert.equal(h.requests.length, before + 2);
+  await h.Api.refreshStaleFavoriteShows(); assert.equal(h.requests.length, before + 2);
+});

@@ -8,26 +8,31 @@ import { tg } from '@/i18n';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { usePlayCounts } from '@/store/playCounts';
 import { usePlayHistory } from '@/store/playHistory';
-import { type Album, type Artist, type ArtistInfo, type GuestAlbum, type Playlist, type SearchResult, type Song, type SongListSort, type StarType, type Starred } from '@/api/subsonic';
+import { type Album, type Artist, type ArtistInfo, type FolderContents, type GuestAlbum, type MusicFolder, type Playlist, type SearchResult, type Song, type SongListSort, type StarType, type Starred } from '@/api/subsonic';
 import { queryClient } from '@/lib/query';
 import { deleteItem, getItem, setItem, setItemStrict } from '@/lib/storage';
 import { activeServerDir, getDownloadShelf, getDownloadsCatalog } from '@/store/downloads';
 import * as Cat from './downloadsDb';
 import * as LocalCat from './localDb';
+import { createLocalRefreshScheduler } from './localRefreshScheduler';
 import {
-  clearLocalCatalog,
-  clearLocalCatalogDisk,
   ensureScanned,
+  folderNameFromUri,
   getLocalCatalog,
   hashKey,
+  localCheckedAt,
+  localPlaylistFiles,
   loadDeviceSongs,
   folderSetKey,
   loadFolderSongs,
   normKey,
+  refreshSource,
   registerCover,
+  writeTextToFolder,
   UNKNOWN_ALBUM,
   UNKNOWN_ARTIST,
 } from './localLibrary';
+import { baseOf, buildM3u, commonRoot, dirOf, folderTree, m3uMatcher, parseM3u, pathOfTree, pathOfUri, type FolderNode } from './localPaths';
 
 // Local favorites and playlists are PER PROFILE (each account/profile has its
 // own): stored under `<base>.<profile hash>`. The bare base key is the old
@@ -125,6 +130,8 @@ export async function unstarLocal(id: string, type?: StarType) {
 export function resetLocalLoading(): void {
   loadingPromise = null;
   scanning = null;
+  sourceEpoch++;
+  tree = null;
 }
 
 /** Clears the favorites cache (on source change). */
@@ -146,6 +153,21 @@ function sourceInfo() {
 }
 
 let loadingPromise: Promise<any> | null = null;
+let loadingSource = '';
+let sourceEpoch = 0;
+useAuthStore.subscribe?.((state, previous) => {
+  if (state.auth !== previous.auth || state.offline !== previous.offline || state.offlineSource !== previous.offlineSource) sourceEpoch++;
+});
+function sourceTicket() {
+  const state = useAuthStore.getState();
+  if (state.auth || !state.offline || !state.offlineSource) return null;
+  const epoch = sourceEpoch, source = state.offlineSource;
+  const { mode, uris, key } = sourceInfo();
+  return { mode, uris, key, id: `${epoch}:${mode}:${key ?? ''}`, current: () => {
+    const now = useAuthStore.getState();
+    return sourceEpoch === epoch && !now.auth && now.offline && now.offlineSource === source;
+  } };
+}
 
 /** Minimal shape shared by album/artist between the scan and the downloads. */
 interface CatAlbum {
@@ -179,28 +201,23 @@ interface MergedCatalog {
 
 /** Catalog for the chosen source (device/folder), loading it if needed. */
 async function ensureScanCatalog() {
-  const { mode, uris, key } = sourceInfo();
+  const ticket = sourceTicket();
+  if (!ticket) return undefined;
+  const { mode, uris, key } = ticket;
   const cached = getLocalCatalog(mode, key);
   if (cached) return cached;
-  if (!loadingPromise) {
-    loadingPromise = (async () => {
-      try {
-        if (mode === 'folder' && uris.length > 0) {
-          await loadFolderSongs(uris);
-        } else {
-          await loadDeviceSongs();
-        }
-      } finally {
-        loadingPromise = null;
-      }
-      // A catalog just appeared where there was none, so whatever the screens
-      // have cached predates the music existing: without this, Home stays empty
-      // until you refresh it by hand. Same as what downloads and libraries do
-      // when their catalog changes.
-      void queryClient.invalidateQueries();
+  if (!loadingPromise || loadingSource !== ticket.id) {
+    loadingSource = ticket.id;
+    const work = (async () => {
+      if (mode === 'folder' && uris.length > 0) await loadFolderSongs(uris, ticket.current);
+      else await loadDeviceSongs(ticket.current);
+      if (ticket.current()) void queryClient.invalidateQueries();
     })();
+    loadingPromise = work;
+    void work.finally(() => { if (loadingPromise === work) loadingPromise = null; }).catch(() => {});
   }
   await loadingPromise;
+  if (!ticket.current()) throw new Error('Local music source changed');
   return getLocalCatalog(mode, key);
 }
 
@@ -249,7 +266,7 @@ const ALL_ROWS = 1_000_000;
 
 /** A scan in progress, so that six screens asking at once on a cold start
  *  produce one of them and not six. */
-let scanning: Promise<{ src: LocalCat.Source; scanned: boolean }> | null = null;
+let scanning: { id: string; work: Promise<{ src: LocalCat.Source; scanned: boolean }> } | null = null;
 
 /**
  * The local profile's catalog, as a database to ask, scanning the source first
@@ -264,36 +281,107 @@ let scanning: Promise<{ src: LocalCat.Source; scanned: boolean }> | null = null;
  * memory is what is left for when it cannot.
  */
 async function localSrc(): Promise<LocalCat.Source | null> {
-  const state = useAuthStore.getState();
-  if (state.auth || !state.offlineSource) return null;
-  const { mode, uris } = sourceInfo();
-  if (mode === 'folder' && uris.length === 0) return null;
-  if (!scanning) {
-    scanning = ensureScanned(mode, uris).finally(() => {
-      scanning = null;
-    });
+  const ticket = sourceTicket();
+  if (!ticket || ticket.mode === 'folder' && !ticket.uris.length) return null;
+  if (!scanning || scanning.id !== ticket.id) {
+    const run = { id: ticket.id, work: ensureScanned(ticket.mode, ticket.uris, ticket.current) };
+    scanning = run;
+    void run.work.finally(() => { if (scanning === run) scanning = null; }).catch(() => {});
   }
-  const { src, scanned } = await scanning;
-  // A library just appeared where there was none, so whatever the screens have
-  // cached predates the music existing.
+  const { src, scanned } = await scanning.work;
+  if (!ticket.current()) throw new Error('Local music source changed');
   if (scanned) void queryClient.invalidateQueries();
   return src;
 }
 
-/**
- * Rescans the local source: discards the cached catalog (and the covers) and
- * rebuilds it by reading the files' tags again. Useful after adding or
- * changing music without restarting the app.
- */
+const refreshScheduler = createLocalRefreshScheduler(5 * 60_000);
+
+/** Manual rescan keeps the last complete database while reading changed files. */
 export async function rescan(): Promise<void> {
-  clearLocalCatalog();
-  await clearLocalCatalogDisk();
-  loadingPromise = null;
-  scanning = null;
-  // Through the database on the local profile, which is what reads it from now
-  // on: `ensureCatalog` would rebuild the whole library in memory to answer a
-  // question nobody asked.
-  if (!(await localSrc())) await ensureCatalog();
+  const ticket = sourceTicket();
+  if (!ticket) return;
+  await refreshScheduler.run(ticket.id, true, ticket.current, async () => {
+    // An initial catalog read may still be in flight. Do not duplicate it or
+    // delete its database; a failed filesystem walk must retain the old songs.
+    const src = await localSrc();
+    if (!src || !ticket.current()) return false;
+    const changed = await refreshSource(ticket.mode, ticket.uris, true, ticket.current);
+    if (!ticket.current()) return false;
+    tree = null;
+    const imported = await importPlaylistFiles(src, localPlaylistFiles(ticket.mode, ticket.uris), ticket.current);
+    if (ticket.current()) void queryClient.invalidateQueries();
+    return changed || imported;
+  });
+}
+
+/** Low frequency automatic check, restricted to the standalone local profile. */
+export function refreshLocal(force = false): Promise<boolean> {
+  const ticket = sourceTicket();
+  if (!ticket) return Promise.resolve(false);
+  return refreshScheduler.run(ticket.id, force, ticket.current, async () => {
+    const src = await localSrc();
+    if (!src || !ticket.current()) return false;
+    const changed = await refreshSource(ticket.mode, ticket.uris, false, ticket.current);
+    if (!ticket.current()) return false;
+    if (changed) tree = null;
+    const imported = await importPlaylistFiles(src, localPlaylistFiles(ticket.mode, ticket.uris), ticket.current);
+    if (ticket.current() && (changed || imported)) void queryClient.invalidateQueries();
+    return ticket.current() && (changed || imported);
+  });
+}
+
+/** Counts the standalone catalog, never a server's downloaded music. */
+export async function localInfo(): Promise<{ songs: number; checkedAt: number } | null> {
+  const ticket = sourceTicket();
+  if (!ticket) return null;
+  const src = await localSrc();
+  if (!src || !ticket.current()) return null;
+  const songs = await LocalCat.songCount(src), checkedAt = await localCheckedAt(ticket.mode, ticket.uris);
+  return ticket.current() ? { songs, checkedAt } : null;
+}
+
+// ── Folders ─────────────────────────────────────────────────────────────────
+
+/** The folders with music in them, worked out once per catalog: ids and paths
+ *  only, never the songs. */
+let tree: { name: string; map: Map<string, FolderNode> } | null = null;
+
+async function localTree(src: LocalCat.Source, current: () => boolean): Promise<Map<string, FolderNode>> {
+  if (!current()) throw new Error('Local music source changed');
+  if (tree?.name === src.name) return tree.map;
+  const map = folderTree(await LocalCat.songUris(src));
+  if (!current()) throw new Error('Local music source changed');
+  tree = { name: src.name, map };
+  return map;
+}
+
+export async function getMusicFolders(): Promise<MusicFolder[]> {
+  const ticket = sourceTicket();
+  if (!ticket) return [];
+  const src = await localSrc();
+  if (!src || !ticket.current()) return [];
+  if (ticket.mode === 'folder') {
+    return ticket.uris.map((uri) => ({ id: pathOfTree(uri), name: folderNameFromUri(uri) }));
+  }
+  const root = commonRoot(await localTree(src, ticket.current));
+  return ticket.current() ? [{ id: root, name: baseOf(root) || root }] : [];
+}
+
+export async function getMusicDirectory(id: string): Promise<FolderContents> {
+  const ticket = sourceTicket();
+  const empty = { id, name: baseOf(id), dirs: [], songs: [] };
+  if (!ticket) return empty;
+  const src = await localSrc();
+  if (!src || !ticket.current()) return empty;
+  const map = await localTree(src, ticket.current), node = map.get(id);
+  if (!node) return empty;
+  const found = await LocalCat.songsByIds(src, node.songs);
+  if (!ticket.current()) return empty;
+  const songs = node.songs.map((songId) => found.get(songId)).filter((song): song is Song => !!song)
+    .sort((a, b) => (a.discNumber ?? 1) - (b.discNumber ?? 1) || (a.track ?? Infinity) - (b.track ?? Infinity) || a.title.localeCompare(b.title));
+  const dirs = [...node.dirs].map((path) => ({ id: path, name: baseOf(path), coverArt: map.get(path)?.albumId }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  return { id, name: baseOf(id), dirs, songs };
 }
 
 // An album and an artist with nothing to go by are grouped under a name that
@@ -927,11 +1015,22 @@ async function loadPlaylists(): Promise<LocalPlaylistRec[]> {
   return list;
 }
 
-async function savePlaylists(list: LocalPlaylistRec[]) {
-  const key = playlistsKey();
-  playlistCache = list;
-  playlistCacheKey = key;
-  await setItem(key, JSON.stringify(list));
+const playlistWrites = new Map<string, Promise<unknown>>();
+function withPlaylistWrite<T>(work: (key: string, current: () => boolean) => Promise<T>, guard = () => true): Promise<T> {
+  const key = playlistsKey(), epoch = sourceEpoch;
+  const current = () => epoch === sourceEpoch && playlistsKey() === key && guard();
+  const run = (playlistWrites.get(key) ?? Promise.resolve()).catch(() => {}).then(() => {
+    if (!current()) throw new Error('Playlist profile changed');
+    return work(key, current);
+  });
+  playlistWrites.set(key, run);
+  void run.finally(() => { if (playlistWrites.get(key) === run) playlistWrites.delete(key); }).catch(() => {});
+  return run;
+}
+async function savePlaylists(list: LocalPlaylistRec[], key: string, current: () => boolean) {
+  if (!current()) throw new Error('Playlist profile changed');
+  await setItemStrict(key, JSON.stringify(list));
+  if (current()) { playlistCache = list; playlistCacheKey = key; }
 }
 
 /** Clears the playlists cache (on source/profile change). */
@@ -997,18 +1096,22 @@ export async function playlistTracklists(): Promise<Map<string, string[]>> {
 
 /** Edits raw IDs so missing local files cannot shift a removal to another song. */
 export async function editPlaylistTracklist(id: string, edit: (ids: string[]) => string[], current: () => boolean): Promise<string[]> {
-  const key = playlistsKey();
+  return withPlaylistWrite(async (storageKey, owned) => {
+  const key = storageKey;
   const list = await loadPlaylists();
-  if (!current() || playlistsKey() !== key) throw new Error('Playlist profile changed');
+  if (!owned() || !current() || playlistsKey() !== key) throw new Error('Playlist profile changed');
   const found = list.find((playlist) => playlist.id === id);
   if (!found) throw new Error('Playlist changed. Reopen it and try again.');
   const ids = edit([...found.songIds]);
   const next = list.map((playlist) => playlist.id === id ? { ...playlist, songIds: ids } : playlist);
   // Capture the storage key before the write. A profile switch during native
   // persistence cannot write these IDs into the replacement account.
+  if (!owned()) throw new Error('Playlist profile changed');
   await setItemStrict(key, JSON.stringify(next));
-  if (current() && playlistsKey() === key) { playlistCache = next; playlistCacheKey = key; }
+  if (owned() && current() && playlistsKey() === key) { playlistCache = next; playlistCacheKey = key; }
   return ids;
+
+  }, current);
 }
 
 /** The local playlists (in creation order, newest first). */
@@ -1032,40 +1135,141 @@ export async function getPlaylist(id: string): Promise<{ playlist: Playlist; son
 }
 
 export async function createPlaylist(name: string): Promise<string> {
-  const key = playlistsKey();
+  return withPlaylistWrite(async (storageKey, owned) => {
+  const key = storageKey;
   const list = await loadPlaylists();
   if (playlistsKey() !== key) throw new Error('Playlist profile changed');
   const id = newPlaylistId();
   const next = [{ id, name, songIds: [], createdAt: Date.now() }, ...list];
-  await setItem(key, JSON.stringify(next));
+  if (!owned()) throw new Error('Playlist profile changed');
+  await setItemStrict(key, JSON.stringify(next));
   if (playlistsKey() === key) { playlistCache = next; playlistCacheKey = key; }
   return id;
+
+  });
 }
 
 export async function addToPlaylist(playlistId: string, songId: string): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
   await savePlaylists(
     list.map((p) => (p.id === playlistId ? { ...p, songIds: [...p.songIds, songId] } : p)),
-  );
+   storageKey, owned);
+
+  });
 }
 
 export async function removeFromPlaylist(id: string, index: number): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
   await savePlaylists(
     list.map((p) => (p.id === id ? { ...p, songIds: p.songIds.filter((_, i) => i !== index) } : p)),
-  );
+   storageKey, owned);
+
+  });
 }
 
 /** Rewrites a local playlist's order with the new sequence of ids. */
 export async function reorderPlaylist(id: string, songIds: string[]): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
-  await savePlaylists(list.map((p) => (p.id === id ? { ...p, songIds } : p)));
+  await savePlaylists(list.map((p) => (p.id === id ? { ...p, songIds } : p)), storageKey, owned);
+
+  });
 }
 
 export async function deletePlaylist(id: string): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
-  deleteCoverFile(list.find((p) => p.id === id)?.coverUri);
-  await savePlaylists(list.filter((p) => p.id !== id));
+  const oldCover = list.find((p) => p.id === id)?.coverUri;
+  await savePlaylists(list.filter((p) => p.id !== id), storageKey, owned);
+  deleteCoverFile(oldCover);
+
+  });
+}
+
+// ── Playlist files (#335) ───────────────────────────────────────────────────
+// An `.m3u` in the music folders becomes a playlist. It is read again only
+// when the file itself changes, so editing or deleting the playlist in the app
+// is not undone by the next look at the folder.
+const M3U_KEY = 'resonus.localM3u';
+
+async function importPlaylistFiles(src: LocalCat.Source, files: string[], current = () => true): Promise<boolean> {
+  return withPlaylistWrite(async (storageKey, owned) => {
+  if (files.length === 0) return false;
+  const key = `${M3U_KEY}.${hashKey(profileScopeId())}`;
+  const playlistKey = storageKey;
+  let seen: Record<string, string> = {};
+  try {
+    seen = JSON.parse((await getItem(key)) ?? '{}') as Record<string, string>;
+  } catch {
+    // Starts over: the worst case is importing them once more.
+  }
+  let match: ReturnType<typeof m3uMatcher> | null = null;
+  let imported = false;
+  let dirty = false;
+  for (const uri of files) {
+    if (!owned() || playlistsKey() !== playlistKey) return false;
+    let text: string;
+    try {
+      text = await FileSystem.readAsStringAsync(uri);
+    } catch {
+      continue;
+    }
+    if (!owned() || playlistsKey() !== playlistKey) return false;
+    const stamp = hashKey(text);
+    if (seen[uri] === stamp) continue;
+    match = match ?? m3uMatcher(await LocalCat.songUris(src));
+    const path = pathOfUri(uri);
+    const ids = parseM3u(text)
+      .map((entry) => match!(entry, dirOf(path)))
+      .filter((id): id is string => !!id);
+    if (ids.length === 0) continue;
+    if (!owned() || playlistsKey() !== playlistKey) return false;
+    const list = await loadPlaylists();
+    if (!owned() || playlistsKey() !== playlistKey) return false;
+    const id = `lp_m3u_${hashKey(uri)}`;
+    const rec: LocalPlaylistRec = { id, name: baseOf(path).replace(/\.m3u8?$/i, ''), songIds: ids, createdAt: Date.now() };
+    const next = list.some((p) => p.id === id) ? list.map((p) => p.id === id ? { ...p, songIds: ids } : p) : [rec, ...list];
+    await setItemStrict(playlistKey, JSON.stringify(next));
+    if (!owned() || playlistsKey() !== playlistKey) return false;
+    playlistCache = next; playlistCacheKey = playlistKey;
+    seen[uri] = stamp; dirty = true;
+    imported = true;
+  }
+  if (dirty && owned() && playlistsKey() === playlistKey) await setItemStrict(key, JSON.stringify(seen));
+  return imported;
+
+  }, current);
+}
+
+/**
+ * Writes a local playlist into a folder as an `.m3u8`. The file is noted as
+ * read: saved among the music, it would otherwise come back as a second copy
+ * of the playlist it was made from.
+ */
+export async function exportPlaylistFile(id: string, folderUri: string): Promise<void> {
+  return withPlaylistWrite(async (_storageKey, owned) => {
+  const ticket = sourceTicket();
+  if (!ticket) throw new Error('Only local playlists can be exported as paths');
+  const { playlist, songs } = await getPlaylist(id);
+  if (!owned() || !ticket.current()) throw new Error('Local music source changed');
+  const key = `${M3U_KEY}.${hashKey(profileScopeId())}`;
+  const text = buildM3u(songs);
+  const name = `${playlist.name.replace(/[\\/:*?"<>|]/g, '_')}.m3u8`;
+  const file = await writeTextToFolder(folderUri, name, 'audio/x-mpegurl', text);
+  if (!owned() || !ticket.current()) return;
+  let seen: Record<string, string> = {};
+  try {
+    seen = JSON.parse((await getItem(key)) ?? '{}') as Record<string, string>;
+  } catch {
+    // Starts over.
+  }
+  if (!owned() || !ticket.current()) return;
+  seen[file] = hashKey(text);
+  await setItemStrict(key, JSON.stringify(seen));
+
+  });
 }
 
 // ── Custom cover for local playlists ────────────────────────────────────────
@@ -1078,6 +1282,7 @@ function deleteCoverFile(uri?: string) {
 }
 
 export async function setLocalPlaylistCover(id: string, srcUri: string): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   await FileSystem.makeDirectoryAsync(PLAYLIST_COVERS_DIR, { intermediates: true }).catch(() => {});
   // A new name on every change: reusing the same URI would leave expo-image
   // showing the previous image it has cached.
@@ -1085,14 +1290,21 @@ export async function setLocalPlaylistCover(id: string, srcUri: string): Promise
   const dest = `${PLAYLIST_COVERS_DIR}${safe}-${Date.now()}.jpg`;
   await FileSystem.copyAsync({ from: srcUri, to: dest });
   const list = await loadPlaylists();
-  deleteCoverFile(list.find((p) => p.id === id)?.coverUri);
-  await savePlaylists(list.map((p) => (p.id === id ? { ...p, coverUri: dest } : p)));
+  const oldCover = list.find((p) => p.id === id)?.coverUri;
+  await savePlaylists(list.map((p) => (p.id === id ? { ...p, coverUri: dest } : p)), storageKey, owned);
+  deleteCoverFile(oldCover);
+
+  });
 }
 
 export async function removeLocalPlaylistCover(id: string): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
-  deleteCoverFile(list.find((p) => p.id === id)?.coverUri);
-  await savePlaylists(list.map((p) => (p.id === id ? { ...p, coverUri: undefined } : p)));
+  const oldCover = list.find((p) => p.id === id)?.coverUri;
+  await savePlaylists(list.map((p) => (p.id === id ? { ...p, coverUri: undefined } : p)), storageKey, owned);
+  deleteCoverFile(oldCover);
+
+  });
 }
 
 /** Creates or updates a local playlist (used by playlist downloads). */
@@ -1102,25 +1314,33 @@ export async function upsertLocalPlaylist(
   songIds: string[],
   comment?: string,
 ): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
   if (list.some((p) => p.id === id)) {
-    await savePlaylists(list.map((p) => (p.id === id ? { ...p, name, comment, songIds } : p)));
+    await savePlaylists(list.map((p) => (p.id === id ? { ...p, name, comment, songIds } : p)), storageKey, owned);
   } else {
-    await savePlaylists([{ id, name, comment, songIds, createdAt: Date.now() }, ...list]);
+    await savePlaylists([{ id, name, comment, songIds, createdAt: Date.now() }, ...list], storageKey, owned);
   }
+
+  });
 }
 
 /** Deletes the local playlists with that id prefix (downloads cleanup). */
 export async function deleteLocalPlaylistsByPrefix(prefix: string): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
-  for (const p of list) if (p.id.startsWith(prefix)) deleteCoverFile(p.coverUri);
-  await savePlaylists(list.filter((p) => !p.id.startsWith(prefix)));
+  const removed = list.filter((p) => p.id.startsWith(prefix));
+  await savePlaylists(list.filter((p) => !p.id.startsWith(prefix)), storageKey, owned);
+  for (const playlist of removed) deleteCoverFile(playlist.coverUri);
+
+  });
 }
 
 export async function updatePlaylist(
   id: string,
   changes: { name?: string; comment?: string; public?: boolean },
 ): Promise<void> {
+  return withPlaylistWrite(async (storageKey, owned) => {
   const list = await loadPlaylists();
   await savePlaylists(
     list.map((p) =>
@@ -1132,7 +1352,9 @@ export async function updatePlaylist(
           }
         : p,
     ),
-  );
+   storageKey, owned);
+
+  });
 }
 
 /**

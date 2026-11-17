@@ -2151,5 +2151,10 @@
   "{n} plays": "{n} plays",
   "Hours": "Hours",
   "Minutes": "Minutes",
-  "Seconds": "Seconds"
+  "Seconds": "Seconds",
+  "{n} episodes deleted": "{n} episodes deleted",
+  "Playlist exported": "Playlist exported",
+  "Export as M3U": "Export as M3U",
+  "Last checked": "Last checked",
+  "Not checked yet": "Not checked yet"
 }

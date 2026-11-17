@@ -1,3 +1,5 @@
+import { createLocalRefreshScheduler } from '../src/lib/localRefreshScheduler';
+import * as localPaths from '../src/lib/localPaths';
 import { completeDownloadedPlaylists } from '../src/lib/downloadedPlaylists';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,6 +19,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function load(path: string, dependencies: Record<string, unknown>) {
+  dependencies = { './localRefreshScheduler': { createLocalRefreshScheduler }, './localPaths': localPaths, ...dependencies };
   const output = ts.transpileModule(readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;

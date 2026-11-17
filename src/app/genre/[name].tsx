@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * A genre: its albums (grid or list) and its songs, with infinite scroll.
  *
@@ -159,7 +160,6 @@ export default function GenreScreen() {
   const download = useDownloads(useShallow((s) => groupDownloadState(s, `genre:${genre}`, [])));
   const downloadGenre = useDownloads((s) => s.downloadGenre);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const [confirmDownload, setConfirmDownload] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
   /** While reading the genre's songs off the server, before downloading any. */
@@ -265,8 +265,7 @@ export default function GenreScreen() {
       toast(t('Nothing here is downloaded'));
       return;
     }
-    await deleteSongs(ids);
-    toast(t('{n} songs deleted', { n: ids.length }));
+    await removeSongDownloads(ids);
   }
 
   /** Play and shuffle draw from the SAME pool (the genre's songs), one in the

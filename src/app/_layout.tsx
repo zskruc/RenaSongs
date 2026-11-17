@@ -56,6 +56,8 @@ import { playerModalAnimation } from '@/lib/amllPlayerTransition';
 import { buildPrimuseAlbumPalette } from '@/lib/primuseAlbumPalette';
 import { profileScopeId, useAuthStore } from '@/store/auth';
 import { usePodcastStorageMaintenance } from '@/hooks/usePodcastStorageMaintenance';
+import { usePodcastAutoRefresh } from '@/hooks/usePodcastAutoRefresh';
+import { useLocalAutoRefresh } from '@/hooks/useLocalAutoRefresh';
 import { useAutoDownloads } from '@/store/autoDownloads';
 import { checkAutoUrlNow, initAutoUrl } from '@/store/autoUrl';
 import { anyDownloads, useDownloads } from '@/store/downloads';
@@ -345,8 +347,11 @@ export default function RootLayout() {
     }).catch(() => {});
     return () => { active = false; };
   }, [queueRestore]);
-  usePodcastStorageMaintenance(!hydrating && ready && downloadsHydrated && podcastDownloadsHydrated
-    && queueReadyRequest === queueRestore);
+  const maintenanceReady = !hydrating && ready && downloadsHydrated && podcastDownloadsHydrated
+    && queueReadyRequest === queueRestore;
+  usePodcastStorageMaintenance(maintenanceReady);
+  usePodcastAutoRefresh(maintenanceReady);
+  useLocalAutoRefresh(maintenanceReady);
 
   // Keep screen awake (setting). The native flag only acts with the app in
   // the foreground, so it doesn't waste extra battery in the background.

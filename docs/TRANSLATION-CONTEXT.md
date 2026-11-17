@@ -5,7 +5,7 @@
      `src/i18n/context.jsonc`, and where a string shows up is read off the
      code, so both are fixed at the source and this page follows. -->
 
-Every string the app can show, under the screen it shows up on. 2153 of them.
+Every string the app can show, under the screen it shows up on. 2158 of them.
 The second column is only filled in where the English is ambiguous on its own
 If one tripped you up and the column is empty, that is worth telling us, and
 the answer goes into `src/i18n/context.jsonc` where the next translator of the
@@ -87,12 +87,12 @@ you are actually typing into, which is easier than reading it here.
 | `Devices` | The audio output devices to cast to |
 | `Disc {n}` | Heading over the songs of one disc of a multi-disc album. `{n}` is its number |
 | `Don't remind me` | Its other button: never show this again |
-| `Download removed` | Toast: the file was deleted, the song stays in the library |
 | `Downloading {app} {version}` |  |
 | `Duration` | Label of a field in the song information sheet: how long the song is |
 | `Edit and export lyrics` |  |
 | `Explicit` | A value of `Content`: the recording carries a parental advisory (strong language). Also read out for the E badge next to a title |
 | `Export “{name}”?` | Confirms getting the files of an album or playlist out of the app |
+| `Export as M3U` |  |
 | `Find metadata for this song` |  |
 | `Fixes` | Heading in the update prompt over the bugs a release fixes |
 | `Format` | The file format (FLAC, MP3…), written as the player writes it |
@@ -101,6 +101,7 @@ you are actually typing into, which is easier than reading it here.
 | `Go to artist` | Leave this sheet and open the artist |
 | `hours` |  |
 | `Last 30 days` |  |
+| `Library updated` | Toast after the phone finished going through its own files |
 | `Linked shuffle groups` |  |
 | `Listening time` |  |
 | `Local song metadata` |  |
@@ -122,6 +123,7 @@ you are actually typing into, which is easier than reading it here.
 | `Pin to top` | Keep this at the top of its list, above everything else. `Unpin` undoes it |
 | `Play count` |  |
 | `Playback stopped` | The mini player when there is nothing playing any more |
+| `Playlist exported` |  |
 | `Plays` | How many times the song has been played |
 | `Rate` | Verb: give it stars. Used for a song and for an artist. Not "bitrate" |
 | `Rating` | The stars given to the song. Not a bitrate, not a review |
@@ -1867,10 +1869,12 @@ you are actually typing into, which is easier than reading it here.
 | `Folder` | In offline mode, where the phone's own music is read from: one folder you picked, as opposed to `Device`, the whole phone |
 | `Keep at least one folder` | Refusing to remove the last folder of a local profile, which would leave it with no music |
 | `Keep at least one library on` | Toast: at least one of the server's libraries has to stay ticked |
+| `Last checked` |  |
 | `Libraries` | Section header over the server's libraries, when it has more than one |
 | `Library updated` | Toast after the phone finished going through its own files |
 | `Local music` | Music stored on the phone itself |
 | `Music folders` | Settings > Local music: the list of phone folders the local profile reads its music from |
+| `Not checked yet` |  |
 | `Only the music in the folder you choose.` | The line under `Choose a folder (recommended)` |
 | `Rescan` | Trigger the server's library scan again |
 | `Rescanning your music…` | The phone is going through its own files again, offline |
@@ -2895,6 +2899,7 @@ you are actually typing into, which is easier than reading it here.
 | --- | --- |
 | `“{name}” will no longer be available offline.` | The line under that title. `{name}` is the album, artist or playlist |
 | `{n} columns` | The other options in that menu: cards, this many across. `{n}` is 2, 3 or 4, so it is always plural |
+| `{n} episodes deleted` |  |
 | `{n} minutes` | A value of the sleep timer, in minutes from now |
 | `{n} of {m} songs exported` | Toast when only some of them made it |
 | `{n} of {songs}` |  |
@@ -2985,6 +2990,7 @@ you are actually typing into, which is easier than reading it here.
 | `Download episode` |  |
 | `Download new episodes` |  |
 | `Download queues, offline files and cache` |  |
+| `Download removed` | Toast: the file was deleted, the song stays in the library |
 | `Download stopped` | Toast: the download was stopped part way |
 | `Downloaded audio will be removed. Your shows, favorites and listening progress are kept.` |  |
 | `Downloading…` | Toast: the download has started. The songs arrive one by one after this |

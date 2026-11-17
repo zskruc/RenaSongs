@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Playlist detail with its songs. */
 import { GlassPressable } from '@/components/glass';
 import Icon from '@/components/Icon';
@@ -492,7 +493,6 @@ export default function PlaylistScreen() {
     }
   }, [autoDownload, data]);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const downloadSongs = useDownloads((s) => s.downloadSongs);
   // Stable between progress ticks (only changes with status): prevents the
   // Pressable from losing its touch when its onPress is recreated on every update.
@@ -1094,8 +1094,7 @@ export default function PlaylistScreen() {
           setConfirmDeleteDl(false);
           const files = useDownloads.getState().files;
           const ids = songIds.filter((sid) => !!files[sid]);
-          void deleteSongs(ids);
-          toast(t('{n} songs deleted', { n: ids.length }));
+          void removeSongDownloads(ids);
         }}
       />
 
@@ -1139,7 +1138,7 @@ export default function PlaylistScreen() {
         onCancel={() => setConfirmRemoveDl(false)}
         onConfirm={() => {
           setConfirmRemoveDl(false);
-          void deleteSongs(songIds);
+          void removeSongDownloads(songIds);
         }}
       />
 

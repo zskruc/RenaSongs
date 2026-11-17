@@ -13,6 +13,26 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.1] - 2026-11-17
+
+### Added
+
+- 收藏播客在启动／回到前台时低频检查新集，按账号去重，保留已有流式首屏、订阅、播放进度与下载管理。
+- 本机音乐增加目录封面与艺人图、文件夹浏览、目录内 M3U／M3U8 歌单发现、增量扫描和扫描信息；不修改 Navidrome 的离线下载目录。
+- Jukebox 把一段后续队列交给服务器自行续播，减少锁屏后对手机 JavaScript 计时器的依赖。
+
+### Fixed
+
+- 返回之前的播放队列或加载失败回滚时，一并恢复电台／混播与随机状态。
+- 离线流派查询返回有效空结果，避免无连接时仍请求服务器。
+- 删除下载在操作结束后反馈结果，区分没有可删除的下载与已处理的内容。
+
+### English
+
+- Selectively adapt upstream player snapshots, daily favorite-podcast refresh, offline genre guards and download-removal feedback.
+- Add the standalone local-music refresh/folder-artwork/M3U bundle and bounded server-driven Jukebox continuation, preserving the current Glass layouts and saved tuning.
+- Local preview only; physical Samsung and Jukebox-receiver verification are pending. See `docs/UPSTREAM-ADAPTATION-20261117.md` for scope and validation.
+
 ## [0.8.7.1-preview.6] - 2026-11-09
 
 ### Added

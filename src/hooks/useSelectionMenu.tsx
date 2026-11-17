@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * What the ⋯ of a selection offers on every screen, built once here (#164).
  *
@@ -31,6 +32,7 @@ import { pickFolder } from '@/lib/localLibrary';
 import { captureCustomizationOwner } from '@/lib/localCustomizations';
 import { clearSelectedMetadataSongs, createSelectedMetadataSongs } from '@/store/metadataBulkSelection';
 import { anyDownloads, useDownloads } from '@/store/downloads';
+import { useAuthStore } from '@/store/auth';
 import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 import { useFavoriteIds } from './useFavoriteIds';
@@ -59,7 +61,8 @@ export function useSelectionMenu(
   const favIds = useFavoriteIds();
   // Only whether there are any, not the map itself: subscribing to `files`
   // would repaint the whole list every time a download lands.
-  const hasDownloads = useDownloads(anyDownloads);
+  const local = useAuthStore((state) => state.offline && !state.auth);
+  const hasDownloads = useDownloads(anyDownloads) && !local;
   const [pendingExport, setPendingExport] = useState<{ songs: Song[]; bytes: number } | null>(null);
 
   async function applyFavorite(songs: Song[], add: boolean) {
@@ -155,8 +158,7 @@ export function useSelectionMenu(
                 toast(t('Nothing here is downloaded'));
                 return;
               }
-              void useDownloads.getState().deleteSongs(ids);
-              toast(t('{n} songs deleted', { n: ids.length }));
+              void removeSongDownloads(ids);
             }),
         },
       ]

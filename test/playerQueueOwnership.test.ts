@@ -10,7 +10,7 @@ import ts from 'typescript';
 const source = readFileSync(new URL('../src/store/player.ts', import.meta.url), 'utf8');
 const ast = ts.createSourceFile('player.ts', source, ts.ScriptTarget.Latest, true);
 const names = new Set(['queueRequestOwner', 'ownsQueueRequest', 'safeKey', 'queueStorageKey', 'savedSpeed',
-  'serverQueueIsSomeoneElses', 'markWeOwnServerQueue', 'markPlayedHere', 'clearPlayedHere', 'syncQueueNow', 'adoptNewerServerQueue']);
+  'jukeboxUpcoming', 'syncJukeboxUpcoming', 'serverQueueIsSomeoneElses', 'markWeOwnServerQueue', 'markPlayedHere', 'clearPlayedHere', 'syncQueueNow', 'adoptNewerServerQueue']);
 const variables = new Set(['loadToken', 'resumeSeekGeneration', 'speedIntentGeneration', 'lastOwnerCheck', 'OWNER_CHECK_TTL', 'playedHere', 'localSavedAt', 'lastAdoptCheck']);
 const declarations = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && names.has(node.name?.text ?? '')
   || ts.isVariableStatement(node) && node.declarationList.declarations.some((decl) => variables.has(decl.name.getText(ast))))

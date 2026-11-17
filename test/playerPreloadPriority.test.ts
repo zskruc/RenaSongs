@@ -1,3 +1,4 @@
+import { captureSnapshot, restoreSnapshot } from '../src/lib/playerSnapshot';
 import { cueDeletionBlocked } from '../src/lib/cueDeletionLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -49,7 +50,7 @@ function harness(enabled = true) {
   const noop = () => {};
   const set = (next: Record<string, unknown>) => { Object.assign(state, next); exported.warmUpcoming(); };
   runInNewContext(executable, {
-    cueDeletionBlocked, exports: exported, streamWarming: warmer, bootQuiet: false, PRELOAD_AHEAD: 5, listeningIntent: 0,
+    captureSnapshot, restoreSnapshot, cueDeletionBlocked, exports: exported, streamWarming: warmer, bootQuiet: false, PRELOAD_AHEAD: 5, listeningIntent: 0,
     rememberListeningState: noop, currentListeningSource: () => undefined, sessionSpace: () => 'music', isAudiobookTrack: () => false, currentSong: (value: any) => value.queue[value.index] ?? null,
     remoteKind: () => null, awaitingSpeculativeSource: null,
     useAuthStore: { getState: () => authState }, useSettings: { getState: () => settings },

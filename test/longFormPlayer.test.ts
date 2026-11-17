@@ -1,3 +1,4 @@
+import { captureSnapshot, restoreSnapshot } from '../src/lib/playerSnapshot';
 import { cueDeletionBlocked } from '../src/lib/cueDeletionLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -42,7 +43,7 @@ function harness() {
   const auth = {}, noop = () => {};
   const native = { play: noop, volume: 1, audioSessionId: 1 };
   const settings = { saveAudiobookProgress: true }, podcastPreferences = { ...DEFAULT_PODCAST_PLAYBACK };
-  const context: Record<string, any> = { cueDeletionBlocked, prepareLoudnessSnapshot: async () => {}, maybeAnalyzeMissingLoudness: noop, exports: {}, AudiobookProgressTracker,
+  const context: Record<string, any> = { captureSnapshot, restoreSnapshot, cueDeletionBlocked, prepareLoudnessSnapshot: async () => {}, maybeAnalyzeMissingLoudness: noop, exports: {}, AudiobookProgressTracker,
     profileScopeId: () => scope, audiobookProfileScope: () => `book:${scope}`,
     usePlayerStore: store, useSettings: { getState: () => settings, subscribe: noop },
     useAuthStore: { getState: () => ({ auth, offline: false }), subscribe: noop },

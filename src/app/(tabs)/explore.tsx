@@ -125,7 +125,7 @@ export default function ExploreScreen() {
       case 'radio':
         return subsonic && !offline;
       case 'folders':
-        return subsonic && !offline && showFolderBrowser;
+        return !auth && offline ? true : subsonic && !offline && showFolderBrowser;
       case 'playlists':
         // Jellyfin answers for them too, and offline the mirror does; it is
         // the one server-side section the local profile has nothing for.

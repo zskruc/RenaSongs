@@ -60,3 +60,10 @@ export function formatBytes(n: number): string {
   if (n >= 1024 ** 2) return `${Math.round(n / 1024 ** 2)} MB`;
   return `${Math.round(n / 1024)} KB`;
 }
+
+/** A timestamp in the selected UI language. */
+export function formatDateTime(ms: number, lang: string): string {
+  const date = new Date(ms);
+  try { return date.toLocaleString(lang, { dateStyle: 'medium', timeStyle: 'short' }); }
+  catch { return date.toLocaleString(); }
+}

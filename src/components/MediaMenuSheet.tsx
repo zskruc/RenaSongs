@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * Bottom sheet with quick actions for an album or playlist (opened via
  * long-press on its cards/rows): play, shuffle, queue, download, and
@@ -10,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { COVER, coverArtUrl, getAlbum, getPlaylist, star, unstar, type Song } from '@/api/data';
+import { COVER, coverArtUrl, getAlbum, getPlaylist, exportPlaylistFile, star, unstar, type Song } from '@/api/data';
 import { useAlbumDownloads } from '@/hooks/useAlbumDownloads';
 import { useBottomSheetAnim } from '@/hooks/useBottomSheetAnim';
 import { useCanShare } from '@/hooks/useCanShare';
@@ -121,6 +122,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
   const lang = useSettings((s) => s.language);
   const toast = useToast((s) => s.show);
   const offline = useAuthStore((s) => s.offline);
+  const local = useAuthStore((s) => s.offline && !s.auth);
   const { dismiss: animateDismiss, dismissing, backdropStyle, sheetStyle, onSheetLayout } = useBottomSheetAnim(
     true,
     closeAfterGesture,
@@ -148,7 +150,6 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
   const downloadMsg = useDownloadMessage(pending?.songs ?? []);
   const downloadAlbum = useDownloads((s) => s.downloadAlbum);
   const downloadPlaylist = useDownloads((s) => s.downloadPlaylist);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const files = useDownloads((s) => s.files);
   const canShare = useCanShare();
   // Before the early return: hooks can't be conditional. For an album this is
@@ -159,7 +160,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
     item?.kind === 'album' ? item.album.id : undefined,
   );
   const hasDownloads =
-    item?.kind === 'album' ? albumHasDownloads : anyDownloads({ files });
+    !local && (item?.kind === 'album' ? albumHasDownloads : anyDownloads({ files }));
 
   const close = () => {
     if (!isOpenSession()) return;
@@ -257,8 +258,25 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
     );
   }
 
+  /** Exports paths from the local playlist, without copying audio or using the
+   * server-download export action. A later menu/account retires this request. */
+  async function exportM3u() {
+    if (!playlist || !local || !isOpenSession() || !metadataOwner()) return;
+    const playlistId = playlist.id, ticket = beginRequest();
+    actionClosing.current = true;
+    closeNow();
+    try {
+      const folder = await pickFolder();
+      if (!folder || !requests.owns(ticket) || !metadataOwner()) return;
+      await exportPlaylistFile(playlistId, folder);
+      if (requests.owns(ticket) && metadataOwner()) toast(t('Playlist exported'));
+    } catch {
+      if (requests.owns(ticket)) toast(t("Couldn't complete the action"));
+    }
+  }
+
   /** Closes, fetches the songs, and runs the action (with toast on failure). */
-  async function withSongs(fn: (songs: Song[]) => void) {
+  async function withSongs(fn: (songs: Song[]) => void, allowEmpty = false) {
     if (!isOpenSession()) return;
     const ticket = beginRequest();
     actionClosing.current = true;
@@ -274,7 +292,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
         return;
       }
       try {
-        if (songs.length > 0) fn(songs);
+        if (songs.length > 0 || allowEmpty) fn(songs);
       } catch {
         toast(t("Couldn't complete the action"));
       }
@@ -406,6 +424,9 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                 which is what the press does. */}
             {hasDownloads ? (
               <Action icon="save-outline" label={t('Export')} onPress={() => void askExport()} />
+            ) : null}
+            {playlist && local ? (
+              <Action icon="document-text-outline" label={t('Export as M3U')} onPress={() => void exportM3u()} />
             ) : null}
             {/* Moved here from the header row, which had grown to four icons for
                 something used now and then. Covers the long press on a card too,
@@ -569,14 +590,8 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
         onConfirm={() => {
           if (confirmDelete === null || !ownsConfirmation(confirmDelete)) return;
           void withSongs((songs) => {
-            const ids = songs.filter((s) => files[s.id]).map((s) => s.id);
-            if (ids.length === 0) {
-              toast(t('Nothing here is downloaded'));
-              return;
-            }
-            void deleteSongs(ids);
-            toast(t('{n} songs deleted', { n: ids.length }));
-          });
+            void removeSongDownloads(songs.map((song) => song.id));
+          }, true);
         }}
       />
     </Modal>

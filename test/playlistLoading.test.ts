@@ -1,3 +1,5 @@
+import { createLocalRefreshScheduler } from '../src/lib/localRefreshScheduler';
+import * as localPaths from '../src/lib/localPaths';
 import { completeDownloadedPlaylists } from '../src/lib/downloadedPlaylists';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,6 +19,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function load(path: string, dependencies: Record<string, unknown>) {
+  dependencies = { './localRefreshScheduler': { createLocalRefreshScheduler }, './localPaths': localPaths, ...dependencies };
   const output = ts.transpileModule(readFileSync(new URL(`../src/${path}`, import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -197,12 +200,13 @@ test('hide-unavailable still applies after reusing the complete offline mirror',
 test('the actual local playlist query asks only for this list, retaining duplicates and skipping removed source songs', async () => {
   const requested: string[][] = [];
   let scans = 0;
+  const localState = { auth: null, offline: true, offlineSource: { mode: 'device' } };
   const lists = [{ id: 'all', name: 'AllMusic', songIds: ['b', 'a', 'b', 'removed'], createdAt: 1 },
     { id: 'other', name: 'Other', songIds: Array.from({ length: 20_000 }, (_, i) => `other-${i}`), createdAt: 2 },
     { id: 'empty', name: 'Empty', songIds: [], createdAt: 3 }];
   const dependencies: Record<string, unknown> = {
     'expo-file-system/legacy': { documentDirectory: 'file:///app/' }, '@/i18n': {},
-    '@/store/auth': { profileScopeId: () => 'local', useAuthStore: { getState: () => ({ auth: null, offlineSource: { mode: 'device' } }) } },
+    '@/store/auth': { profileScopeId: () => 'local', useAuthStore: { getState: () => localState } },
     '@/store/playCounts': {}, '@/store/playHistory': {}, '@/lib/query': { queryClient: { invalidateQueries() {} } },
     '@/lib/storage': { getItem: async () => JSON.stringify(lists) }, '@/store/downloads': {}, './downloadsDb': {},
     './localDb': { songsByIds: async (_source: unknown, ids: string[]) => {

@@ -1,3 +1,4 @@
+import { removeEpisodeDownloads } from '@/lib/downloadRemoval';
 /** One device-owned podcast menu, presented by the existing floating glass card. */
 import { useEffect, useRef, useState } from 'react';
 import { Linking, Pressable, Text, View } from 'react-native';
@@ -179,7 +180,7 @@ export function PodcastMenuSheet() {
           if (value.remove) await removeChannel(value.target.channel.id);
           else {
             const ready = value.target.episode ? [value.target.episode] : await listAllEpisodes(value.target.channel.id);
-            if (current(value.target)) await usePodcastDownloads.getState().deleteEpisodes(ready.map((item) => item.id));
+            if (current(value.target)) await removeEpisodeDownloads(ready.map((item) => item.id));
           }
         });
       }} />

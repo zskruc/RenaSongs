@@ -65,6 +65,7 @@ function hookHarness() {
   const dependencies: Record<string, unknown> = {
     react: React, 'react/jsx-runtime': JSXRuntime, 'expo-router': { useRouter: () => router, useIsFocused: () => focused },
     '@/api/data': {}, '@/components/Dialog': { Dialog: () => null },
+    '@/lib/downloadRemoval': {}, '@/store/auth': { useAuthStore: (select: (state: unknown) => unknown) => select({ offline: false, auth: {} }) },
     '@/i18n': { useT: () => (key: string) => key, songsLabel: (n: number) => `${n} songs` }, '@/lib/exportSong': {}, '@/lib/favoritesCache': {}, '@/lib/format': {}, '@/lib/localLibrary': {},
     '@/lib/localCustomizations': handoff.customization, '@/store/metadataBulkSelection': handoff.api,
     '@/store/downloads': { anyDownloads: () => false, useDownloads: (select: (state: unknown) => unknown) => select({ files: {} }) },

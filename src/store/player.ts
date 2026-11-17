@@ -72,6 +72,7 @@ import { remapSong } from '@/lib/navidromeRemap';
 import { noteOwnReport } from '@/lib/ownReports';
 import { beat, bump, note, setExpectedPlaybackBeatInterval, timed } from '@/lib/perfLog';
 import { plausibleDuration } from '@/lib/playbackDuration';
+import { captureSnapshot, restoreSnapshot, type PlayerSnapshot } from '@/lib/playerSnapshot';
 import { queryClient } from '@/lib/query';
 import {
   appendEnd,
@@ -122,6 +123,7 @@ import {
   jukeboxPlay,
   jukeboxSeek,
   jukeboxSetVolume,
+  jukeboxSyncUpcoming,
 } from './jukebox';
 import { useLastPlayed } from './lastPlayed';
 import { offLocalNetwork, useNetworkType } from './networkType';
@@ -944,14 +946,29 @@ function syncCastMedia(): void {
   castSetVolumeLevel(st.volume);
 }
 
+/** Server-owned bounded continuation; explicit end boundaries keep the tail empty. */
+function jukeboxUpcoming(index: number): Song[] {
+  const state = usePlayerStore.getState();
+  if (state.repeat === 'one' || state.sleepAtSongEnd || state.chapterStop) return [];
+  return state.queue.slice(index + 1);
+}
+function syncJukeboxUpcoming(): void {
+  if (remoteKind() !== 'jukebox') return;
+  const { queue, index } = usePlayerStore.getState();
+  if (queue[index]) void jukeboxSyncUpcoming(queue[index], jukeboxUpcoming(index), index);
+}
+
 /** Loads the track at `index` into the remote output and syncs state. */
-async function remoteLoadIndex(index: number, autoplay: boolean, startSec = 0) {
+async function remoteLoadIndex(index: number, autoplay: boolean, startSec = 0): Promise<boolean> {
   const state = usePlayerStore.getState();
   const song = state.queue[index];
-  if (!song) return;
+  if (!song) return false;
+  const askedLoad = loadToken, askedAuth = useAuthStore.getState().auth, output = remoteKind();
+  const current = () => askedLoad === loadToken && askedAuth === useAuthStore.getState().auth
+    && output === remoteKind() && usePlayerStore.getState().queue[index] === song;
   scrobbledThisTrack = false;
   const ok = isJukeboxActive()
-    ? await jukeboxLoad(song, autoplay, startSec)
+    ? await jukeboxLoad(song, autoplay, startSec, jukeboxUpcoming(index), index)
     : await loadUpnpRemoteTrack(
         {
           queue: state.queue,
@@ -963,13 +980,14 @@ async function remoteLoadIndex(index: number, autoplay: boolean, startSec = 0) {
         },
         autoplay,
       );
+  if (!current()) return false;
   if (!ok) {
     const { devices, deviceId } = useUpnp.getState();
     const device = isJukeboxActive() ? 'jukebox' : devices.find((d) => d.id === deviceId)?.name ?? '?';
     note(`cast refused: ${song.suffix ?? '?'} on ${device}`);
     useToast.getState().show(tg("This song can't be cast"));
     usePlayerStore.setState({ index, isPlaying: false, isBuffering: false });
-    return;
+    return false;
   }
   usePlayerStore.setState({
     index,
@@ -979,6 +997,7 @@ async function remoteLoadIndex(index: number, autoplay: boolean, startSec = 0) {
     isBuffering: autoplay,
   });
   onTrackChanged(song);
+  return true;
 }
 
 /**
@@ -1101,6 +1120,8 @@ async function loadIndexSource(index: number, autoplay: boolean, recoveryTicket?
   scrobbledThisTrack = false;
   consumeQueuedOnIndexChange(index);
   if (remoteKind()) {
+    // A failed remote command may already have replaced the server's source.
+    // It cannot prove the old song still plays, so do not roll back to it.
     await remoteLoadIndex(index, autoplay);
     return true;
   }
@@ -1228,17 +1249,8 @@ async function loadIndexSource(index: number, autoplay: boolean, recoveryTicket?
 // from a different playlist or album. Pushed on each advance/skip forward
 // and popped in previous(). Entries share the `queue` reference within the
 // same context, so they only weigh what changes between skips.
-type HistoryEntry = {
-  queue: Song[];
-  index: number;
-  source: string | null;
-  sourceHref: string | null;
-  originalQueue: Song[] | null;
-  shuffle: boolean;
-  queueDealt: boolean;
-};
 const HISTORY_MAX = 100;
-let playedHistory: HistoryEntry[] = [];
+let playedHistory: PlayerSnapshot[] = [];
 
 /**
  * Why the queue is moving, which decides whether paused stays paused.
@@ -1261,10 +1273,9 @@ function skipAutoplay(playing: boolean): boolean {
 
 /** Pushes the current context before advancing or skipping to another track. */
 function pushHistory() {
-  const { queue, index, source, sourceHref, originalQueue, shuffle, queueDealt } =
-    usePlayerStore.getState();
-  if (!queue[index]) return;
-  playedHistory.push({ queue, index, source, sourceHref, originalQueue, shuffle, queueDealt });
+  const state = usePlayerStore.getState();
+  if (!state.queue[state.index]) return;
+  playedHistory.push(captureSnapshot(state));
   if (playedHistory.length > HISTORY_MAX) playedHistory.shift();
 }
 
@@ -3672,6 +3683,7 @@ function syncQueueNow(force = false, syncRemote = true) {
       }
     }
   }
+  if (syncRemote) syncJukeboxUpcoming();
   if (syncRemote && remoteKind() === 'upnp') {
     void syncUpnpRemoteQueue(
       {
@@ -3972,7 +3984,7 @@ export function initRemoteIntegration() {
   });
 }
 
-interface PlayerState {
+export interface PlayerState {
   queue: Song[];
   index: number;
   /**
@@ -4356,19 +4368,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // it there: the app showing one song, the speakers still on the last one,
     // and nothing to say which was which (@ztx-lyghters). Whatever is put back
     // is what is actually playing, so the two agree again.
-    const before = {
-      queue: get().queue,
-      index: get().index,
-      queuedCount: get().queuedCount,
-      positionSec: get().positionSec,
-      durationSec: get().durationSec,
-      originalQueue: get().originalQueue,
-      queueDealt: get().queueDealt,
-      source: get().source,
-      sourceHref: get().sourceHref,
-      radioMode: get().radioMode,
-      radioSeed: get().radioSeed,
-    };
+    const before = captureSnapshot(get());
     queueOrigin = null;
     // The desired queue is published before native accepts its source. Its
     // initial zero is not an observed position of the still-audible chapter.
@@ -4405,7 +4405,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!ok && streamWarming.owns(warmIntent) && useAuthStore.getState().auth === warmAuth
       && get().queue === queued && get().index === at && before.queue.length > 0) {
       longFormOwner = parkedLongForm;
-      set(before);
+      set(restoreSnapshot(before));
       observeLongFormState();
     }
     if (releasedWarming && useAuthStore.getState().auth === warmAuth) warmUpcoming();
@@ -4633,23 +4633,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // advances the steps above walked back over.
     const { queue, source, sourceHref } = get();
     const key = contextKey(source, sourceHref);
-    const sameList = (e: HistoryEntry) =>
+    const sameList = (e: PlayerSnapshot) =>
       e.queue === queue || (key != null && contextKey(e.source, e.sourceHref) === key);
     let entry = playedHistory.pop();
     while (entry && sameList(entry)) entry = playedHistory.pop();
     if (entry) {
-      set({
-        queue: entry.queue,
-        index: entry.index,
-        source: entry.source,
-        sourceHref: entry.sourceHref,
-        originalQueue: entry.originalQueue,
-        shuffle: entry.shuffle,
-        queueDealt: entry.queueDealt,
-        queuedCount: 0,
-        positionSec: 0,
-        durationSec: 0,
-      });
+      set(restoreSnapshot(entry, { restart: true }));
       void loadIndex(entry.index, skipAutoplay(playing));
       return;
     }
@@ -5288,6 +5277,8 @@ usePlayerStore.subscribe((st, prev) => {
   } else if (st.isPlaying !== prev.isPlaying) {
     reportState(st.isPlaying ? 'playing' : 'paused', st.queue[st.index], st.positionSec);
   }
+  if (st.queue !== prev.queue || st.index !== prev.index || st.repeat !== prev.repeat
+    || st.sleepAtSongEnd !== prev.sleepAtSongEnd || st.chapterStop !== prev.chapterStop) syncJukeboxUpcoming();
   // What the saved queue holds, position aside (see `queueDirty`).
   if (
     st.queue !== prev.queue ||

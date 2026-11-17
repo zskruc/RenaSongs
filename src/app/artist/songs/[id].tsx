@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * Every song by one artist, as a list (#139 asked for it next to "Popular").
  *
@@ -100,7 +101,6 @@ export default function ArtistSongsScreen() {
   const playQueue = usePlayerStore((s) => s.playQueue);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const downloadSongs = useDownloads((s) => s.downloadSongs);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const downloadArtist = useDownloads((s) => s.downloadArtist);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
   const openPlaylistPicker = usePlaylistPicker((s) => s.open);
@@ -208,8 +208,7 @@ export default function ArtistSongsScreen() {
       toast(t('Nothing here is downloaded'));
       return;
     }
-    await deleteSongs(ids);
-    toast(t('{n} songs deleted', { n: ids.length }));
+    await removeSongDownloads(ids);
   }
 
   if (isLoading || (canFetch && (!artist || appearsOnPending))) return <TrackListSkeleton />;

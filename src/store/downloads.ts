@@ -911,7 +911,7 @@ interface DownloadsState {
   /** Stops an ongoing group download (already downloaded items are kept). */
   cancelDownload: (groupKey: string) => void;
   /** Deletes files for those songs and removes them from the catalog. */
-  deleteSongs: (songIds: string[]) => Promise<void>;
+  deleteSongs: (songIds: string[]) => Promise<number>;
   /**
    * Forgets a download whose file is not on the disk any more, and says whether
    * it did.
@@ -963,7 +963,7 @@ export const useDownloads = create<DownloadsState>((set, get) => {
   type Protection = { auth: SubsonicAuth; epoch: number; work?: Promise<BackgroundWorkLease>;
     lease?: BackgroundWorkLease; pending?: AbortController };
   const preflights = new Set<Preflight>();
-  let protection: Protection | undefined, protectionEpoch = 0;
+  let protection: Protection | undefined, protectionEpoch = 0, removalEpoch = 0;
   let sequence = 0;
   const scope = (auth: SubsonicAuth) => hashKey(`${primaryUrl(auth)}|${auth.username}`);
   const policyAllowed = () => {
@@ -1071,6 +1071,7 @@ export const useDownloads = create<DownloadsState>((set, get) => {
     },
   });
   useAuthStore.subscribe((state, previous) => {
+    if (state.auth !== previous.auth) removalEpoch++;
     if (state.auth !== previous.auth || state.offline !== previous.offline) {
       protectionEpoch++; void releaseProtection();
       set({ backgroundError: undefined });
@@ -1482,7 +1483,14 @@ export const useDownloads = create<DownloadsState>((set, get) => {
     },
 
     deleteSongs: async (songIds) => {
-      const removed = new Set(songIds), auth = useAuthStore.getState().auth;
+      const auth = useAuthStore.getState().auth, epoch = removalEpoch;
+      // Count unique catalog entries, not the requested size. Capturing the
+      // directory now prevents a queued delete from choosing a later account.
+      const active = activeServerDir();
+      const known = get().files;
+      songIds = [...new Set(songIds)].filter((id) => !!known[id]);
+      if (!songIds.length) return 0;
+      const removed = new Set(songIds), removedEntries = new Set<string>();
       for (const claim of preflights) if (claim.auth === auth) {
         for (let index = claim.songs.length - 1; index >= 0; index--) {
           if (removed.has(claim.songs[index].id)) claim.songs.splice(index, 1);
@@ -1510,12 +1518,15 @@ export const useDownloads = create<DownloadsState>((set, get) => {
       await locked(async () => {
         // The signed in profile's, or all of them if there isn't one: opening
         // another account's database has a cost and nothing to find.
-        const active = activeServerDir();
-        for (const dir of active ? [active] : await serverDirs()) {
+        if (auth !== useAuthStore.getState().auth || epoch !== removalEpoch) throw new Error('Download owner changed');
+        const dirs = active ? [active] : await serverDirs();
+        if (auth !== useAuthStore.getState().auth || epoch !== removalEpoch) throw new Error('Download owner changed');
+        for (const dir of dirs) {
           // The rows go first and tell us what they pointed at, so the files
           // are deleted knowing the catalog no longer claims to have them.
           const gone = await Db.removeFromCatalog(dir, songIds);
           for (const s of gone.songs) {
+            removedEntries.add(s.id);
             if (!s.localUri) continue;
             await FileSystem.deleteAsync(s.localUri, { idempotent: true }).catch(() => {});
             // Also the cached lyrics alongside the file, if any.
@@ -1537,6 +1548,9 @@ export const useDownloads = create<DownloadsState>((set, get) => {
         }
       });
       invalidate();
+      // Catalog count: filesystem deletion is idempotent, so already missing
+      // audio still removes one obsolete offline record, never extra bytes.
+      return removedEntries.size;
     },
 
     forgetIfMissing: async (songId) => {

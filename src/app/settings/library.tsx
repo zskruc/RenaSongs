@@ -8,7 +8,8 @@ import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { Modal, ScrollView, Text, View } from 'react-native';
 
-import { rescanLocal } from '@/api/data';
+import { localInfo, rescanLocal } from '@/api/data';
+import { formatDateTime } from '@/lib/format';
 import { getScanStatus, startScan } from '@/api/backend';
 import { Field, SettingRow, SettingsGroup, SettingsPage, SwitchList, settingsStyles } from '@/components/SettingsUI';
 import { useT } from '@/i18n';
@@ -18,6 +19,7 @@ import { queryClient } from '@/lib/query';
 import { useAuthStore } from '@/store/auth';
 import { profileKeyOf, useLibraries } from '@/store/libraries';
 import { useToast } from '@/store/toast';
+import { useSettings } from '@/store/settings';
 import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
 
 export default function LibrarySettings() {
@@ -27,6 +29,8 @@ export default function LibrarySettings() {
   const t = useT();
   const auth = useAuthStore((s) => s.auth);
   const offline = useAuthStore((s) => s.offline);
+  const local = offline && !auth;
+  const language = useSettings((s) => s.language);
   const source = useAuthStore((s) => s.offlineSource);
   const setSource = useAuthStore((s) => s.setOfflineSource);
   const setFolders = useAuthStore((s) => s.setOfflineFolders);
@@ -54,6 +58,7 @@ export default function LibrarySettings() {
     setEnabled(auth, id, enabled);
   }
 
+  const info = useQuery({ queryKey: ['localInfo', source], queryFn: localInfo, enabled: local });
   const [rescanning, setRescanning] = useState(false);
   const [changing, setChanging] = useState(false);
 
@@ -145,9 +150,9 @@ export default function LibrarySettings() {
   }
 
   return (
-    <SettingsPage title={offline ? t('Local music') : t('Library')}>
+    <SettingsPage title={local ? t('Local music') : t('Library')}>
       <DockScrollView contentContainerStyle={settingsStyles.content}>
-        {offline ? (
+        {local ? (
           <>
             <SettingsGroup title={t('Local music')}>
             <Field
@@ -179,6 +184,8 @@ export default function LibrarySettings() {
               </SettingsGroup>
             ) : null}
             <SettingsGroup title={t('Scan')}>
+            <Field label={t('Songs')} value={(info.data?.songs ?? 0).toLocaleString(language)} />
+            <Field label={t('Last checked')} value={info.data?.checkedAt ? formatDateTime(info.data.checkedAt, language) : t('Not checked yet')} />
             <SettingRow
               icon="refresh"
               label={rescanning ? t('Rescanning your music…') : t('Rescan')}

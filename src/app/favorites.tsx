@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Favorites screen: starred songs, Spotify-style. */
 import Icon from '@/components/Icon';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -75,7 +76,6 @@ export default function FavoritesScreen() {
   const download = useDownloads(useShallow((s) => groupDownloadState(s, 'favorites', songIds)));
   const downloadFavorites = useDownloads((s) => s.downloadFavorites);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const downloadSongs = useDownloads((s) => s.downloadSongs);
 
   // Auto-download favorites: keep all starred songs downloaded, syncing on open
@@ -314,8 +314,7 @@ export default function FavoritesScreen() {
           setConfirmDeleteDl(false);
           const files = useDownloads.getState().files;
           const ids = songIds.filter((sid) => !!files[sid]);
-          void deleteSongs(ids);
-          toast(t('{n} songs deleted', { n: ids.length }));
+          void removeSongDownloads(ids);
         }}
       />
 
@@ -340,7 +339,7 @@ export default function FavoritesScreen() {
         onCancel={() => setConfirmRemoveDl(false)}
         onConfirm={() => {
           setConfirmRemoveDl(false);
-          void deleteSongs(songIds);
+          void removeSongDownloads(songIds);
         }}
       />
       <Dialog

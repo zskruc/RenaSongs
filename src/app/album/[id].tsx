@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 import { useMetadataArtwork, useMetadataInsight } from '@/lib/metadata/hooks';
 /** Album detail with its songs. */
 import { useQuery } from '@tanstack/react-query';
@@ -209,7 +210,6 @@ export default function AlbumScreen() {
   const download = useDownloads(useShallow((s) => groupDownloadState(s, `album:${id}`, songIds)));
   const downloadAlbum = useDownloads((s) => s.downloadAlbum);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   const downloadSongs = useDownloads((s) => s.downloadSongs);
   // Stable between progress ticks (only changes with status): if its identity
   // changed on every % update, the Pressable would lose its touch and you'd
@@ -386,7 +386,7 @@ export default function AlbumScreen() {
         onCancel={() => setConfirmDelete(false)}
         onConfirm={() => {
           setConfirmDelete(false);
-          void deleteSongs(songIds);
+          void removeSongDownloads(songIds);
         }}
       />
       <Dialog

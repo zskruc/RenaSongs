@@ -21,13 +21,13 @@ interface PodcastDownloadsState {
   hydrated: boolean;
   hydrate(): Promise<void>;
   download(channel: PodcastChannel, episodes: PodcastEpisode[], automatic?: boolean): Promise<void>;
-  deleteEpisodes(ids: string[]): Promise<void>;
+  deleteEpisodes(ids: string[]): Promise<number>;
   deleteShow(channelId: string): Promise<void>;
   clearAll(allProfiles?: boolean): Promise<void>;
   usageBytes(): Promise<number>;
   forgetIfMissing(song: Song): Promise<boolean>;
 }
-let hydration = 0, serial = 0;
+let hydration = 0, serial = 0, removalEpoch = 0;
 let networkRevision = 0, wifiAvailable = false;
 const isWifi = (network: Network.NetworkState | null) => network?.type === Network.NetworkStateType.WIFI
   && network.isConnected !== false && network.isInternetReachable !== false;
@@ -156,19 +156,23 @@ export const usePodcastDownloads = create<PodcastDownloadsState>((set, get) => (
     }
   },
   async deleteEpisodes(ids) {
-    const own = activeScope();
+    const own = activeScope(), auth = useAuthStore.getState().auth, epoch = removalEpoch;
+    const current = () => own === activeScope() && auth === useAuthStore.getState().auth && epoch === removalEpoch;
     // An accepted native move/DB commit may not be abortable. Let this exact
     // entry settle before reading its final recorded path and unlinking it.
     await useDownloads.getState().forgetExternal(ids);
-    if (own !== activeScope()) return;
+    if (!current()) return 0;
     const saved = await Db.listDownloads(own);
-    if (own !== activeScope()) return;
+    if (!current()) return 0;
+    ids = [...new Set(ids)].filter((id) => !!saved[id]);
+    if (!ids.length) return 0;
     await Db.dropDownloads(own, ids);
-    if (own === activeScope()) set((state) => {
+    if (current()) set((state) => {
       const files = { ...state.files }; for (const id of ids) delete files[id]; return { files };
     });
     for (const id of ids) if (saved[id]) await FileSystem.deleteAsync(saved[id], { idempotent: true }).catch(() => {});
     invalidate();
+    return ids.length;
   },
   async deleteShow(channelId) {
     const own = activeScope();
@@ -214,6 +218,7 @@ export function podcastFile(song: Song): string | undefined {
 }
 
 useAuthStore.subscribe((state, previous) => {
+  if (state.auth !== previous.auth || state.offlineSource !== previous.offlineSource) removalEpoch++;
   if (state.auth === previous.auth && state.offline === previous.offline) return;
   const old = usePodcastDownloads.getState().scope;
   if (old) {

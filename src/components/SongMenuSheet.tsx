@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Shared floating card with actions for a song (⋯ menu). */
 import Icon from '@/components/Icon';
 import { useQueryClient } from '@tanstack/react-query';
@@ -306,7 +307,6 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
   const dlUri = useDownloads((s) => (song ? s.files[song.id] : undefined));
   const dlBitRate = useDownloads((s) => (song ? s.dlBitRates[song.id] : undefined));
   const downloadSong = useDownloads((s) => s.downloadSong);
-  const deleteDownloads = useDownloads((s) => s.deleteSongs);
   const openArtistPicker = useArtistPicker((s) => s.open);
   const favIds = useFavoriteIds(!!song);
   const favorited = song ? (favIds ? favIds.has(song.id) : !!song.starred) : false;
@@ -867,13 +867,9 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
         onConfirm={() => {
           if (confirmDelete === null || !ownsConfirmation(confirmDelete)) return;
           cancelConfirmation();
-          void deleteDownloads([song.id]);
-          // «Undo» still there: confirming by mistake is a tap away from
-          // getting it back (offline there'd be nowhere to download from).
-          toast(
-            t('Download removed'),
-            offline ? undefined : { label: t('Undo'), run: () => void downloadSong(song) },
-          );
+          // Undo is offered only after the owned removal succeeds.
+          void removeSongDownloads([song.id],
+            offline ? undefined : { label: t('Undo'), run: () => void downloadSong(song) });
           if (isCard) closeNow();
           else close();
         }}

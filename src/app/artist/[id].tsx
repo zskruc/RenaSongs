@@ -1,3 +1,4 @@
+import { removeSongDownloads } from '@/lib/downloadRemoval';
 import { captureCustomizationOwner } from '@/lib/localCustomizations';
 import { openMetadataTarget } from '@/store/metadataScraping';
 import { useMetadataArtwork, useMetadataInsight } from '@/lib/metadata/hooks';
@@ -171,7 +172,6 @@ export default function ArtistScreen() {
   const download = useDownloads(useShallow((s) => groupDownloadState(s, `artist:${id}`, [])));
   const downloadArtist = useDownloads((s) => s.downloadArtist);
   const cancelDownload = useDownloads((s) => s.cancelDownload);
-  const deleteSongs = useDownloads((s) => s.deleteSongs);
   // The boolean, not the map: it is replaced with every song that finishes
   // downloading, so subscribing to it re-rendered the screen on each one (#50).
   const hasDownloads = useDownloads(anyDownloads);
@@ -428,8 +428,7 @@ export default function ArtistScreen() {
       toast(t('Nothing here is downloaded'));
       return;
     }
-    await deleteSongs(ids);
-    toast(t('{n} songs deleted', { n: ids.length }));
+    await removeSongDownloads(ids);
   }
 
   async function playDiscography() {

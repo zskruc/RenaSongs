@@ -66,6 +66,7 @@ export interface PodcastSearchResult {
 const TIMEOUT_MS = 20_000;
 const AUTO_DOWNLOAD_EPISODES = 3;
 const AUTO_DOWNLOAD_READ_MS = 1000 * 60 * 60 * 6;
+const FAVORITE_READ_MS = 1000 * 60 * 60 * 24;
 
 function scope(): string {
   return hashKey(profileScopeId());
@@ -678,27 +679,44 @@ export async function refreshAll(
   } finally { owner.dispose(); }
 }
 
-/** Re-reads auto-download shows gone stale, which is how they see new episodes:
- *  nothing else reads a feed until its show is opened. */
-let automaticRefresh: { owner: string; work: Promise<void> } | undefined;
-export function refreshAutoDownloadShows(): Promise<void> {
-  const owner = profileScopeId();
-  if (automaticRefresh?.owner === owner) return automaticRefresh.work;
+/** One owned, serial pass serves both automatic downloads (six hours) and
+ * favorites (one day). Sharing it prevents cold-start/foreground callers from
+ * reading the still-stale tail twice, or two policies fetching the same feed. */
+let automaticRefresh: { owner: RequestOwner; work: Promise<void> } | undefined;
+export function refreshStaleFavoriteShows(options: PodcastOperationOptions = {}): Promise<void> {
+  if (automaticRefresh?.owner.current()) return automaticRefresh.work;
+  const owner = requestOwner(options);
   const ticket = { owner, work: Promise.resolve() as Promise<void> };
   automaticRefresh = ticket;
-  ticket.work = refreshAutoDownloadShowsOwned(owner).finally(() => { if (automaticRefresh === ticket) automaticRefresh = undefined; });
+  ticket.work = refreshDueShows(owner).finally(() => {
+    owner.dispose();
+    if (automaticRefresh === ticket) automaticRefresh = undefined;
+  });
   return ticket.work;
 }
-async function refreshAutoDownloadShowsOwned(owner: string): Promise<void> {
-  if (isManualOffline()) return;
-  const ids = await autoDownloadChannelIds();
-  if (ids.size === 0) return;
-  for (const channel of await listChannels()) {
-    if (owner !== profileScopeId() || isManualOffline()) return;
-    if (!ids.has(channel.id)) continue;
+
+/** Compatibility for the existing download/startup caller; uses the same pass. */
+export function refreshAutoDownloadShows(): Promise<void> {
+  return refreshStaleFavoriteShows();
+}
+
+async function refreshDueShows(owner: RequestOwner): Promise<void> {
+  if (isManualOffline() || !owner.current()) return;
+  const [automatic, favorites, channels] = await Promise.all([
+    Db.autoDownloadIds(owner.scope), Db.favoriteIds(owner.scope), Db.listChannels(owner.scope),
+  ]);
+  if (!owner.current() || isManualOffline()) return;
+  for (const channel of channels) {
+    if (!owner.current() || isManualOffline()) return;
     if (!channel.feedUrl) continue;
-    if (Date.now() - (channel.refreshedAt ?? 0) < AUTO_DOWNLOAD_READ_MS) continue;
-    await refreshChannel(channel.feedUrl).catch(() => {});
+    const interval = automatic.has(channel.id) ? AUTO_DOWNLOAD_READ_MS
+      : favorites.has(channel.id) ? FAVORITE_READ_MS : undefined;
+    if (interval === undefined || Date.now() - (channel.refreshedAt ?? 0) < interval) continue;
+    // Refresh rechecks the exact account epoch around network and SQLite work.
+    // A failed complete feed is timestamped too, so a dead host is not retried
+    // on every foreground event. One failure must not block the remaining shows.
+    await refreshChannel(channel.feedUrl, { signal: owner.signal, current: owner.current,
+      expectedProfile: owner.profile }).catch(() => {});
   }
 }
 

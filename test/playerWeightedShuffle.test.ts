@@ -1,3 +1,4 @@
+import { captureSnapshot, restoreSnapshot } from '../src/lib/playerSnapshot';
 import { cueDeletionBlocked } from '../src/lib/cueDeletionLease';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -28,7 +29,7 @@ function harness(mode: ShuffleMode) {
   const noop = () => {};
   const api: Record<string, any> = {};
   const auth = {};
-  runInNewContext(code, { cueDeletionBlocked, exports: api, listeningIntent: 0, get: () => state, set: (value: object) => Object.assign(state, value),
+  runInNewContext(code, { captureSnapshot, restoreSnapshot, cueDeletionBlocked, exports: api, listeningIntent: 0, get: () => state, set: (value: object) => Object.assign(state, value),
     usePlayerStore: { getState: () => state }, useAuthStore: { getState: () => ({ auth, offline: false }) },
     getShuffleMode: () => mode, ownedPlayCounts: () => local, isAudiobookTrack: (song: Song | null) => song?.genre === 'audiobook',
     rememberListeningState: noop, currentListeningSource: () => undefined, sessionSpace, currentSong: (value: any) => value.queue[value.index] ?? null, shuffleLinkedGroups,
