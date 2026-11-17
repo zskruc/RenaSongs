@@ -13,6 +13,21 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.6] - 2026-11-18
+
+### Fixed
+
+- 移除原生菜单中被外层轮廓裁掉的阴影绘制，减少动画中无效的大尺寸滤镜图层。
+- 同一段菜单动效使用固定的前景滤镜容量，避免随每帧尺寸变化反复分配纹理；保留屏幕坐标映射和稳定态清晰度。
+- 主玻璃的圆角、高光和折射边缘跟随同一份动画轮廓变化，完成后保留原来的圆角与折射参数。
+- 普通弹窗在同一次原生状态提交中提供展开参数，由原生实际布局检查决定起步；自然高度选择框仍等待内容测量。
+
+### English
+
+- Remove menu-only shadow work that is discarded by the outer morph clip, and stabilize transient foreground filter allocations for each presentation.
+- Drive menu material corners, lens and highlight from the current native morph radius while preserving the resting optical profile.
+- Avoid a redundant JavaScript readiness round trip for ordinary popups while retaining native layout guards and explicitly deferred content measurement.
+
 ## [0.8.8.1-preview.5] - 2026-11-18
 
 ### Fixed

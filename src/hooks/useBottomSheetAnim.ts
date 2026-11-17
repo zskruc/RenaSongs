@@ -44,7 +44,11 @@ export function useBottomSheetAnim(open: boolean, onClose?: () => void, presenta
     dismissing.value = false;
     if (open) {
       const id = session.begin();
-      update({ sessionId: id, open: true, ready: false, sourceRect: takeMenuOrigin() });
+      // The native host already waits for attachment, pre-draw, a visible
+      // window and measured children. Authorize that first valid draw in this
+      // same transaction instead of making it await a JS onShow/layout reply.
+      // Callers with a natural-height dependency still override motion.ready.
+      update({ sessionId: id, open: true, ready: native, sourceRect: takeMenuOrigin() });
       progress.value = 0;
       if (!native) {
         const settled = (finished?: boolean) => { 'worklet'; if (finished) scheduleOnRN(complete, id, true); };

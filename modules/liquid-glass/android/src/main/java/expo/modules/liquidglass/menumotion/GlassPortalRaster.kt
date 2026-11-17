@@ -6,7 +6,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-/** Foreground-only raster bounds; source capture/material bounds stay separate. */
+/** One fixed filtered capacity/scale per native menu presentation. */
 internal class GlassPortalRaster(private val density: Float) {
   val bounds = RectF()
   var scale = 1f
@@ -15,26 +15,52 @@ internal class GlassPortalRaster(private val density: Float) {
     private set
   var height = 0
     private set
+  private var physicalWidth = 0f
+  private var physicalHeight = 0f
+  private var reserved = false
 
-  fun update(incoming: RectF, source: RectF?, limits: RectF, screenBlur: Float): Boolean {
-    // Original renderer has 28dp portal reach inside a capture expanded by
-    // 48dp. Include the actual visible Gaussian reach, bounded by that same
-    // original total guard, rather than filtering the whole travel envelope.
-    val guard = max(28f * density, min(3f * max(screenBlur, 0f), 76f * density)) + 2f
-    val left = max(min(incoming.left, source?.left ?: incoming.left) - guard, limits.left)
-    val top = max(min(incoming.top, source?.top ?: incoming.top) - guard, limits.top)
-    val right = min(max(incoming.right, source?.right ?: incoming.right) + guard, limits.right)
-    val bottom = min(max(incoming.bottom, source?.bottom ?: incoming.bottom) + guard, limits.bottom)
+  /**
+   * Reserve maximum size, not the source-to-destination travel distance.
+   * 1.2 covers the upstream spring rebound. The initial incoming circle uses
+   * target width for its height, including for short landscape controls.
+   * Repeated calls with unchanged real layout never change GPU dimensions.
+   */
+  fun reserve(targetWidth: Float, targetHeight: Float, windowWidth: Float, windowHeight: Float,
+    hasGlassSource: Boolean = false): Boolean {
+    if (!targetWidth.isFinite() || !targetHeight.isFinite() || !windowWidth.isFinite() ||
+      !windowHeight.isFinite() || targetWidth <= 0f || targetHeight <= 0f || windowWidth <= 0f || windowHeight <= 0f) return false
+    val guard = 76f * density + 2f
+    val nextPhysicalWidth = if (hasGlassSource) windowWidth else min(windowWidth, targetWidth * 1.2f + guard * 2f)
+    val nextPhysicalHeight = if (hasGlassSource) windowHeight else
+      min(windowHeight, max(targetWidth, targetHeight) * 1.2f + guard * 2f)
+    val nextScale = min(1f, sqrt(MaximumPixels / max(nextPhysicalWidth * nextPhysicalHeight, 1f)))
+    val nextWidth = max(1, ceil(nextPhysicalWidth * nextScale).toInt())
+    val nextHeight = max(1, ceil(nextPhysicalHeight * nextScale).toInt())
+    val changed = !reserved || physicalWidth != nextPhysicalWidth || physicalHeight != nextPhysicalHeight ||
+      scale != nextScale || width != nextWidth || height != nextHeight
+    physicalWidth = nextPhysicalWidth; physicalHeight = nextPhysicalHeight
+    scale = nextScale; width = nextWidth; height = nextHeight
+    reserved = true
+    return changed
+  }
+
+  /** Motion only changes physical placement; filter size and sampling scale stay fixed. */
+  fun update(incoming: RectF, source: RectF?, limits: RectF, @Suppress("UNUSED_PARAMETER") screenBlur: Float): Boolean {
+    if (!reserved || !incoming.left.isFinite() || !incoming.top.isFinite() || !incoming.right.isFinite() ||
+      !incoming.bottom.isFinite() || incoming.width() <= 0f || incoming.height() <= 0f) return false
+    val left = min(incoming.left, source?.left ?: incoming.left)
+    val top = min(incoming.top, source?.top ?: incoming.top)
+    val right = max(incoming.right, source?.right ?: incoming.right)
+    val bottom = max(incoming.bottom, source?.bottom ?: incoming.bottom)
     if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite() ||
-      right <= left || bottom <= top) {
-      width = 0; height = 0
-      return false
-    }
-    bounds.set(left, top, right, bottom)
-    val area = bounds.width() * bounds.height()
-    scale = min(1f, sqrt(MaximumPixels / max(area, 1f)))
-    width = max(1, ceil(bounds.width() * scale).toInt())
-    height = max(1, ceil(bounds.height() * scale).toInt())
+      right <= limits.left || bottom <= limits.top || left >= limits.right || top >= limits.bottom) return false
+    val minLeft = limits.left
+    val maxLeft = max(minLeft, limits.right - physicalWidth)
+    val minTop = limits.top
+    val maxTop = max(minTop, limits.bottom - physicalHeight)
+    val x = ((left + right - physicalWidth) / 2f).coerceIn(minLeft, maxLeft)
+    val y = ((top + bottom - physicalHeight) / 2f).coerceIn(minTop, maxTop)
+    bounds.set(x, y, x + physicalWidth, y + physicalHeight)
     return true
   }
 

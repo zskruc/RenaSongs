@@ -170,6 +170,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuMaterialCapacity by mutableStateOf(IntSize.Zero)
   private var menuMaterialVersion by mutableIntStateOf(0)
   private var menuPlacementVersion by mutableIntStateOf(0)
+  private var menuMorphShape by mutableStateOf<RoundedCornerShape?>(null)
+  private var menuCornerRadiusPx = Float.NaN
   private val composeOffsetX get() = if (menuMaterial.active) menuMaterial.captureLeft else 0
   private val composeOffsetY get() = if (menuMaterial.active) menuMaterial.captureTop else 0
   internal val opticalMaterialOffsetX get() = composeOffsetX + materialOffsetX
@@ -287,13 +289,17 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   /** Native-only fixed viewport for a menu; RN layout and optical settings stay unchanged. */
   internal fun reserveMenuMorph(screenBounds: RectF, layerWidth: Int, layerHeight: Int) {
     getLocationOnScreen(sampleLocation)
-    if (!menuMaterial.reserve(screenBounds.left - sampleLocation[0], screenBounds.top - sampleLocation[1],
-        screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])) return
+    val geometryChanged = menuMaterial.reserve(screenBounds.left - sampleLocation[0], screenBounds.top - sampleLocation[1],
+      screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])
     // The viewport spans travel, but a material layer only needs its largest
     // *size*, not the distance between source and destination. Reserving the
     // entire screen here made small menus allocate full-window blur targets.
-    menuMaterialCapacity = IntSize(layerWidth.coerceIn(1, menuMaterial.captureWidth),
-      layerHeight.coerceIn(1, menuMaterial.captureHeight))
+    val nextCapacity = IntSize(maxOf(menuMaterialCapacity.width, layerWidth.coerceAtLeast(1)),
+      maxOf(menuMaterialCapacity.height, layerHeight.coerceAtLeast(1)))
+    if (!geometryChanged && nextCapacity == menuMaterialCapacity) return
+    // A later async title/keyboard layout can grow a card. Never shrink the
+    // backing during this presentation, even when its capture ROI stays fixed.
+    menuMaterialCapacity = nextCapacity
     menuMaterialVersion++
     menuPlacementVersion++
     geometryVersion++
@@ -302,10 +308,23 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     snapshot?.onMaterialChanged()
   }
 
-  internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float) {
+  internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float,
+    radiusX: Float, radiusY: Float) {
     getLocationOnScreen(sampleLocation)
-    if (!menuMaterial.update(screenLeft - sampleLocation[0], screenTop - sampleLocation[1],
-        screenRight - sampleLocation[0], screenBottom - sampleLocation[1])) return
+    val geometryChanged = menuMaterial.update(screenLeft - sampleLocation[0], screenTop - sampleLocation[1],
+      screenRight - sampleLocation[0], screenBottom - sampleLocation[1])
+    // Motion publishes physical pixels. The default engine's x/y radii are
+    // equal; preserve its current radius rather than using the resting 28dp.
+    // Use a new immutable CornerBasedShape so both the cached clipping outline
+    // and Kyant's lens/highlight corner uniforms invalidate together. Radius
+    // can still move after integer width/height/placement have stopped changing.
+    val radius = minOf(radiusX, radiusY).takeIf { it.isFinite() && it >= 0f } ?: return
+    val radiusChanged = !menuCornerRadiusPx.isFinite() || abs(menuCornerRadiusPx - radius) > 0.01f
+    if (radiusChanged) {
+      menuCornerRadiusPx = radius
+      menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)
+    }
+    if (!geometryChanged && !radiusChanged) return
     // Measurement owns only this Compose drawing child, as with the native dock.
     if (menuMaterial.sizeChanged) menuMaterialVersion++
     if (menuMaterial.placementChanged) menuPlacementVersion++
@@ -320,6 +339,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   internal fun clearMenuMorph() {
     if (!menuMaterial.clear()) return
     menuMaterialCapacity = IntSize.Zero
+    menuMorphShape = null
+    menuCornerRadiusPx = Float.NaN
     menuMaterialVersion++
     menuPlacementVersion++
     geometryVersion++
@@ -796,7 +817,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             dockCompactWidth.dp.toPx(), GlassBarCollapsePolicy.GAP_DP.dp.toPx()),
             if (enabled) glassBlur.dp.toPx() else 0f)
         }
-        val glassShape = if (amPlusMaterial) RoundedCornerShape(50) else RoundedCornerShape(
+        val glassShape = menuMorphShape ?: if (amPlusMaterial) RoundedCornerShape(50) else RoundedCornerShape(
           topStart = (if (isLtr) topLeft else topRight).dp,
           topEnd = (if (isLtr) topRight else topLeft).dp,
           bottomEnd = (if (isLtr) bottomRight else bottomLeft).dp,
@@ -849,7 +870,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
               }
             },
             highlight = if (withHighlight) materialHighlight else null,
-            shadow = if (officialMaterial) ({ Shadow.Default }) else null,
+            // MenuMorph already clips this entire material to its painted
+            // outline. ShadowNode clears the outline interior and paints only
+            // outside it, so its large filtered target is clipped away there.
+            // Keep the original shadow on every other surface and recipe.
+            shadow = if (officialMaterial && menuMaterialCapacity == IntSize.Zero) ({ Shadow.Default }) else null,
             onDrawSurface = {
               // API 31/32 retain true background blur, but Android's shader lens
               // and directional highlight require API 33 (handled by Backdrop).

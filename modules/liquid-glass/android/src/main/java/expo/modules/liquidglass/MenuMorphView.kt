@@ -298,7 +298,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     }
     (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
       target.left + materialBounds.left, target.top + materialBounds.top,
-      target.left + materialBounds.right, target.top + materialBounds.bottom)
+      target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY)
     getChildAt(0)?.alpha = if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)
     val sx = localIncoming.width() / max(width.toFloat(), 1f)
     val sy = localIncoming.height() / max(height.toFloat(), 1f)
@@ -381,9 +381,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     rootView.getLocationOnScreen(rootLocation)
     if (!captureEnvelope.intersect(rootLocation[0].toFloat(), rootLocation[1].toFloat(),
         rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
-    material.reserveMenuMorph(captureEnvelope,
-      kotlin.math.ceil(target.width() * 1.2f + 8f * density).toInt(),
-      kotlin.math.ceil(target.height() * 1.2f + 8f * density).toInt())
+    val capacity = menuLayerCapacity(target.width(), target.height(), source.height(), density)
+    material.reserveMenuMorph(captureEnvelope, capacity.width, capacity.height)
+    foregroundPortal?.reserve(target, target.left, target.top, captureEnvelope)
     lockedFieldStep = max(5f * density, max(captureEnvelope.width(), captureEnvelope.height()) / 64f)
     foregroundBounds.set(captureEnvelope)
     foregroundBounds.offset(-target.left, -target.top)

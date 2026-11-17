@@ -1,14 +1,18 @@
 package expo.modules.liquidglass
 
 import kotlin.math.ceil
+import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.PI
+import kotlin.math.sqrt
 
 /**
  * Menu texture coordinates are physical screen pixels, never morph scale.
  * The Compose viewport reserves the full travel envelope once; only its glass
  * child is measured/placed at the live shell rectangle. Capture ROI remains
- * fixed while that child moves, preventing per-frame GPU image reallocation.
+ * fixed while that child moves, so the source producer need not resize its
+ * images. This alone does not reserve the material's filtered drawing layers.
  */
 internal class MenuMaterialGeometry {
   var active = false
@@ -77,4 +81,38 @@ internal class MenuMaterialGeometry {
 
   private fun finiteRect(l: Float, t: Float, r: Float, b: Float): Boolean =
     l.isFinite() && t.isFinite() && r.isFinite() && b.isFinite() && l < r && t < b
+}
+
+internal data class MenuLayerCapacity(val width: Int, val height: Int)
+
+/**
+ * Reserve actual default-spring extents, not 120% of a travel-sized viewport.
+ * Width/height and incoming scale share the default spring response, so their
+ * product is a quadratic in its unit step response. Include both expansion and
+ * absorption extrema plus a physical guard; no motion/optical values change.
+ */
+internal fun menuLayerCapacity(width: Float, height: Float, sourceHeight: Float, density: Float): MenuLayerCapacity {
+  val w = width.coerceAtLeast(1f)
+  val h = height.coerceAtLeast(1f)
+  val initialScale = max(0.5f * sourceHeight / max(w, h), 1f / w)
+  fun responseMaximum(damping: Float): Float = 1f + exp((-PI * damping / sqrt(1f - damping * damping)).toFloat())
+  fun productMaximum(a0: Float, a1: Float, b0: Float, b1: Float, response: Float): Float {
+    val a = a1 * b1
+    val b = a0 * b1 + a1 * b0
+    fun value(t: Float) = (a0 + a1 * t) * (b0 + b1 * t)
+    var maximum = max(value(0f), value(response))
+    if (a < 0f) {
+      val vertex = -b / (2f * a)
+      if (vertex > 0f && vertex < response) maximum = max(maximum, value(vertex))
+    }
+    return maximum
+  }
+  val eject = responseMaximum(0.75f)
+  val absorb = responseMaximum(0.8f)
+  val maxWidth = w * max(initialScale, max(initialScale + (1f - initialScale) * eject, 1f))
+  val maxHeight = max(productMaximum(w, h - w, initialScale, 1f - initialScale, eject),
+    productMaximum(h, w - h, 1f, initialScale - 1f, absorb))
+  val guard = max(4f * density, 4f)
+  fun bucket(value: Float): Int = (ceil((value + guard) / 32f).toInt() * 32).coerceAtLeast(1)
+  return MenuLayerCapacity(bucket(maxWidth), bucket(maxHeight))
 }

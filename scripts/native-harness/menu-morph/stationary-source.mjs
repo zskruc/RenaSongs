@@ -24,4 +24,11 @@ assert.doesNotMatch(menuProgram, /(?:root|scrim)\.draw\s*\(|withoutGlass\s*\(|sy
   'A menu must not replay its own Modal tree or wait for an offscreen GPU capture');
 assert.match(windowBackdrop, /surfaces\.any\s*\{\s*nativeMenuOwner\(it\) == null \|\| it\.progressiveBlur\s*\}/,
   'The direct program must remain gated to native menu hosts');
+assert.match(material, /shadow = if \(officialMaterial && menuMaterialCapacity == IntSize\.Zero\)/,
+  'Only the already-clipped native menu may skip its invisible shadow; normal materials must retain their shadow');
+assert.ok(material.includes('val glassShape = menuMorphShape ?:') &&
+  material.includes('menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)'),
+  'The native menu material, lens and highlight must share the current physical spring radius');
+assert.ok(material.includes('if (!geometryChanged && !radiusChanged) return'),
+  'A stationary integer box must still update its changing optical radius');
 console.log('Stationary material source contract passed (no texture transform; image and RenderNode share physical origin).');

@@ -4,6 +4,7 @@ import android.graphics.RectF
 import kotlin.math.abs
 import kotlin.random.Random
 import expo.modules.liquidglass.MenuMaterialGeometry
+import expo.modules.liquidglass.menuLayerCapacity
 
 private var checks = 0
 private fun verify(value: Boolean, message: String) { checks++; check(value) { message } }
@@ -22,6 +23,7 @@ private fun finite(frame: GlassMorphFrame) {
     frame.radiusX, frame.radiusY, frame.smoothing, frame.contentProgress, frame.rowsOpacity))
     verify(value.isFinite(), "Nonfinite spring/outline coordinate")
   verify(frame.bounds.width() > 0f && frame.bounds.height() > 0f, "Collapsed into invalid shell")
+  verify(near(frame.radiusX, frame.radiusY, 0.00001f), "Default spring no longer supports one CornerBasedShape radius")
 }
 
 fun main() {
@@ -161,5 +163,29 @@ fun main() {
     settle(value, 120f)
     finite(value.frame)
   }
+  // Compare the independent reserved-size calculation against the real
+  // production analytic springs, including short cards and oversized origins.
+  repeat(80) {
+    val density = 1f + random.nextFloat() * 3f
+    val width = 100f + random.nextFloat() * 1200f
+    val height = 80f + random.nextFloat() * 2400f
+    val sourceHeight = 12f + random.nextFloat() * 700f
+    val src = RectF(80f, 100f, 140f, 100f + sourceHeight)
+    val dest = RectF(10f, 20f, 10f + width, 20f + height)
+    val cap = menuLayerCapacity(width, height, sourceHeight, density)
+    val measured = initialized(src, dest, density)
+    measured.retarget(true)
+    repeat(2) { phase ->
+      if (phase == 1) measured.retarget(false)
+      repeat(300) {
+        measured.advanceBy(1f / 240f)
+        verify(measured.frame.bounds.width() <= cap.width + 0.1f, "Default spring exceeded reserved material width")
+        verify(measured.frame.bounds.height() <= cap.height + 0.1f, "Default spring exceeded reserved material height")
+      }
+    }
+  }
+  val phoneCapacity = menuLayerCapacity(1170f, 2400f, 165f, 3.75f)
+  verify(phoneCapacity.width * phoneCapacity.height < 1440 * 2790,
+    "Material capacity still reserves the former full-window filtered target")
   println("Menu morph harness: $checks checks passed (upstream springs, 24–144 Hz, reversal, liquid contour, screen coordinates).")
 }

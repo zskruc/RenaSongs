@@ -27,6 +27,8 @@ export function MenuMorphSurface({ children, style, radius = MENU_GLASS_RADIUS, 
   Omit<ViewProps, 'style'> & { style?: AnimatedViewStyle; radius?: number; motion?: MenuMorphController }) {
   const fallback = useBottomSheetAnim(!motion, undefined, 'card');
   const controller = motion ?? fallback.motion;
+  // Preserve an explicit caller defer, such as a dropdown awaiting natural
+  // content height. Native attachment/pre-draw guards cover ordinary cards.
   return <AnimatedMenuMorph {...props} collapsable={false}
     style={[style, controller.fallbackStyle, { backgroundColor: 'transparent', borderRadius: radius, overflow: 'visible' }]}
     radius={radius} open={controller.open} ready={controller.ready} sessionId={controller.sessionId}

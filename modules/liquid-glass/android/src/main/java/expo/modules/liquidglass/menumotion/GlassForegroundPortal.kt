@@ -58,6 +58,17 @@ internal class GlassForegroundPortal(density: Float) {
   private var maxRasterPixels = 0L
   private var maxCompensatedBlur = 0f
   private var maxScreenBlur = 0f
+  private var rasterReservations = 0L
+  private var nodeResizes = 0L
+  private var effectRebuilds = 0L
+  private var rowsEffectRebuilds = 0L
+
+  /** Called at session attachment or an actual target/window layout change. */
+  fun reserve(target: RectF, @Suppress("UNUSED_PARAMETER") originX: Float,
+    @Suppress("UNUSED_PARAMETER") originY: Float, windowBounds: RectF) {
+    if (raster.reserve(target.width(), target.height(), windowBounds.width(), windowBounds.height(), hasSource))
+      rasterReservations++
+  }
 
   /** `field` comes from the outline; no duplicate Gaussian CPU pass. */
   fun update(frame: GlassMorphFrame, originX: Float, originY: Float,
@@ -88,14 +99,15 @@ internal class GlassForegroundPortal(density: Float) {
   }
 
   /**
-   * Filter current visible foreground, never the entire source-to-menu travel
-   * envelope. Raster coordinates are converted back to physical field/lens
-   * coordinates by the shader. Only transient filtered images are downsampled;
-   * the settled native foreground still draws directly at full resolution.
+   * A session reserves filtered dimensions once. Motion moves the physical
+   * origin, while rasterScale and both RenderNode capacities remain constant.
+   * Raster coordinates map back to physical field/lens coordinates. Only
+   * transient images are downsampled; settled native content draws directly.
    */
   fun draw(canvas: Canvas, bounds: RectF, warp: Boolean, drawContent: (Canvas) -> Unit) {
     if (!warp || !canvas.isHardwareAccelerated) {
-      clearTransientNodes()
+      // As upstream, retain the fixed nodes until the presentation ends. They
+      // are not drawn while settled, but closing can reuse the same capacity.
       drawContent(canvas)
       return
     }
@@ -116,6 +128,11 @@ internal class GlassForegroundPortal(density: Float) {
       rowsNode.setPosition(0, 0, width, height)
       foregroundNode.setPosition(0, 0, width, height)
       foregroundNode.setPivotX(0f); foregroundNode.setPivotY(0f)
+      // The reserved guard already includes all filter reach. Explicit bounds
+      // clipping prevents Skia from adding changing blur-outset layer sizes.
+      rowsNode.setClipToBounds(true)
+      foregroundNode.setClipToBounds(true)
+      if (diagnosticsEnabled) nodeResizes++
     }
     foregroundNode.setScaleX(1f / scale)
     foregroundNode.setScaleY(1f / scale)
@@ -131,6 +148,7 @@ internal class GlassForegroundPortal(density: Float) {
       rowsEffectX = blurX; rowsEffectY = blurY
       rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
         RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null)
+      if (diagnosticsEnabled) rowsEffectRebuilds++
     }
     // Geometry uniforms are snapshotted by RenderEffect. Reuse an effect and
     // recording only for repeated draws of the same unchanged native frame.
@@ -141,6 +159,7 @@ internal class GlassForegroundPortal(density: Float) {
       portal.setFloatUniform("nodeOrigin", area.left, area.top)
       portal.setFloatUniform("rasterScale", scale)
       foregroundNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(portal, "content"))
+      if (diagnosticsEnabled) effectRebuilds++
     }
     if (effectChanged || dimensionsChanged || renderedGeneration != generation ||
       contentBlur.keys.any { it.isDirty || it.isLayoutRequested }) {
@@ -186,7 +205,9 @@ internal class GlassForegroundPortal(density: Float) {
   }
 
   fun diagnostics(): Map<String, Number> = mapOf("portalDraws" to draws, "portalRecords" to records,
-    "portalInvisibleSkips" to invisibleSkips, "portalMaxPhysicalPixels" to maxPhysicalPixels,
+    "portalInvisibleSkips" to invisibleSkips, "portalRasterReservations" to rasterReservations,
+    "portalNodeResizes" to nodeResizes, "portalEffectRebuilds" to effectRebuilds,
+    "portalRowsEffectRebuilds" to rowsEffectRebuilds, "portalMaxPhysicalPixels" to maxPhysicalPixels,
     "portalMaxRasterPixels" to maxRasterPixels, "portalMaxCompensatedBlurPx" to maxCompensatedBlur,
     "portalMaxScreenBlurPx" to maxScreenBlur)
 

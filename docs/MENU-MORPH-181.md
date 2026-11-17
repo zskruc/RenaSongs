@@ -104,4 +104,30 @@ advances with elapsed wall time. Safe selections now apply at tap time, separate
 from retained exit cleanup; navigation, destructive/save and OS handoffs keep
 their existing ownership-safe completion behavior.
 
+### 185: remove discarded layers and allocation churn
+
+The 184 physical preview still failed the motion/performance acceptance check.
+Its trusted menu source avoided offscreen capture submission as intended, but
+the trace showed expensive Vulkan image allocations and layer flushing. A menu
+shadow was drawn into a large intermediate image and then discarded by the
+outer morph clip; menu hosts now omit that pass without changing the saved
+material profile or shadows on other controls. Foreground portal capacity and
+sampling scale stay fixed during one presentation instead of following each
+frame's dimensions. The original spring channels and physical field mapping
+are retained.
+
+The current physical morph radius also supplies the menu-only material shape.
+Kyant's lens and highlight use that same CornerBasedShape instead of a fixed
+resting radius. The original resting radius, refraction height and refraction
+amount remain unchanged; no second refraction-strength track is introduced.
+
+Ordinary popups submit readiness with the open/session/source state. Native
+attachment, visible-window, pre-draw and positive-child-size checks still gate
+the first frame. Content-measured selectors retain their explicit size gate.
+The upstream demo also accepts JavaScript open requests; its already-attached
+native overlay avoids the additional Modal readiness exchange used here.
+
+Physical performance receipts are separate from build and unit-test receipts;
+a successful build is not treated as evidence of smooth animation.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。
