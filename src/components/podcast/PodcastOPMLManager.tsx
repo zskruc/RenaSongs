@@ -107,7 +107,7 @@ function PodcastOPMLSession({ onClose, onImported }: Omit<PodcastOPMLManagerProp
       if (!FileSystem.cacheDirectory) throw new Error('No cache directory');
       const directory = `${FileSystem.cacheDirectory}podcast-opml/`;
       await FileSystem.makeDirectoryAsync(directory, { intermediates: true }); if (!current(ticket)) return;
-      const file = `${directory}Resonus-Glass-subscriptions-${Date.now()}.opml`;
+      const file = `${directory}RenaSongs-subscriptions-${Date.now()}.opml`;
       await FileSystem.writeAsStringAsync(file, result.xml, { encoding: FileSystem.EncodingType.UTF8 });
       if (!current(ticket)) { await FileSystem.deleteAsync(file, { idempotent: true }).catch(() => {}); return; }
       await Sharing.shareAsync(file, { mimeType: 'text/x-opml', UTI: 'public.xml', dialogTitle: t('Export podcast subscriptions') });

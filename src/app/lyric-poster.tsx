@@ -152,7 +152,7 @@ export default function LyricPosterScreen() {
             </View>
             <Text style={[styles.posterTitle, { color: snapshot.ink }]}>{snapshot.title}</Text>
             {snapshot.artist ? <Text style={[styles.posterArtist, { color: snapshot.secondary }]}>{snapshot.artist}</Text> : null}
-            <Text style={[styles.posterBrand, { color: snapshot.secondary }]}>Resonus Glass</Text>
+            <Text style={[styles.posterBrand, { color: snapshot.secondary }]}>RenaSongs</Text>
           </View>
         </View>
         <GlassPressable buttonMaterial={false} onPress={() => { void share(); }} accessibilityRole="button"

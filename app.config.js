@@ -4,7 +4,7 @@ module.exports = ({ config }) => {
   if (process.env.RESONUS_GLASS_PREVIEW !== '1') return config;
   return {
     ...config,
-    name: 'Resonus Glass',
+    name: 'RenaSongs',
     slug: 'resonus-glass-preview',
     scheme: 'resonus-glass',
     android: { ...config.android, package: 'com.zskruc.resonus.glasspreview' },

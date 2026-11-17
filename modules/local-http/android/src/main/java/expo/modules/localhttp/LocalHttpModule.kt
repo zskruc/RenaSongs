@@ -72,7 +72,7 @@ class LocalHttpModule : Module() {
       val ctx = appContext.reactContext
       val address = synchronized(transferLock) { transfer?.origin() }
       val clipboard = ctx?.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-      if (address != null && clipboard != null) { clipboard.setPrimaryClip(ClipData.newPlainText("Resonus Glass Wi-Fi transfer", address)); true } else false
+      if (address != null && clipboard != null) { clipboard.setPrimaryClip(ClipData.newPlainText("RenaSongs Wi-Fi transfer", address)); true } else false
     }
 
     /**

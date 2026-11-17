@@ -1,32 +1,34 @@
 <p align="center">
-  <img src="./assets/images/icon-transparent.png" width="100" alt="Resonus Glass icon" />
+  <img src="./assets/images/icon-transparent.png" width="100" alt="RenaSongs icon" />
 </p>
 
-<h1 align="center">Resonus Glass</h1>
+<h1 align="center">RenaSongs</h1>
 
 <p align="center"><strong>简体中文</strong> · <a href="./README.en.md">English</a></p>
 
-<p align="center">为 Android 定制的 Resonus 玻璃界面衍生版</p>
+<p align="center">为自托管音乐与播客打造的 Android 播放器，提供 Apple Music 风格布局和原生液态玻璃交互</p>
 
-Resonus Glass 基于 [juananzzz/resonus](https://github.com/juananzzz/resonus)，保留其自托管音乐播放器功能，并为 Android 加入透明折射材质、联动的 mini player 与底部导航、浮动玻璃菜单及可保存的材质调节。
+RenaSongs（原名 Resonus Glass）基于 [juananzzz/resonus](https://github.com/juananzzz/resonus)，保留其自托管音乐播放器功能，并为 Android 加入透明折射材质、联动的 mini player 与底部导航、浮动玻璃菜单及可保存的材质调节。
 
 这是独立维护的非官方衍生项目，与原作者、Apple 及其音乐服务没有隶属或认可关系。玻璃效果使用 Android 原生绘制，不是 Apple 私有实现，也不会逐项复现 iOS 的内部参数。开发重点为 Android；上游实验性的 iOS 支持不属于本分支的玻璃效果验证范围。
 
 ## 安装
 
-从 [本仓库最新 Release](https://github.com/zskruc/resonus-glass/releases/latest) 下载 **Resonus Glass APK**。当前正式版为 `0.8.5.1`，APK 为 `Resonus-Glass-v0.8.5.1-arm64-v8a.apk`，适用于 ARM64 Android 设备。原项目 Releases 中的 APK 是原版 Resonus，不包含本分支的改动。
+从 [本仓库最新 Release](https://github.com/zskruc/RenaSongs/releases/latest) 下载 **RenaSongs APK**。当前正式版为 `0.8.5.1`，APK 为 `Resonus-Glass-v0.8.5.1-arm64-v8a.apk`，适用于 ARM64 Android 设备。原项目 Releases 中的 APK 是原版 Resonus，不包含本分支的改动。
 
-新功能测试请下载 **[0.8.7.1-preview.24 预发布](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.24)**，Android 更新编号 `170`。新增后台省电优化、渐进式播客加载、播客存储管理与自动整理，并汇总此前的 17 项可选工具和年代页绘制优化。三星已核对后台更新频率、本地播放锁、暂停与灭屏续播；保留现有布局和玻璃参数。需手动下载安装，App 的正式更新检查不会选取预发布。[本版改动与验证范围](./docs/RELEASE-0.8.7.1-preview.24.md)。
+此前发布的安装包仍可能显示旧名称 Resonus Glass；RenaSongs 名称与图标随新版安装包生效，历史附件文件名保留不变。
+
+新功能测试请下载 **[0.8.7.1-preview.24 预发布](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24)**，Android 更新编号 `170`。新增后台省电优化、渐进式播客加载、播客存储管理与自动整理，并汇总此前的 17 项可选工具和年代页绘制优化。三星已核对后台更新频率、本地播放锁、暂停与灭屏续播；保留现有布局和玻璃参数。需手动下载安装，App 的正式更新检查不会选取预发布。[本版改动与验证范围](./docs/RELEASE-0.8.7.1-preview.24.md)。
 
 Android 13 及以上支持原生折射和定向高光；Android 12 使用 GPU 模糊；更早版本使用界面回退效果。实际效果与流畅度取决于设备和系统状态。
 
-构建时启用 `RESONUS_GLASS_PREVIEW=1`，应用名为 **Resonus Glass**，Android 包名为 `com.zskruc.resonus.glasspreview`，可与原版并存。两者的登录和离线资料互相独立。覆盖更新已有 Glass 安装时，包名和签名必须一致；请勿通过卸载来解决签名不一致，否则会丢失应用内资料。
+构建时启用 `RESONUS_GLASS_PREVIEW=1`，应用名为 **RenaSongs**，Android 包名为 `com.zskruc.resonus.glasspreview`，可与原版并存。两者的登录和离线资料互相独立。更名保留已有包名、深链接与数据目录；覆盖更新已有 Glass 安装时，包名和签名必须一致；请勿通过卸载来解决签名不一致，否则会丢失应用内资料。
 
 App 内 **设置 → 关于** 的 GitHub、更新内容和检查更新均指向本仓库；更新摘要读取本仓库 Release 说明，下载安装包也来自同一 Release。检查更新只采用已发布的正式版本，不采用草稿或预发布。
 
 需要自行验证时，可进入 **Actions → Glass ARM64 test APK → Run workflow** 手动构建测试 APK。每次任务使用随机生成的一次性测试签名，不能覆盖当前手机上已有的 Glass 安装，也不能保证与前一次 CI 构建互相覆盖；请使用独立测试设备或模拟器。正式下载以 Releases 中明确标注的安装包为准。
 
-当前正式版 **[0.8.5.1](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1)** 已整合艺人上滑、保留页面图片资源与遮罩生命周期修复。三星已完成连续详情跳转、滚动和旧页返回检查；具体范围与内存限制见[本版说明](./docs/RELEASE-0.8.5.1.md)。
+当前正式版 **[0.8.5.1](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1)** 已整合艺人上滑、保留页面图片资源与遮罩生命周期修复。三星已完成连续详情跳转、滚动和旧页返回检查；具体范围与内存限制见[本版说明](./docs/RELEASE-0.8.5.1.md)。
 
 ## Glass 的主要改动
 
@@ -42,18 +44,18 @@ App 内 **设置 → 关于** 的 GitHub、更新内容和检查更新均指向�
 
 ## 界面预览
 
-以下为 Samsung 实机上的 Resonus Glass 界面与交互示例，展示 `glass` 分支的页面和可选布局；主题、歌曲和玻璃参数可能不同，曲库内容仅为示例。艺人／专辑图为画面中展示的媒体内容，不随 App 分发。
+以下为 Samsung 实机上的 RenaSongs 界面与交互示例；部分画面保留更名前的名称与图标，展示 `glass` 分支的页面和可选布局；主题、歌曲和玻璃参数可能不同，曲库内容仅为示例。艺人／专辑图为画面中展示的媒体内容，不随 App 分发。
 
 <table>
   <tr>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/artist-page.jpg" width="230" alt="Resonus Glass 的 Taylor Swift 艺人页" /><br /><strong>艺人页 · Taylor Swift</strong><br />满幅照片与取色背景</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/album-artist-layout.jpg" width="230" alt="Resonus Glass 的七里香专辑页" /><br /><strong>专辑页 · 七里香</strong><br />艺人式满幅布局</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/dock-interaction.gif" width="230" alt="Resonus Glass 的 Bottom Tabs 与 Mini Player 随滚动折叠、展开的交互动画" /><br /><strong>底栏交互</strong><br />Mini Player 与 Bottom Tabs 联动</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/artist-page.jpg" width="230" alt="RenaSongs 的 Taylor Swift 艺人页" /><br /><strong>艺人页 · Taylor Swift</strong><br />满幅照片与取色背景</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/album-artist-layout.jpg" width="230" alt="RenaSongs 的七里香专辑页" /><br /><strong>专辑页 · 七里香</strong><br />艺人式满幅布局</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/dock-interaction.gif" width="230" alt="RenaSongs 的 Bottom Tabs 与 Mini Player 随滚动折叠、展开的交互动画" /><br /><strong>底栏交互</strong><br />Mini Player 与 Bottom Tabs 联动</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/player.jpg" width="230" alt="Resonus Glass 播放 Above the Chinese Restaurant 的播放器页面" /><br /><strong>播放器</strong><br />Above the Chinese Restaurant</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/lyrics.jpg" width="230" alt="Resonus Glass 的 Above the Chinese Restaurant 同步歌词页面" /><br /><strong>同步歌词</strong><br />Above the Chinese Restaurant</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/appearance-options.jpg" width="230" alt="Resonus Glass 外观设置中的 Apple Music、Spotify 以及专辑布局选项" /><br /><strong>可切换布局</strong><br />Apple Music／Spotify、专辑与歌单样式</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/player.jpg" width="230" alt="RenaSongs 播放 Above the Chinese Restaurant 的播放器页面" /><br /><strong>播放器</strong><br />Above the Chinese Restaurant</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/lyrics.jpg" width="230" alt="RenaSongs 的 Above the Chinese Restaurant 同步歌词页面" /><br /><strong>同步歌词</strong><br />Above the Chinese Restaurant</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/appearance-options.jpg" width="230" alt="RenaSongs 外观设置中的 Apple Music、Spotify 以及专辑布局选项" /><br /><strong>可切换布局</strong><br />Apple Music／Spotify、专辑与歌单样式</td>
   </tr>
 </table>
 
@@ -63,12 +65,12 @@ App 内 **设置 → 关于** 的 GitHub、更新内容和检查更新均指向�
 
 | 渠道 | 版本 | Android 更新编号 | 获取方式 |
 | --- | --- | --- | --- |
-| 当前源码／预发布 | `0.8.7.1-preview.24` | `170` | [预发布 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.24) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.24.md) |
-| 先前预发布 | `0.8.7.1-preview.6` | `152` | [预发布 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.6) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.6.md) |
-| 先前预发布 | `0.8.7.1-preview.2` | `148` | [预发布 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.2) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.2.md) |
-| 先前预发布 | `0.8.5.2-preview.14` | `146` | [预发布 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.2-preview.14) · [改动与验证](./docs/RELEASE-0.8.5.2-preview.14.md) |
-| 正式版 | `0.8.5.1` | `132` | [Release 与 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1) · [改动与验证](./docs/RELEASE-0.8.5.1.md) |
-| 测试预发布 | `0.8.5.1-preview.6` | `128` | [Release 与 APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1-preview.6) · [改动与验证](./docs/ALBUM-ARTIST-PREVIEW-6.md) |
+| 当前源码／预发布 | `0.8.7.1-preview.24` | `170` | [预发布 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.24.md) |
+| 先前预发布 | `0.8.7.1-preview.6` | `152` | [预发布 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.6) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.6.md) |
+| 先前预发布 | `0.8.7.1-preview.2` | `148` | [预发布 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.2) · [改动与验证](./docs/RELEASE-0.8.7.1-preview.2.md) |
+| 先前预发布 | `0.8.5.2-preview.14` | `146` | [预发布 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.2-preview.14) · [改动与验证](./docs/RELEASE-0.8.5.2-preview.14.md) |
+| 正式版 | `0.8.5.1` | `132` | [Release 与 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1) · [改动与验证](./docs/RELEASE-0.8.5.1.md) |
+| 测试预发布 | `0.8.5.1-preview.6` | `128` | [Release 与 APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1-preview.6) · [改动与验证](./docs/ALBUM-ARTIST-PREVIEW-6.md) |
 
 先前 `0.8.7.1-preview.2` 汇总 `147–148` 的选择性适配：扩展已下载浏览、分类排序／隐藏、歌单自动保存、播客收藏／续播／下载及排序、有声书章节进度、倍速记忆、歌词断词、播放器取消和弹窗关闭修复。三星基本检查及自动测试范围见[发布说明](./docs/RELEASE-0.8.7.1-preview.2.md)。
 
@@ -151,8 +153,8 @@ Resonus 原有布局开启封面配色时，播放／暂停按钮直接使用当
 需要 **Node.js 24、pnpm 11、Java 17、Android SDK Platform 36** 及 Android 构建工具。项目使用 **Expo SDK 57**；版本和依赖以 `package.json`、`pnpm-lock.yaml` 为准。Expo Go 无法加载本项目的本地原生模块。
 
 ```bash
-git clone https://github.com/zskruc/resonus-glass.git
-cd resonus-glass
+git clone https://github.com/zskruc/RenaSongs.git
+cd RenaSongs
 git switch glass
 pnpm install --frozen-lockfile
 pnpm typecheck
@@ -178,7 +180,7 @@ bash scripts/build-glass-preview.sh
 | 内容 | 链接 |
 | --- | --- |
 | 本次预发布 | [preview.14：Primuse、缓存与验证范围（中英）](./docs/RELEASE-0.8.5.2-preview.14.md) |
-| 版本变化与 APK | [更新日志](./CHANGELOG.md) · [Releases](https://github.com/zskruc/resonus-glass/releases) |
+| 版本变化与 APK | [更新日志](./CHANGELOG.md) · [Releases](https://github.com/zskruc/RenaSongs/releases) |
 | 功能与验证范围 | [Glass 说明](./docs/LIQUID-GLASS-PREVIEW.md) |
 | 歌单双布局与七项音乐工具 | [入口、用法、边界与后续建议（中英）](./docs/PLAYLIST-MUSIC-TOOLS-PREVIEW-3.md) |
 | AMLL 播放器预览 | [布局、背景与验证边界](./docs/AMLL-PLAYER-PREVIEW.md) |
@@ -190,7 +192,7 @@ bash scripts/build-glass-preview.sh
 | 原项目功能 | [上游 README](./docs/UPSTREAM-README.md) |
 | 界面翻译 | [翻译指南](./TRANSLATING.md) |
 
-提交问题或建议请使用 [本仓库 Issues](https://github.com/zskruc/resonus-glass/issues)，中文和英文均可。请附上 Glass 版本、设备和 Android 版本、复现步骤，并说明问题是否只在本分支出现；仅由 Glass 定制造成的问题请在这里反馈。
+提交问题或建议请使用 [本仓库 Issues](https://github.com/zskruc/RenaSongs/issues)，中文和英文均可。请附上 Glass 版本、设备和 Android 版本、复现步骤，并说明问题是否只在本分支出现；仅由 Glass 定制造成的问题请在这里反馈。
 
 ## 许可证与致谢
 

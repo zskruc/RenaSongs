@@ -152,7 +152,7 @@ export function exportPodcastOPML(shows: readonly { title?: string; feedUrl?: st
     entries.push(`    <outline type="rss" text="${title}" title="${title}" xmlUrl="${escapeXML(feed)}"${site ? ` htmlUrl="${escapeXML(site)}"` : ''} />`);
   }
   const xml = ['<?xml version="1.0" encoding="UTF-8"?>', '<opml version="2.0">',
-    '  <head><title>Resonus Glass Podcasts</title>', `    <dateCreated>${now.toISOString()}</dateCreated></head>`, '  <body>',
+    '  <head><title>RenaSongs Podcasts</title>', `    <dateCreated>${now.toISOString()}</dateCreated></head>`, '  <body>',
     ...entries, '  </body>', '</opml>', ''].join('\n');
   if (new TextEncoder().encode(xml).byteLength > PODCAST_OPML_MAX_BYTES) throw new PodcastOPMLError('tooLarge');
   return { xml, exported: entries.length, skippedSensitive, skippedInvalid };

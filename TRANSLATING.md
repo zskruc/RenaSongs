@@ -1,7 +1,7 @@
-# Translating Resonus Glass
+# Translating RenaSongs
 
-Thanks for helping translate Resonus Glass. If anything here is unclear, open an
-[issue in this repository](https://github.com/zskruc/resonus-glass/issues).
+Thanks for helping translate RenaSongs. If anything here is unclear, open an
+[issue in this repository](https://github.com/zskruc/RenaSongs/issues).
 
 ## How it works
 

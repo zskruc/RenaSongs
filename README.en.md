@@ -1,32 +1,34 @@
 <p align="center">
-  <img src="./assets/images/icon-transparent.png" width="100" alt="Resonus Glass icon" />
+  <img src="./assets/images/icon-transparent.png" width="100" alt="RenaSongs icon" />
 </p>
 
-<h1 align="center">Resonus Glass</h1>
+<h1 align="center">RenaSongs</h1>
 
 <p align="center"><a href="./README.md">简体中文</a> · <strong>English</strong></p>
 
-<p align="center">An Android-focused Resonus derivative with a Liquid Glass interface</p>
+<p align="center">An Android music and podcast player for self-hosted libraries, with Apple Music-inspired layouts and native Liquid Glass</p>
 
-Resonus Glass builds on [juananzzz/resonus](https://github.com/juananzzz/resonus), retaining its self-hosted music player features and adding native refractive glass, a coordinated mini player and bottom navigation, floating glass menus, and saved material profiles for Android.
+RenaSongs (formerly Resonus Glass) builds on [juananzzz/resonus](https://github.com/juananzzz/resonus), retaining its self-hosted music player features and adding native refractive glass, a coordinated mini player and bottom navigation, floating glass menus, and saved material profiles for Android.
 
 This is an independently maintained, unofficial derivative. It is not affiliated with or endorsed by the upstream author, Apple, or Apple's music services. Glass is rendered natively on Android; it does not use Apple's private implementation or reproduce every internal iOS parameter. Development focuses on Android. Upstream's experimental iOS support is outside this branch's glass validation scope.
 
 ## Install
 
-Download the **Resonus Glass APK** from [this repository's latest release](https://github.com/zskruc/resonus-glass/releases/latest). The stable release is `0.8.5.1`, with APK `Resonus-Glass-v0.8.5.1-arm64-v8a.apk`, for ARM64 Android devices. APKs in the original project's releases are the original Resonus and do not include these changes.
+Download the **RenaSongs APK** from [this repository's latest release](https://github.com/zskruc/RenaSongs/releases/latest). The stable release is `0.8.5.1`, with APK `Resonus-Glass-v0.8.5.1-arm64-v8a.apk`, for ARM64 Android devices. APKs in the original project's releases are the original Resonus and do not include these changes.
 
-To try the new features, download **[0.8.7.1-preview.24](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.24)**, Android version code `170`. It adds background power optimizations, progressive podcast loading, categorized podcast storage and daily cleanup, alongside the earlier 17 optional tools and era-rendering improvements. Samsung checks covered background cadence, local playback locks, paused timers and screen-off playback. Existing layouts and glass profiles remain available. This prerelease requires manual installation and is excluded from the stable update check. See the [changes and validation scope](./docs/RELEASE-0.8.7.1-preview.24.md).
+Previously published APKs may still display the former Resonus Glass name. The RenaSongs name and icon take effect in new builds; historical asset filenames remain unchanged.
+
+To try the new features, download **[0.8.7.1-preview.24](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24)**, Android version code `170`. It adds background power optimizations, progressive podcast loading, categorized podcast storage and daily cleanup, alongside the earlier 17 optional tools and era-rendering improvements. Samsung checks covered background cadence, local playback locks, paused timers and screen-off playback. Existing layouts and glass profiles remain available. This prerelease requires manual installation and is excluded from the stable update check. See the [changes and validation scope](./docs/RELEASE-0.8.7.1-preview.24.md).
 
 Android 13 and later support native refraction and directional highlights. Android 12 uses GPU blur; earlier versions use a UI fallback. Appearance and smoothness depend on the device and system state.
 
-With `RESONUS_GLASS_PREVIEW=1` enabled at build time, the app is named **Resonus Glass** and uses Android package `com.zskruc.resonus.glasspreview`. It can coexist with the original app. Their sign-in state and offline files are separate. Updating an existing Glass installation requires the same package name and signing key. Do not uninstall the app to work around a signature mismatch: uninstalling removes its local data.
+With `RESONUS_GLASS_PREVIEW=1` enabled at build time, the app is named **RenaSongs** and uses Android package `com.zskruc.resonus.glasspreview`. It can coexist with the original app. Their sign-in state and offline files are separate. The rename preserves existing package identifiers, deep links and data directories. Updating an existing Glass installation requires the same package name and signing key. Do not uninstall the app to work around a signature mismatch: uninstalling removes its local data.
 
 In **Settings → About**, the GitHub link, release notes, and update check all use this repository. The update summary reads its release notes, and the APK comes from the same release. Update checks use published stable releases, excluding drafts and prereleases.
 
 For independent testing, open **Actions → Glass ARM64 test APK → Run workflow**. Each run creates a random, disposable test signing key. Its APK cannot update an existing Glass installation and is not guaranteed to update an APK from an earlier CI run. Use a separate test device or emulator. Use explicitly identified APKs in Releases for normal installation.
 
-The stable **[0.8.5.1 release](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1)** includes artist scrolling, retained-page image ownership and native mask lifecycle fixes. Samsung checks cover repeated detail navigation, scrolling and retired-page restoration; see the [release notes](./docs/RELEASE-0.8.5.1.md) for scope and memory limitations.
+The stable **[0.8.5.1 release](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1)** includes artist scrolling, retained-page image ownership and native mask lifecycle fixes. Samsung checks cover repeated detail navigation, scrolling and retired-page restoration; see the [release notes](./docs/RELEASE-0.8.5.1.md) for scope and memory limitations.
 
 ## Glass features
 
@@ -42,18 +44,18 @@ These features describe the released Glass baseline. Development previews may ch
 
 ## UI preview
 
-Resonus Glass screens and interactions captured on a Samsung device, showing pages and optional layouts in the `glass` branch. Theme, song and glass settings vary between captures; library content is illustrative. Artist/album imagery is media shown in these captures and is not bundled with the app.
+RenaSongs screens and interactions captured on a Samsung device (some captures retain the former name and icon), showing pages and optional layouts in the `glass` branch. Theme, song and glass settings vary between captures; library content is illustrative. Artist/album imagery is media shown in these captures and is not bundled with the app.
 
 <table>
   <tr>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/artist-page.jpg" width="230" alt="Taylor Swift artist page in Resonus Glass" /><br /><strong>Artist page · Taylor Swift</strong><br />Full-width photo and artwork-derived background</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/album-artist-layout.jpg" width="230" alt="Qi Li Xiang album page in Resonus Glass" /><br /><strong>Album page · 七里香</strong><br />Artist-style full-width layout</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/dock-interaction.gif" width="230" alt="Resonus Glass Bottom Tabs and Mini Player folding and unfolding during scrolling" /><br /><strong>Dock interaction</strong><br />Coordinated Mini Player and Bottom Tabs</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/artist-page.jpg" width="230" alt="Taylor Swift artist page in RenaSongs" /><br /><strong>Artist page · Taylor Swift</strong><br />Full-width photo and artwork-derived background</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/album-artist-layout.jpg" width="230" alt="Qi Li Xiang album page in RenaSongs" /><br /><strong>Album page · 七里香</strong><br />Artist-style full-width layout</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/dock-interaction.gif" width="230" alt="RenaSongs Bottom Tabs and Mini Player folding and unfolding during scrolling" /><br /><strong>Dock interaction</strong><br />Coordinated Mini Player and Bottom Tabs</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/player.jpg" width="230" alt="Resonus Glass player for Above the Chinese Restaurant" /><br /><strong>Player</strong><br />Above the Chinese Restaurant</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/lyrics.jpg" width="230" alt="Synchronized lyrics for Above the Chinese Restaurant in Resonus Glass" /><br /><strong>Synchronized lyrics</strong><br />Above the Chinese Restaurant</td>
-    <td align="center"><img src="./assets/screenshots/gallery-20261101/appearance-options.jpg" width="230" alt="Resonus Glass Appearance settings with Apple Music, Spotify and album layout choices" /><br /><strong>Layout choices</strong><br />Apple Music/Spotify, album and playlist styles</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/player.jpg" width="230" alt="RenaSongs player for Above the Chinese Restaurant" /><br /><strong>Player</strong><br />Above the Chinese Restaurant</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/lyrics.jpg" width="230" alt="Synchronized lyrics for Above the Chinese Restaurant in RenaSongs" /><br /><strong>Synchronized lyrics</strong><br />Above the Chinese Restaurant</td>
+    <td align="center"><img src="./assets/screenshots/gallery-20261101/appearance-options.jpg" width="230" alt="RenaSongs Appearance settings with Apple Music, Spotify and album layout choices" /><br /><strong>Layout choices</strong><br />Apple Music/Spotify, album and playlist styles</td>
   </tr>
 </table>
 
@@ -63,12 +65,12 @@ Choose Primuse, Artist page layout, Volta or Minidisc under **Settings → Appea
 
 | Channel | Version | Android version code | Availability |
 | --- | --- | --- | --- |
-| Current source / prerelease | `0.8.7.1-preview.24` | `170` | [Prerelease APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.24) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.24.md) |
-| Earlier prerelease | `0.8.7.1-preview.6` | `152` | [Prerelease APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.6) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.6.md) |
-| Previous prerelease | `0.8.7.1-preview.2` | `148` | [Prerelease APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.7.1-preview.2) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.2.md) |
-| Previous prerelease | `0.8.5.2-preview.14` | `146` | [Prerelease APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.2-preview.14) · [Changes and validation](./docs/RELEASE-0.8.5.2-preview.14.md) |
-| Stable | `0.8.5.1` | `132` | [Release and APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1) · [Changes and validation](./docs/RELEASE-0.8.5.1.md) |
-| Test prerelease | `0.8.5.1-preview.6` | `128` | [Release and APK](https://github.com/zskruc/resonus-glass/releases/tag/v0.8.5.1-preview.6) · [Changes and validation](./docs/ALBUM-ARTIST-PREVIEW-6.md) |
+| Current source / prerelease | `0.8.7.1-preview.24` | `170` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.24.md) |
+| Earlier prerelease | `0.8.7.1-preview.6` | `152` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.6) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.6.md) |
+| Previous prerelease | `0.8.7.1-preview.2` | `148` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.2) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.2.md) |
+| Previous prerelease | `0.8.5.2-preview.14` | `146` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.2-preview.14) · [Changes and validation](./docs/RELEASE-0.8.5.2-preview.14.md) |
+| Stable | `0.8.5.1` | `132` | [Release and APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1) · [Changes and validation](./docs/RELEASE-0.8.5.1.md) |
+| Test prerelease | `0.8.5.1-preview.6` | `128` | [Release and APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.1-preview.6) · [Changes and validation](./docs/ALBUM-ARTIST-PREVIEW-6.md) |
 
 The earlier `0.8.7.1-preview.2` collects the selective code `147–148` adaptations: downloaded browsing, library category preferences, playlist auto-save, podcast favorites/resume/downloads and ordering, audiobook chapter progress, saved speed, lyric word wrapping, player cancellation and card closing fixes. See the [release notes](./docs/RELEASE-0.8.7.1-preview.2.md) for scoped Samsung and automated validation.
 
@@ -153,8 +155,8 @@ Settings → Glass tuning still lets you compare AM++ reference, Kyant defaults 
 Use **Node.js 24, pnpm 11, Java 17, Android SDK Platform 36**, and Android build tools. This project uses **Expo SDK 57**; `package.json` and `pnpm-lock.yaml` are the source of truth for dependency versions. Expo Go cannot load this project's local native modules.
 
 ```bash
-git clone https://github.com/zskruc/resonus-glass.git
-cd resonus-glass
+git clone https://github.com/zskruc/RenaSongs.git
+cd RenaSongs
 git switch glass
 pnpm install --frozen-lockfile
 pnpm typecheck
@@ -180,7 +182,7 @@ This project provides a complete [Chinese README](./README.md) and [English READ
 | Topic | Link |
 | --- | --- |
 | This prerelease | [preview.14: Primuse, caching and validation scope (Chinese/English)](./docs/RELEASE-0.8.5.2-preview.14.md) |
-| Changes and APKs | [Changelog](./CHANGELOG.md) · [Releases](https://github.com/zskruc/resonus-glass/releases) |
+| Changes and APKs | [Changelog](./CHANGELOG.md) · [Releases](https://github.com/zskruc/RenaSongs/releases) |
 | Features and validation scope | [Glass guide](./docs/LIQUID-GLASS-PREVIEW.md) |
 | Playlist layouts and seven music tools | [Entry points, use, limits and future candidates (Chinese/English)](./docs/PLAYLIST-MUSIC-TOOLS-PREVIEW-3.md) |
 | AMLL player preview | [Layout, background and validation boundaries](./docs/AMLL-PLAYER-PREVIEW.md) |
@@ -192,7 +194,7 @@ This project provides a complete [Chinese README](./README.md) and [English READ
 | Original project features | [Upstream README](./docs/UPSTREAM-README.md) |
 | UI translations | [Translation guide](./TRANSLATING.md) |
 
-Report issues and suggestions in [this repository's Issues](https://github.com/zskruc/resonus-glass/issues), in Chinese or English. Include the Glass version, device and Android version, reproduction steps, and whether the problem occurs only in this derivative. Report issues caused by Glass customizations here.
+Report issues and suggestions in [this repository's Issues](https://github.com/zskruc/RenaSongs/issues), in Chinese or English. Include the Glass version, device and Android version, reproduction steps, and whether the problem occurs only in this derivative. Report issues caused by Glass customizations here.
 
 ## License and acknowledgements
 
