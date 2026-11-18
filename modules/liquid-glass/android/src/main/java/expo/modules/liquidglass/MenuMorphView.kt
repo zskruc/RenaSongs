@@ -480,7 +480,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()} " +
       "menuJellyFrames=$jellyFrames menuPlateFrames=$plateFrames menuSelectionDispatches=${interaction.selectionDispatches} " +
       "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${triggerSnapshot != null} " +
-      "sourceClone=${triggerSnapshot?.diagnostics()}")
+      "sourceClone=${triggerSnapshot?.diagnostics()} sourceCapture=${MenuTriggerSnapshots.captureDiagnostics()}")
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }

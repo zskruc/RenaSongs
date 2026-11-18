@@ -242,3 +242,30 @@ unit tests and mathematical motion tests are separate from the physical video
 check; none alone establishes parity with the demo's default glass anchor.
 
 本预览仅在本机构建，不推送 GitHub，不发布 Release。
+
+
+### 190: freeze real trigger pixels before hiding the original
+
+189 failed the physical source-glyph check. Its logs showed overlay draws,
+nonzero source alpha and no clip misses, yet the Sort and More glyphs were
+absent throughout the hidden-original interval and only returned at completion.
+Those diagnostics measured commands and geometry, not actual pixel content.
+
+A hardware RecordingCanvas can retain live child RenderNode references from
+ReactViewGroup. Hiding or updating the source can then alter those referenced
+nodes. Source capture now draws the exact small plain button once on a software
+ARGB8888 Canvas, scans the pixel alpha, and makes an immutable copy before the
+original may be hidden. The small animation RenderNode records only drawBitmap
+with explicit physical-pixel source/destination dimensions. Empty content,
+unsupported hardware-only children, oversized controls and failed capture leave
+the original visible. The mutable capture buffer is recycled after copying;
+the immutable copy is retained without manual recycling while RenderThread may
+still reference it. There is no full-screen source bitmap or per-frame recapture.
+
+189 exact identity, window overlay ownership and restoration remain, together
+with 188 gestures, the upstream springs and 187 material epochs. Optional private
+source PNGs and alpha/hash diagnostics supplement physical video checks; a
+nonempty bitmap alone does not prove a glyph remains visible through the final
+composite. JS source and test hashes are unchanged, so its previous 2,113-test
+suite is reused with explicit provenance; fresh native checks and device results
+are recorded separately. No GitHub push or Release is included.
