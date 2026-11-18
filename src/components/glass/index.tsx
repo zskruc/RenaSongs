@@ -3,7 +3,7 @@ import Slider, { type SliderProps } from '@react-native-community/slider';
 import { forwardRef } from 'react';
 import Animated, { useAnimatedReaction, useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import {
-  Pressable, StyleSheet, Switch, TextInput, View,
+  StyleSheet, Switch, TextInput, View,
   type ColorValue, type PressableProps, type StyleProp, type SwitchProps, type TextInputProps,
   type ViewProps, type ViewStyle,
 } from 'react-native';
@@ -16,7 +16,7 @@ import { getKyantGlassProfile } from '@/theme/glassDefaults';
 import { glassMaterialTuningMask } from '@/lib/glassMaterialTuning';
 import { traceResolvedGlassTheme } from '@/lib/glassThemeTrace';
 import { GLASS_SWITCH_SIZE } from '@/lib/glassSwitchSize';
-import { captureMenuTrigger } from '@/lib/menuOrigin';
+import { MenuTriggerPressable } from '@/components/MenuTriggerPressable';
 import { DynamicGlassBackdrop } from './StaticGlassBackdropContext';
 
 export type GlassVariant = 'regular' | 'prominent' | 'subtle' | 'button';
@@ -225,11 +225,7 @@ export const GlassPressable = forwardRef<View, GlassPressableProps>(function Gla
   const nativeProps = { ...props };
   for (const key of MATERIAL_PROPS) delete nativeProps[key];
   delete nativeProps.buttonMaterial;
-  nativeProps.onPressIn = (event) => {
-    captureMenuTrigger(event);
-    props.onPressIn?.(event);
-  };
-  return <Pressable {...nativeProps} ref={ref} />;
+  return <MenuTriggerPressable {...nativeProps} ref={ref} />;
 });
 
 export const GlassTextInput = forwardRef<TextInput, TextInputProps>(function GlassTextInput({ style, ...props }, ref) {

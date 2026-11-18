@@ -172,6 +172,7 @@ function list() {
   const scrolls: unknown[] = [];
   const dock = { dock: true };
   const module = load('components/TrackListView.tsx', runtime.react, {
+    '@/components/MenuTriggerPressable': { MenuTriggerPressable: 'Pressable' },
     '@/components/glass': { GlassBackdrop: 'GlassBackdrop', GlassPressable: 'GlassPressable' },
     '@/components/PlaylistDetailHeader': load('components/PlaylistDetailHeader.tsx', runtime.react, {
       'react-native': listNative, './Icon': icon, './Cover': { Cover: 'Cover' },

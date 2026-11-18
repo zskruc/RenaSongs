@@ -36,7 +36,7 @@ assert.ok(trigger.includes('MenuTriggerSnapshots.owns(this)') &&
   'Live source refresh must retain weak-source ownership and normalized trigger dimensions');
 assert.ok(host.includes('private val sourceHasGlass = false') &&
   host.includes('if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)') &&
-  host.includes('triggerSnapshot?.draw(canvas, motion.frame,'),
+  host.includes('triggerSnapshot?.updateOverlay(motion.frame)'),
   'Plain triggers must retain the upstream plain-source absorption rather than gain a fake glass lobe');
 const rows = host.slice(host.indexOf('fun drawRows('), host.indexOf('if (portal != null', host.indexOf('fun drawRows(')));
 assert.ok(rows.includes('interaction.drawPlate(') && rows.indexOf('interaction.drawPlate(') < rows.indexOf('drawChild(recording,'),

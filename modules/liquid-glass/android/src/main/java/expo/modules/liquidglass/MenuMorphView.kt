@@ -27,6 +27,7 @@ import expo.modules.liquidglass.menumotion.GlassFrameClock
 import expo.modules.liquidglass.menumotion.GlassMorphTuning
 import expo.modules.liquidglass.menumotion.GlassMotion
 import expo.modules.liquidglass.menumotion.GlassMorphFrame
+import expo.modules.liquidglass.menumotion.menuSourceTag
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -115,7 +116,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (value.isFinite()) requestedRadius = value.toFloat().coerceIn(0f, 200f)
   }
   internal fun setSourceRect(value: List<Double>?) {
-    requestedSource = value?.takeIf { it.size >= 4 && it.all(Double::isFinite) }?.toList()
+    requestedSource = value?.takeIf { it.size >= 4 && it.take(5).all(Double::isFinite) }?.take(6)?.toList()
   }
   internal fun setMenuRows(value: List<MenuMorphRowRecord>?) {
     finiteRows = !value.isNullOrEmpty()
@@ -150,6 +151,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (initialized && motion.expanded != requestedOpen) {
       if (!requestedOpen) {
         interaction.close()
+        triggerSnapshot?.beginClosing()
         val refreshed = RectF()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && triggerSnapshot?.currentScreenBounds(refreshed) == true) {
           source.set(refreshed)
@@ -206,7 +208,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
 
   override fun onWindowVisibilityChanged(visibility: Int) {
     super.onWindowVisibilityChanged(visibility)
-    if (visibility != VISIBLE) { interaction.close(); stopFrames() } else if (isAttachedToWindow) {
+    if (visibility != VISIBLE) {
+      interaction.close(); stopFrames(); triggerSnapshot?.detachOverlay()
+    } else if (isAttachedToWindow) {
+      if (triggerSnapshot?.attachOverlay(rootView) == false) releaseTrigger()
       frameClock.restart(animationScale)
       requestStart()
       if (initialized && (!settled || !interaction.motion.isSettled)) beginMotion()
@@ -250,8 +255,15 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     // The library's default is morphOrigin="trigger", not press-following.
     // Forcing followsPress multiplies spring position by growth and introduces
     // an initially sticky, then sudden leap for distant right-aligned cards.
+    // Only an explicit exact Pressable ref may hide a source. Geometry-only
+    // root touches never borrow a global pending descendant/toolbar snapshot.
+    val sourceTag = menuSourceTag(rect?.getOrNull(5))
+    val sourceView = sourceTag?.let { tag ->
+      try { appContext.findView<View>(tag)?.takeIf { it.id == tag } } catch (_: Exception) { null }
+    }
+    triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+      MenuTriggerSnapshots.take(source, sourceView) else null
     through.set(source)
-    triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.take(source) else null
     reserveMaterialEnvelope()
     targetRadius = requestedRadius * density
     motion.initialize(source, target, targetRadius, density, through, false, GlassMorphTuning(null, null))
@@ -262,6 +274,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     frameClock.restart(animationScale)
     beginMotion()
     applyFrame()
+    if (triggerSnapshot?.attachOverlay(rootView) == false) releaseTrigger()
     // Initial source geometry is drawn in this pre-draw before the first tick.
     invalidate()
   }
@@ -329,6 +342,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
 
   private fun applyFrame() {
     if (!initialized) return
+    triggerSnapshot?.updateOverlay(motion.frame)
     liveFrame.copyFrom(motion.frame)
     interaction.motion.deform(liveFrame.bounds,
       if (source.centerX() > rootLocation[0] + rootView.width / 2f) -1f else 1f,
@@ -417,9 +431,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       drawRows(canvas)
       canvas.restoreToCount(contentSave)
     }
-    // A nonglass trigger's foreground is drawn outside the glass portal, as in
-    // GlassMenuSession. Its real view is restored exactly at session cleanup.
-    triggerSnapshot?.draw(canvas, motion.frame, target.left, target.top)
+    // The source glyph has a full-window Drawable owner. A fixed card's HWUI
+    // recording bounds must never clip its above-card absorption/rebound.
   }
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -466,7 +479,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       "portal=${foregroundPortal?.diagnostics()} " +
       "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()} " +
       "menuJellyFrames=$jellyFrames menuPlateFrames=$plateFrames menuSelectionDispatches=${interaction.selectionDispatches} " +
-      "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${triggerSnapshot != null}")
+      "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${triggerSnapshot != null} " +
+      "sourceClone=${triggerSnapshot?.diagnostics()}")
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }
@@ -494,9 +508,8 @@ internal fun measureMenuOrigin(view: View?): List<Float>? {
     view.outlineProvider?.getOutline(view, outline)
     outline.radius.takeIf { it.isFinite() && it > 0f } ?: min(view.width, view.height) / 2f
   } catch (_: Exception) { min(view.width, view.height) / 2f }
-  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.register(view,
-    RectF(location[0].toFloat(), location[1].toFloat(),
-      location[0] + view.width * abs(view.scaleX), location[1] + view.height * abs(view.scaleY)))
+  // Measurement is read-only. Snapshot ownership comes only from sourceRect's
+  // explicit sixth tag, synchronously resolved when that menu actually opens.
   return listOf(location[0] / density, location[1] / density,
     view.width * abs(view.scaleX) / density, view.height * abs(view.scaleY) / density, corner / density)
 }

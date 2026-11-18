@@ -1,5 +1,9 @@
 /** One short-lived, screen-coordinate origin. No views, events or timers live here. */
-export type MenuOriginRect = readonly [x: number, y: number, width: number, height: number, radius: number];
+/** The first five entries remain geometry-only. Only a control's explicit
+ * native ref may authorize capture/hiding through the optional sixth tag. */
+export type MenuOriginRect =
+  | readonly [x: number, y: number, width: number, height: number, radius: number]
+  | readonly [x: number, y: number, width: number, height: number, radius: number, sourceTag: number];
 export type MenuOriginPoint = { x: number; y: number };
 
 const TOUCH_SIDE = 44;
@@ -36,19 +40,24 @@ export function createMenuOriginTracker(
   const fresh = () => pending !== null && now() >= pending.at && now() - pending.at <= ORIGIN_TTL_MS;
   return {
     clear,
-    start(point: MenuOriginPoint, tag?: number): void {
+    start(point: MenuOriginPoint, tag?: number, explicitSource = false): void {
       clear();
       if (!validPoint(point)) return;
       const own = ++sequence;
+      const validTag = Number.isSafeInteger(tag) && tag! > 0;
+      const sourceTag = explicitSource && validTag ? tag : undefined;
+      const seed: MenuOriginRect = [point.x - TOUCH_SIDE / 2, point.y - TOUCH_SIDE / 2, TOUCH_SIDE, TOUCH_SIDE, TOUCH_SIDE / 2];
       pending = { sequence: own, at: now(), point: { ...point },
-        rect: [point.x - TOUCH_SIDE / 2, point.y - TOUCH_SIDE / 2, TOUCH_SIDE, TOUCH_SIDE, TOUCH_SIDE / 2] };
-      if (!Number.isInteger(tag) || tag! <= 0) return;
+        rect: sourceTag === undefined ? seed : [...seed, sourceTag] as MenuOriginRect };
+      if (!validTag) return;
       // Native promises and even synchronous transport failures are contained.
       // The closure retains plain geometry only, never the event or its target.
       void Promise.resolve().then(() => measure(tag!)).then((value) => {
         if (!pending || pending.sequence !== own || !fresh()) return;
         const rect = measuredRect(value, pending.point);
-        if (rect) pending.rect = rect;
+        // A measurement may improve geometry, never change which explicit
+        // button this press owns (nor promote a generic descendant to one).
+        if (rect) pending.rect = sourceTag === undefined ? rect : [rect[0], rect[1], rect[2], rect[3], rect[4], sourceTag];
       }).catch(() => {});
     },
     move(point: MenuOriginPoint): void {

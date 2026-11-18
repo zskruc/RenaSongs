@@ -212,4 +212,33 @@ in place. Source/default-parameter parity, gesture/lifecycle checks and real
 Samsung observations are recorded separately; automated checks do not establish
 that this adaptation exactly matches the demo on every RN popup.
 
+
+### 189: keep the source button visible through the whole handoff
+
+The 188 device follow-up exposed a missed presentation boundary: pressing Sort,
+Download or More hid that button, while its replacement was drawn inside the
+fixed card host. The source travels above the card during the absorption tail;
+a physically correct spring alone does not establish that those pixels are
+visible. The original baseline did not show all three buttons hidden together.
+
+Popup buttons now retain individual native refs. A source transaction includes
+an optional exact tag with its geometry; generic descendant/root measurements
+remain geometry-only and cannot hide a toolbar. Native acquisition resolves the
+same attached small control synchronously, rejects composite interactive groups,
+and normalizes a fast-tap fallback to the control's actual center. Measurement
+itself no longer registers a global pending source or changes visibility.
+
+The small source RenderNode has a full-window Drawable owner, independent of the
+card's rendering bounds. Its initial frame and drawing owner are established
+before the original control is hidden. Window hiding, detach, replacement,
+failed attachment and normal completion release the same ownership; capture
+passes skip this transient overlay. Original plain-button appearance, the
+upstream nonglass absorption spring and saved optical profiles are retained.
+No full-screen filtered source texture or per-frame JS commit is introduced.
+
+Device diagnostics record window-overlay attachment, source draws and actual
+Canvas clip misses, including the 50–450 ms absorption tail. Ownership/identity
+unit tests and mathematical motion tests are separate from the physical video
+check; none alone establishes parity with the demo's default glass anchor.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。

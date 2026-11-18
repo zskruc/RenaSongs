@@ -32,7 +32,7 @@ function restoredGlassPressable() {
     ts.isIdentifier(declaration.name) && ['MATERIAL_PROPS', 'GlassPressable'].includes(declaration.name.text))).map((node) => node.getText(source)).join('\n');
   const exports: Record<string, any> = {};
   runInNewContext(ts.transpileModule(code, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022,
-    jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, forwardRef: React.forwardRef, Pressable: 'Pressable', require(name: string) {
+    jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, forwardRef: React.forwardRef, MenuTriggerPressable: 'Pressable', require(name: string) {
     assert.equal(name, 'react/jsx-runtime'); return JSXRuntime;
   } });
   return exports.GlassPressable;

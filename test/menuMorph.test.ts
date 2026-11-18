@@ -50,7 +50,7 @@ function harness(native = true) {
     'react-native-worklets': { scheduleOnRN: (call: (...args: any[]) => void, ...args: any[]) => call(...args) },
     '../../modules/liquid-glass': { isMenuMorphAvailable: native },
     '@/lib/menuMorph': { MenuMorphSession },
-    '@/lib/menuOrigin': { takeMenuOrigin: () => { consumed++; return [10, 20, 44, 44, 22]; } },
+    '@/lib/menuOrigin': { takeMenuOrigin: () => { consumed++; return [10, 20, 44, 44, 22, 77]; } },
     '@/theme/motion': { SHEET_IN: { duration: 240 }, SHEET_OUT: { duration: 160 }, motion: { reduceMotion: { essential: 0 } } },
   };
   const api: Record<string, any> = {};
@@ -71,6 +71,7 @@ test('native card authorizes its first valid draw without a JS ready round trip 
   try {
     await act(async () => { root = create(React.createElement(h.Probe, { open: true, onClose: () => closes++ })); });
     const id = h.hook.motion.sessionId;
+    const source = h.hook.motion.sourceRect;
     assert.equal(h.consumed, 1); assert.equal(h.hook.motion.ready, true);
     assert.equal(h.callbacks.length, 0, 'native open is not spent on a JS timer before Modal shows');
     const mountedRenders = h.renders;
@@ -82,9 +83,26 @@ test('native card authorizes its first valid draw without a JS ready round trip 
     assert.equal(h.renders, mountedRenders, 'open acknowledgement updates no React state');
     await act(async () => { h.hook.dismiss({ nativeEvent: {} }); h.hook.dismiss(); });
     assert.equal(h.hook.motion.open, false); assert.equal(closes, 0);
+    assert.equal(h.hook.motion.sourceRect, source, 'close must retarget to the same immutable geometry and exact source tag');
+    assert.equal(h.hook.motion.sourceRect[5], 77); assert.equal(h.hook.motion.sessionId, id);
     await act(async () => h.hook.motion.onMotionComplete(h.event(id + 900, false))); assert.equal(closes, 0);
     await act(async () => { h.hook.motion.onMotionComplete(h.event(id, false)); h.hook.motion.onMotionComplete(h.event(id, false)); });
     assert.equal(closes, 1);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('hidden sheets do not consume a source and ordinary owner rerenders cannot replace a closing presentation', async () => {
+  const h = harness(); let root!: ReactTestRenderer;
+  try {
+    await act(async () => { root = create(React.createElement(h.Probe, { open: false, onClose() {} })); });
+    assert.equal(h.consumed, 0);
+    await act(async () => root.update(React.createElement(h.Probe, { open: true, onClose() {} })));
+    const source = h.hook.motion.sourceRect, id = h.hook.motion.sessionId;
+    await act(async () => h.hook.dismiss());
+    await act(async () => root.update(React.createElement(h.Probe, { open: true, onClose() {} })));
+    assert.equal(h.consumed, 1); assert.equal(h.hook.motion.sessionId, id);
+    assert.equal(h.hook.motion.open, false); assert.equal(h.hook.motion.sourceRect, source);
+    assert.deepEqual(Array.from(source), [10, 20, 44, 44, 22, 77]);
   } finally { await act(async () => root?.unmount()); }
 });
 

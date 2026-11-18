@@ -99,7 +99,7 @@ function harness() {
     '@/lib/glassMaterialTuning': { glassMaterialTuningMask },
     '@/lib/glassThemeTrace': glassThemeTrace,
     '@/lib/glassSwitchSize': { GLASS_SWITCH_SIZE: {} },
-    '@/lib/menuOrigin': { captureMenuTrigger() {} },
+    '@/components/MenuTriggerPressable': { MenuTriggerPressable: 'Pressable' },
     './StaticGlassBackdropContext': { DynamicGlassBackdrop: 'DynamicGlassBackdrop' },
   });
   const module = load('components/Toast.tsx', {

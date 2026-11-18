@@ -50,6 +50,7 @@ import { useScreenBottomPadding } from '@/hooks/useScreenBottomPadding';
 import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
 import { centredPadding, useScreenSize } from '@/hooks/useScreenSize';
 import { useSelectionMenu } from '@/hooks/useSelectionMenu';
+import { MenuTriggerPressable } from '@/components/MenuTriggerPressable';
 import { useT } from '@/i18n';
 import { artistTargets } from '@/lib/artistNav';
 import { haptic } from '@/lib/haptics';
@@ -1322,17 +1323,17 @@ export function TrackListView({
             {appleMusic ? (
               <View style={voltaStyles.barActions}>
                 {minidisc || primusePalette ? <View style={[minidiscToolbar.group, { backgroundColor: (primusePalette ?? minidisc!.palette).controlFill }]}>
-                  {primusePalette && onSort ? <Pressable style={minidiscToolbar.button} accessibilityRole="button"
+                  {primusePalette && onSort ? <MenuTriggerPressable style={minidiscToolbar.button} accessibilityRole="button"
                     accessibilityLabel={t('Sort')} onPress={onSort}>
                     <Icon name="swap-vertical" size={22} color={primusePalette.text} />
-                  </Pressable> : null}
-                  {primusePalette && download ? <Pressable style={minidiscToolbar.button} accessibilityRole="button"
+                  </MenuTriggerPressable> : null}
+                  {primusePalette && download ? <MenuTriggerPressable style={minidiscToolbar.button} accessibilityRole="button"
                     accessibilityLabel={download.status === 'done' ? t('Remove download') : t('Download')}
                     accessibilityValue={download.status === 'active' ? { text: `${Math.round(download.progress * 100)}%` } : undefined}
                     onPress={download.onPress}>
                     {download.status === 'active' ? <ActivityIndicator color={primusePalette.text} /> : <Icon
                       name={download.status === 'done' ? 'checkmark-circle' : 'arrow-down-circle-outline'} size={23} color={primusePalette.text} />}
-                  </Pressable> : minidisc && favorite ? <FavoriteButton id={favorite.id} type={favorite.type} starred={favorite.starred}
+                  </MenuTriggerPressable> : minidisc && favorite ? <FavoriteButton id={favorite.id} type={favorite.type} starred={favorite.starred}
                     size={23} glyph="star" style={minidiscToolbar.button} /> : null}
                   {onMenu ? <GlassPressable buttonMaterial={false} style={minidiscToolbar.button} accessibilityRole="button"
                     accessibilityLabel={t('More options')} onPress={onMenu}>

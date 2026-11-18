@@ -67,6 +67,8 @@ export function useBottomSheetAnim(open: boolean, onClose?: () => void, presenta
     if (!session.close(callback)) return;
     const id = session.id;
     dismissing.value = true;
+    // Keep the same geometry/exact source tag and presentation identity for
+    // native close retargeting. A menu-row touch must not become its new source.
     update({ ...stateRef.current, open: false, ready: true });
     if (!native) {
       progress.value = withTiming(0, { ...SHEET_OUT, duration: isCard ? 180 : SHEET_OUT.duration }, (finished) => {

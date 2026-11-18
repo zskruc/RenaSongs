@@ -29,6 +29,27 @@ test('native full-button bounds replace the descendant seed, with bounded touch 
   assert.equal(tracker.take(), null, 'one press belongs to one menu');
 });
 
+test('only an explicit button identity survives immediate consumption and cannot be replaced by late geometry', async () => {
+  const first = deferred<unknown>(), second = deferred<unknown>();
+  const tracker = createMenuOriginTracker((tag) => tag === 40 ? first.promise : second.promise, () => 100);
+  tracker.start({ x: 100, y: 200 }, 40, true);
+  assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22, 40], 'fast open receives the exact tag before async measurement');
+  tracker.start({ x: 300, y: 400 }, 60, true);
+  first.resolve([270, 370, 60, 60, 30, 999]); await settle();
+  second.resolve([270, 370, 60, 60, 30, 888]); await settle();
+  assert.deepEqual(tracker.take(), [270, 370, 60, 60, 30, 60], 'an earlier result or an untrusted measurement tag cannot replace ownership');
+  assert.equal(tracker.take(), null);
+});
+
+test('generic or implicit origins never authorize hidden-source capture, including a new ordinary touch after a menu trigger', async () => {
+  const tracker = createMenuOriginTracker(async () => [80, 180, 44, 44, 22, 900], () => 100);
+  tracker.start({ x: 100, y: 200 }, 40, true);
+  tracker.start({ x: 100, y: 200 }, 50); await settle();
+  assert.deepEqual(tracker.take(), [80, 180, 44, 44, 22]);
+  tracker.start({ x: 100, y: 200 }, Number.MAX_SAFE_INTEGER + 1, true);
+  assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22]);
+});
+
 test('superseded measurements, source clears and expired presses never contaminate another menu', async () => {
   let now = 100;
   const first = deferred<unknown>(), second = deferred<unknown>();
@@ -84,11 +105,18 @@ function event(target = 7, currentTarget: unknown = { tag: 99 }) {
 test('root capture measures the touched descendant while a control press-in promotes its own host', async () => {
   const h = adapter(), press = event();
   h.api.captureMenuTouchStart(press); await settle(); assert.deepEqual(h.requests, [7]);
-  h.api.captureMenuTrigger(press); await settle(); assert.deepEqual(h.requests, [7, 99]);
+  h.api.captureMenuTrigger(press, { tag: 44 }); await settle(); assert.deepEqual(h.requests, [7, 44]);
   // React may recycle the event before the native request comes back.
   press.nativeEvent.pageY = 900; press.nativeEvent.target = 888;
   h.native.resolve([80, 180, 44, 44, 22]); await settle();
-  assert.deepEqual(Array.from(h.api.takeMenuOrigin()), [80, 180, 44, 44, 22]);
+  assert.deepEqual(Array.from(h.api.takeMenuOrigin()), [80, 180, 44, 44, 22, 44]);
+});
+
+test('event currentTarget alone retains geometry fallback but cannot authorize hiding the enclosing toolbar', async () => {
+  const h = adapter(); h.api.captureMenuTrigger(event());
+  await settle(); assert.deepEqual(h.requests, [99]);
+  h.native.resolve([80, 180, 132, 44, 22]); await settle();
+  assert.deepEqual(Array.from(h.api.takeMenuOrigin()), [80, 180, 132, 44, 22]);
 });
 
 test('touch release promotion works, while keyboard activation and multi-touch clear an unrelated origin', () => {
@@ -101,7 +129,7 @@ test('touch release promotion works, while keyboard activation and multi-touch c
   h.api.captureMenuTouchStart(multiple); assert.equal(h.api.takeMenuOrigin(), null);
 });
 
-test('GlassPressable forwards its ref, styling, presses and press-in event while adding capture', () => {
+test('GlassPressable delegates original props and ref to the exact trigger wrapper without adding material', () => {
   const text = readFileSync(new URL('../src/components/glass/index.tsx', import.meta.url), 'utf8');
   const file = ts.createSourceFile('glass.tsx', text, ts.ScriptTarget.Latest, true);
   const statement = file.statements.find((node) => ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText(file) === 'GlassPressable'));
@@ -110,14 +138,15 @@ test('GlassPressable forwards its ref, styling, presses and press-in event while
   const jsx = (type: unknown, props: object) => ({ type, props });
   runInNewContext(ts.transpileModule(statement.getText(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText, { exports, forwardRef: (render: unknown) => render, Pressable: 'Pressable',
+  }).outputText, { exports, forwardRef: (render: unknown) => render, MenuTriggerPressable: 'MenuTriggerPressable',
     require(name: string) { assert.equal(name, 'react/jsx-runtime'); return { jsx }; },
-    captureMenuTrigger: (value: unknown) => { calls.push(value); },
     MATERIAL_PROPS: ['variant', 'radius'],
   });
   const press = () => {}, pressIn = (value: unknown) => { calls.push(value); }, ref = {}, style = { color: 'red' };
   const result = exports.GlassPressable({ onPress: press, onPressIn: pressIn, style, disabled: true, variant: 'subtle', radius: 20, buttonMaterial: true }, ref);
+  assert.equal(result.type, 'MenuTriggerPressable');
   assert.equal(result.props.ref, ref); assert.equal(result.props.onPress, press); assert.equal(result.props.style, style); assert.equal(result.props.disabled, true);
-  assert.equal('variant' in result.props, false); assert.equal('buttonMaterial' in result.props, false);
-  const input = event(); result.props.onPressIn(input); assert.deepEqual(calls, [input, input]);
+  assert.equal(result.props.onPressIn, pressIn, 'capture belongs to one shared trigger wrapper, not two nested press-in handlers');
+  assert.equal('variant' in result.props, false); assert.equal('radius' in result.props, false); assert.equal('buttonMaterial' in result.props, false);
+  const input = event(); result.props.onPressIn(input); assert.deepEqual(calls, [input]);
 });

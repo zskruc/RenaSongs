@@ -60,11 +60,13 @@ export function captureMenuTouchMove(event: GestureResponderEvent): void {
 }
 
 /** A control's own press-in can promote the descendant measurement to the
- * complete button. Both existing press handlers and forwarded refs stay intact. */
+ * complete button. Only an explicit ref authorizes native trigger capture;
+ * currentTarget/target fallbacks supply geometry without hiding a shared row. */
 export function captureMenuTrigger(event: GestureResponderEvent, target?: unknown): void {
   const at = point(event);
   if (!at) { tracker.clear(); return; }
-  tracker.start(at, tagOf(target ?? event.currentTarget) ?? tagOf(event.nativeEvent.target));
+  const sourceTag = tagOf(target);
+  tracker.start(at, sourceTag ?? tagOf(event.currentTarget) ?? tagOf(event.nativeEvent.target), sourceTag !== undefined);
 }
 
 export const takeMenuOrigin = () => tracker.take();

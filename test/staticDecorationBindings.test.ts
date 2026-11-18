@@ -45,7 +45,7 @@ function harness(platform = 'android') {
     '../../../modules/liquid-glass': bridge, '@/store/glassTuning': { useGlassTuning: (select: any) => select(tuning), resolveGlassProfile: () => profile, sanitizeGlassOverrides: (value: any) => value },
     '@/theme': theme, '@/theme/glassDefaults': { getKyantGlassProfile: () => profile }, '@/lib/glassMaterialTuning': { glassMaterialTuningMask: () => 63 },
     '@/lib/glassThemeTrace': { traceResolvedGlassTheme() {} }, '@/lib/glassSwitchSize': { GLASS_SWITCH_SIZE: {} },
-    '@/lib/menuOrigin': { captureMenuTrigger() {} },
+    '@/components/MenuTriggerPressable': { MenuTriggerPressable: 'Pressable' },
     './StaticGlassBackdropContext': { DynamicGlassBackdrop: ({ children }: any) => React.createElement(React.Fragment, null, children) },
   });
   const card = load('../src/components/AlbumEraCard.tsx', { react, 'react/jsx-runtime': JSXRuntime, 'react-native': native,
