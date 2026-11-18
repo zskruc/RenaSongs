@@ -127,3 +127,12 @@ half4 main(float2 coord) {
 }
 """
 
+/** The original source-and-rows shader above remains unchanged. An ordinary
+ * menu has one uniformly faded content image, so apply that scalar only after
+ * the unchanged Gaussian/lens/coverage operations instead of creating HWUI's
+ * additional alpha saveLayer around the entire reserved rows rectangle.
+ */
+internal val GlassForegroundPortalOpacityShader = GlassForegroundPortalShader
+    .replace("uniform shader content;", "uniform shader content;\nuniform float contentOpacity;")
+    .replace("* half(coverage);", "* half(coverage) * half(contentOpacity);")
+

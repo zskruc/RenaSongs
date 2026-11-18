@@ -20,3 +20,4 @@ done
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalRowsHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalFuseHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalFuseMotionHarnessKt
+"$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalEarlyFrameHarnessKt

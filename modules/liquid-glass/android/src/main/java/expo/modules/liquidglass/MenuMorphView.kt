@@ -680,7 +680,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (!captureEnvelope.intersect(rootLocation[0].toFloat(), rootLocation[1].toFloat(),
         rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
     val capacity = menuLayerCapacity(target.width(), target.height(), source.height(), density)
-    material.reserveMenuMorph(captureEnvelope, capacity.width, capacity.height)
+    material.reserveMenuMorph(captureEnvelope, capacity.width, capacity.height, sourceHasGlass)
     foregroundPortal?.reserve(target, target.left, target.top, captureEnvelope, sourceHasGlass)
     lockedFieldStep = max(5f * density, max(captureEnvelope.width(), captureEnvelope.height()) / 64f)
     foregroundBounds.set(captureEnvelope)

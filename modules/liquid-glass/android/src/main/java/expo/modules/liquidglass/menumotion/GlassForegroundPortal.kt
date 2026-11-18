@@ -20,6 +20,8 @@ import android.view.View
 import androidx.annotation.RequiresApi
 import java.util.WeakHashMap
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 
@@ -28,7 +30,9 @@ import kotlin.math.min
 internal class GlassForegroundPortal(density: Float) {
   // A/B opt-out is read once for this renderer, never on the motion hot path.
   private val legacyForeground = Log.isLoggable("ResonusGlassLegacyForeground", Log.DEBUG)
+  private val legacyEarlyFrames = Log.isLoggable("ResonusGlassLegacyEarlyFrames", Log.DEBUG)
   private val samplingExtent = RectF()
+  private val outputClip = RectF()
   private var samplingExtentValid = false
   private var lensDisplacement = 0f
   private var rowsGaussian: RenderEffect? = null
@@ -39,6 +43,11 @@ internal class GlassForegroundPortal(density: Float) {
   private var groupedDraws = 0L
   private var boundaryFallbackDraws = 0L
   private val portal = RuntimeShader(GlassForegroundPortalShader)
+  private val opacityPortalDelegate = lazy { RuntimeShader(GlassForegroundPortalOpacityShader) }
+  private val opacityPortal by opacityPortalDelegate
+  private var activePortal = portal
+  private var opacityInShader = false
+  private var shaderOpacityDraws = 0L
   private val texture = GlassFieldTexture()
   private val foregroundNode = RenderNode("ResonusMenu.foreground")
   private val rowsNode = RenderNode("ResonusMenu.rows")
@@ -78,6 +87,8 @@ internal class GlassForegroundPortal(density: Float) {
   private var nodeResizes = 0L
   private var effectRebuilds = 0L
   private var rowsEffectRebuilds = 0L
+  private var outputClipDraws = 0L
+  private var outputClipSavedPixels = 0L
 
   /** Called at session attachment or an actual target/window layout change. */
   fun reserve(target: RectF, @Suppress("UNUSED_PARAMETER") originX: Float,
@@ -101,23 +112,32 @@ internal class GlassForegroundPortal(density: Float) {
     // Opacity belongs to the bounded raster node. Applying it to the full-size
     // RN body promotes that native View to a full physical hardware alpha layer
     // before this portal's sampling transform, defeating the pixel budget.
-    rowsNode.setAlpha(rowsOpacity)
+    // A nongroup menu has exactly one foreground image. Its uniform opacity
+    // commutes with both linear filters, so keep the filtered node opaque and
+    // apply the scalar in its final portal shader. This avoids HWUI's large
+    // additional "alpha caused saveLayer". Group source/rows have independent
+    // opacity and retain the original shader, node alpha and composition.
+    opacityInShader = !hasSource && !legacyEarlyFrames
+    rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)
+    activePortal = if (opacityInShader) opacityPortal else portal
     generation++
     // Invisible rows are skipped by GlassMenuSession before foreground draw.
     if (!rowsVisible && !sourceVisible) return
-    portal.setFloatUniform("center", incoming.centerX(), incoming.centerY())
-    portal.setFloatUniform("halfSize", incoming.width() / 2f, incoming.height() / 2f)
-    portal.setFloatUniform("cornerRadii", frame.radiusX, frame.radiusY)
+    val shader = activePortal
+    if (opacityInShader) shader.setFloatUniform("contentOpacity", rowsOpacity)
+    shader.setFloatUniform("center", incoming.centerX(), incoming.centerY())
+    shader.setFloatUniform("halfSize", incoming.width() / 2f, incoming.height() / 2f)
+    shader.setFloatUniform("cornerRadii", frame.radiusX, frame.radiusY)
     val secondary = if (hasSource) outgoing else incoming
-    portal.setFloatUniform("secondaryEnabled", if (hasSource) 1f else 0f)
-    portal.setFloatUniform("secondaryCenter", secondary.centerX(), secondary.centerY())
-    portal.setFloatUniform("secondaryHalfSize", secondary.width() / 2f, secondary.height() / 2f)
-    portal.setFloatUniform("secondaryRadii", frame.sourceRadius, frame.sourceRadius)
-    portal.setFloatUniform("smoothing", frame.smoothing)
+    shader.setFloatUniform("secondaryEnabled", if (hasSource) 1f else 0f)
+    shader.setFloatUniform("secondaryCenter", secondary.centerX(), secondary.centerY())
+    shader.setFloatUniform("secondaryHalfSize", secondary.width() / 2f, secondary.height() / 2f)
+    shader.setFloatUniform("secondaryRadii", frame.sourceRadius, frame.sourceRadius)
+    shader.setFloatUniform("smoothing", frame.smoothing)
     texture.update(field)
-    texture.bind(portal)
-    portal.setFloatUniform("height", frame.lensHeight)
-    portal.setFloatUniform("amount", frame.lensAmount)
+    texture.bind(shader)
+    shader.setFloatUniform("height", frame.lensHeight)
+    shader.setFloatUniform("amount", frame.lensAmount)
     portalBlur = frame.portalBlur
   }
 
@@ -191,9 +211,9 @@ internal class GlassForegroundPortal(density: Float) {
       effectTop != area.top || effectScale != scale
     if (effectChanged) {
       effectGeneration = generation; effectLeft = area.left; effectTop = area.top; effectScale = scale
-      portal.setFloatUniform("nodeOrigin", area.left, area.top)
-      portal.setFloatUniform("rasterScale", scale)
-      portalEffect = RenderEffect.createRuntimeShaderEffect(portal, "content")
+      activePortal.setFloatUniform("nodeOrigin", area.left, area.top)
+      activePortal.setFloatUniform("rasterScale", scale)
+      portalEffect = RenderEffect.createRuntimeShaderEffect(activePortal, "content")
       if (diagnosticsEnabled) effectRebuilds++
     }
     // The legacy intermediate clips its Gaussian output before portal sampling.
@@ -253,10 +273,29 @@ internal class GlassForegroundPortal(density: Float) {
       try { recording.drawRenderNode(if (grouped) sourceCompositeNode else rowsNode) } finally { foregroundNode.endRecording() }
     }
     wasWarping = true
-    canvas.drawRenderNode(if (fused) rowsNode else foregroundNode)
+    val node = if (fused) rowsNode else foregroundNode
+    // The portal shader returns exact transparent black outside its field's
+    // conservative support. Discard only that final transparent output; never
+    // change a recording, intermediate clip, filter radius, sampling origin or
+    // node capacity. Retain additional lens/Gaussian reach inside the output
+    // clip so HWUI's filter culling has the same needed input neighbourhood.
+    // The source-and-rows path keeps its original drawing byte-for-byte.
+    if (!hasSource && !grouped && !legacyEarlyFrames && prepareOutputClip(area, scale)) {
+      val save = canvas.save()
+      try {
+        canvas.clipRect(outputClip)
+        canvas.drawRenderNode(node)
+      } finally { canvas.restoreToCount(save) }
+      if (diagnosticsEnabled) {
+        outputClipDraws++
+        outputClipSavedPixels += max(0L, width.toLong() * height -
+          ceil(outputClip.width() * scale).toLong() * ceil(outputClip.height() * scale).toLong())
+      }
+    } else canvas.drawRenderNode(node)
     drawMode = nextMode
     if (diagnosticsEnabled) {
       draws++
+      if (opacityInShader) shaderOpacityDraws++
       if (grouped) groupedDraws++ else if (fused) fusedDraws++ else {
         legacyDraws++
         if (!legacyForeground) boundaryFallbackDraws++
@@ -293,7 +332,10 @@ internal class GlassForegroundPortal(density: Float) {
     "portalNodeResizes" to nodeResizes, "portalEffectRebuilds" to effectRebuilds,
     "portalRowsEffectRebuilds" to rowsEffectRebuilds, "portalMaxPhysicalPixels" to maxPhysicalPixels,
     "portalMaxRasterPixels" to maxRasterPixels, "portalMaxCompensatedBlurPx" to maxCompensatedBlur,
-    "portalMaxScreenBlurPx" to maxScreenBlur)
+    "portalMaxScreenBlurPx" to maxScreenBlur, "portalOutputClipDraws" to outputClipDraws,
+    "portalOutputClipSavedPixels" to outputClipSavedPixels,
+    "portalShaderOpacityDraws" to shaderOpacityDraws,
+    "portalLegacyEarlyFrames" to if (legacyEarlyFrames) 1 else 0)
 
   private fun clearTransientNodes() {
     if (!wasWarping) return
@@ -321,6 +363,9 @@ internal class GlassForegroundPortal(density: Float) {
     rowsSigmaX = 0f; rowsSigmaY = 0f
     texture.update(null)
     texture.bind(portal)
+    if (opacityPortalDelegate.isInitialized()) texture.bind(opacityPortal)
+    activePortal = portal
+    opacityInShader = false
     texture.release()
   }
 
@@ -371,6 +416,32 @@ internal class GlassForegroundPortal(density: Float) {
     val margin = lensDisplacement * 1.01f + 2f / scale
     return samplingExtent.left - margin > area.left && samplingExtent.top - margin > area.top &&
       samplingExtent.right + margin < area.right && samplingExtent.bottom + margin < area.bottom
+  }
+
+  /** Output support is independent of input image extent. This clip is placed
+   * AFTER both original filters; it cannot crop a recorded source or Gaussian.
+   * The existing analytic support bound above includes the complete field
+   * texture domain, rather than assuming its interpolated values are an SDF.
+   * Invalid inputs preserve the previous unbounded final draw.
+   */
+  private fun prepareOutputClip(area: RectF, scale: Float): Boolean {
+    if (!samplingExtentValid || !scale.isFinite() || scale <= 0f ||
+      !rowsSigmaX.isFinite() || !rowsSigmaY.isFinite() || !portalBlur.isFinite()) return false
+    val sigma = max(max(abs(rowsSigmaX), abs(rowsSigmaY)), GlassPortalBlur.sigma(portalBlur))
+    // A generous guard for native blur culling (not a new blur radius). The
+    // shader itself is already exactly zero outside samplingExtent. Lens
+    // displacement plus six sigmas and four raster texels are left untouched.
+    val margin = lensDisplacement * 1.01f + 6f * sigma + 4f / scale
+    if (!margin.isFinite()) return false
+    val left = max(area.left, area.left + floor((samplingExtent.left - margin - area.left) * scale) / scale)
+    val top = max(area.top, area.top + floor((samplingExtent.top - margin - area.top) * scale) / scale)
+    val right = min(area.right, area.left + ceil((samplingExtent.right + margin - area.left) * scale) / scale)
+    val bottom = min(area.bottom, area.top + ceil((samplingExtent.bottom + margin - area.top) * scale) / scale)
+    if (!left.isFinite() || !top.isFinite() || !right.isFinite() || !bottom.isFinite() ||
+      right <= left || bottom <= top ||
+      (left <= area.left && top <= area.top && right >= area.right && bottom >= area.bottom)) return false
+    outputClip.set(left, top, right, bottom)
+    return true
   }
 
   private companion object {

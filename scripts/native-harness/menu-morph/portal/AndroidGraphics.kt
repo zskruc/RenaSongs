@@ -3,8 +3,15 @@ package android.graphics
 /** Call/accounting fixture only. No claim of Android pixels or GPU effects. */
 open class Canvas(val isHardwareAccelerated: Boolean = true) {
   val replayed = ArrayList<String>()
-  fun save(): Int = 1
-  fun restoreToCount(value: Int) = Unit
+  val clips = ArrayList<RectF>()
+  var saves = 0
+  var restores = 0
+  fun save(): Int { saves++; return saves }
+  fun restoreToCount(value: Int) { restores++ }
+  fun clipRect(rect: RectF): Boolean {
+    clips += RectF(rect.left, rect.top, rect.right, rect.bottom)
+    return rect.width() > 0f && rect.height() > 0f
+  }
   fun scale(x: Float, y: Float) = Unit
   fun translate(x: Float, y: Float) = Unit
   fun drawRenderNode(node: RenderNode) { replayed += node.name }
@@ -52,13 +59,14 @@ class RenderNode(val name: String) {
 }
 
 open class Shader { enum class TileMode { DECAL } }
-class RuntimeShader(source: String) : Shader() {
-  fun setFloatUniform(name: String, vararg values: Float) = Unit
+class RuntimeShader(val source: String) : Shader() {
+  val floats = LinkedHashMap<String, FloatArray>()
+  fun setFloatUniform(name: String, vararg values: Float) { floats[name] = values }
 }
-class RenderEffect(val kind: String, val x: Float = 0f, val y: Float = 0f, val outer: RenderEffect? = null, val inner: RenderEffect? = null) {
+class RenderEffect(val kind: String, val x: Float = 0f, val y: Float = 0f, val outer: RenderEffect? = null, val inner: RenderEffect? = null, val shader: RuntimeShader? = null) {
   companion object {
     fun createBlurEffect(x: Float, y: Float, mode: Shader.TileMode) = RenderEffect("blur", x, y)
     fun createChainEffect(outer: RenderEffect, inner: RenderEffect) = RenderEffect("chain", outer = outer, inner = inner)
-    fun createRuntimeShaderEffect(shader: RuntimeShader, input: String) = RenderEffect("shader")
+    fun createRuntimeShaderEffect(shader: RuntimeShader, input: String) = RenderEffect("shader", shader = shader)
   }
 }

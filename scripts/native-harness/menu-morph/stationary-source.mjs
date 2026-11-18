@@ -102,8 +102,12 @@ assert.doesNotMatch(epochRenderingWithoutDiagnosticFlag, /\bmenuRaster\.|\bmenuR
 const rasterLayout = material.slice(material.indexOf('private fun MenuRasterLayout('), material.indexOf('private fun DockMaterialCapacity('));
 assert.ok(rasterLayout.includes('epoch.pixels(physicalWidth), epoch.pixels(physicalHeight)') &&
   rasterLayout.includes('scaleX = epoch.inverseScale') && rasterLayout.includes('scaleY = epoch.inverseScale') &&
-  rasterLayout.includes('transformOrigin = TransformOrigin(0f, 0f)') && rasterLayout.includes('alpha = menuGroupOpacity'),
-  'Raster dimensions, inverse scale and opacity must commit together in the same Compose layer');
+  rasterLayout.includes('transformOrigin = TransformOrigin(0f, 0f)') &&
+  rasterLayout.includes('alpha = if (optimizeMenuEarlyFrames && !menuHasGroupedSource) 1f else menuGroupOpacity'),
+  'The grouped source and legacy paths keep the original viewport opacity and inverse transform');
+assert.ok(material.includes('optimizeMenuEarlyFrames && !menuHasGroupedSource && menuMaterialCapacity != IntSize.Zero') &&
+  material.includes('canvas.saveLayerAlpha(left, top, right, bottom, (menuGroupOpacity * 255f).roundToInt())'),
+  'The ordinary animated material must still composite its overlapping paint as a group within its live bounds');
 assert.ok(material.includes('epoch.pixels(menuCapacity.width)') && material.includes('epoch.pixels(menuCapacity.height)') &&
   material.includes('DockMaterialCapacity(epoch)') && material.includes('DockMaterialLayout(epoch)'),
   'Kyant filtered layer capacities must be rasterized, not left at full physical resolution');
@@ -119,8 +123,10 @@ assert.ok(material.includes('if (menuMaterial.active && !menuRasterCompositionAt
   rasterLayout.includes('menuRasterCompositionAttached = true'),
   'The first menu draw must wait for its first coherent Compose placement');
 const portal = readFileSync(new URL('menumotion/GlassForegroundPortal.kt', native), 'utf8');
-assert.ok(portal.includes('rowsNode.setAlpha(rowsOpacity)'),
-  'Foreground reveal must live on the compact rows node instead of a full native body alpha layer');
+assert.ok(portal.includes('opacityInShader = !hasSource && !legacyEarlyFrames') &&
+  portal.includes('rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)') &&
+  portal.includes('if (opacityInShader) shader.setFloatUniform("contentOpacity", rowsOpacity)'),
+  'Ordinary rows use output opacity and grouped/legacy rows retain their original compact node alpha');
 console.log('Menu material epoch source contract passed (captured cohort, identity native viewport, committed source origins, compact alpha groups).');
 
 assert.ok(material.includes('epoch.blurRadius(rasterBlur / epoch.scale)'),

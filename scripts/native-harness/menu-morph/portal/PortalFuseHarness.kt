@@ -15,6 +15,9 @@ private fun near(a: Float, b: Float) = abs(a - b) < .0001f
 
 /** Actual private candidate, call-counting graphics boundary: NOT pixel/GPU proof. */
 fun main() {
+  // This fixture isolates the existing201 fused graph; the new early-frame
+  // opacity/clip mode has its own independent fixture below.
+  Log.legacyEarly = true
   val canvas = Canvas()
   val viewport = RectF(0f, 0f, 1600f, 2600f)
   val frame = GlassMorphFrame().apply {

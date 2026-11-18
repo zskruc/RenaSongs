@@ -6,6 +6,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.RenderEffect
 import android.graphics.Path
 import android.os.Build
 import android.util.Log
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -53,6 +55,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.BackdropEffectScope
 import com.kyant.backdrop.ShapeProvider
 import com.kyant.backdrop.backdrops.rememberCanvasBackdrop
 import com.kyant.backdrop.drawBackdrop
@@ -69,6 +72,7 @@ import com.facebook.react.uimanager.ReactPointerEventsView
 import kotlin.math.roundToInt
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.floor
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
@@ -179,6 +183,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   // cannot split the committed density/source/layout cohort.
   private val menuRaster = MenuMaterialRaster(forceFullResolution =
     Log.isLoggable("ResonusGlassFullMaterial", Log.DEBUG))
+  private val optimizeMenuEarlyFrames = !Log.isLoggable("ResonusGlassLegacyEarlyFrames", Log.DEBUG)
+  private var menuHasGroupedSource by mutableStateOf(false)
+  private var menuBoundedAlphaDraws = 0L
+  private var menuBoundedAlphaMaxPixels = 0L
+  private var menuBaseFilters: MenuBaseFilters? = null
   private var menuRasterScale by mutableFloatStateOf(1f)
   private var menuGroupOpacity by mutableFloatStateOf(1f)
   private var menuRasterCompositionAttached = false
@@ -324,10 +333,13 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   }
 
   /** Native-only fixed viewport for a menu; RN layout and optical settings stay unchanged. */
-  internal fun reserveMenuMorph(screenBounds: RectF, layerWidth: Int, layerHeight: Int) {
+  internal fun reserveMenuMorph(screenBounds: RectF, layerWidth: Int, layerHeight: Int, hasGroupedSource: Boolean) {
+    menuHasGroupedSource = hasGroupedSource
     getLocationOnScreen(sampleLocation)
     if (!menuMaterial.active) {
       menuRasterSizeChanges = 0
+      menuBoundedAlphaDraws = 0
+      menuBoundedAlphaMaxPixels = 0
       menuRasterLastWidth = 0
       menuRasterLastHeight = 0
       menuRasterMaxMaterialPixels = 0
@@ -395,6 +407,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     "materialRasterCommittedScale" to menuRasterCommittedScale,
     "materialRasterNativeAlpha" to alpha,
     "materialRasterGroupAlpha" to menuGroupOpacity,
+    "materialBoundedAlphaDraws" to menuBoundedAlphaDraws,
+    "materialBoundedAlphaMaxPixels" to menuBoundedAlphaMaxPixels,
     "materialFieldOptics" to (menuFieldOptics?.diagnostics() ?: emptyMap<String, Any>()),
     "handoffPatchPreparation" to (snapshot?.menuHandoffPatchDiagnostics() ?: emptyMap<String, Any>())
   )
@@ -490,6 +504,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   internal fun clearMenuMorph() {
     if (!menuMaterial.clear()) return
     menuMaterialCapacity = IntSize.Zero
+    menuBaseFilters = null
+    menuHasGroupedSource = false
     menuRaster.clear()
     menuRasterScale = 1f
     menuGroupOpacity = 1f
@@ -1057,14 +1073,12 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             shape = glassShape,
             effects = {
               if (enabled) {
-                if (dialogMaterial) {
-                  colorControls(brightness = if (isDark) 0f else 0.2f, saturation = 1.5f)
-                } else {
-                  vibrancy()
-                }
+                val rasterBlur = glassBlur.dp.toPx()
+                val radius = if (uniformButtonOptics) 0f
+                  else if (menuMaterial.active) epoch.blurRadius(rasterBlur / epoch.scale) else rasterBlur
+                val brightness = if (dialogMaterial && !isDark) 0.2f else 0f
+                applyMenuBaseFilters(this, brightness, radius, dialogMaterial)
                 if (!uniformButtonOptics) {
-                  val rasterBlur = glassBlur.dp.toPx()
-                  blur(if (menuMaterial.active) epoch.blurRadius(rasterBlur / epoch.scale) else rasterBlur)
                   val boundedLens = amPlusMaterial || mediaBottomPopup
                   val edge = if (boundedLens && glassRefraction > 0f && glassRefractionHeight > 0f)
                     AmPlusDockGeometry.edgeLens(size.height, size.width, 24f.dp.toPx()) else 0f
@@ -1162,6 +1176,27 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     }
   }
 
+  private data class MenuBaseFilters(
+    val brightness: Float, val radius: Float, val dialog: Boolean,
+    val effect: RenderEffect?, val padding: Float
+  )
+
+  /** Color and blur are stationary in this raster epoch. Only the lens that
+   * follows them depends on the live outline. Preserve the exact filter order
+   * and restore its padding before constructing the next lens. */
+  private fun applyMenuBaseFilters(scope: BackdropEffectScope, brightness: Float, radius: Float, dialog: Boolean) {
+    val reuse = optimizeMenuEarlyFrames && menuMaterial.active && !menuHasGroupedSource
+    val cached = if (reuse) menuBaseFilters else null
+    if (cached != null && cached.brightness == brightness && cached.radius == radius && cached.dialog == dialog) {
+      scope.renderEffect = cached.effect
+      scope.padding = cached.padding
+      return
+    }
+    if (dialog) scope.colorControls(brightness = brightness, saturation = 1.5f) else scope.vibrancy()
+    scope.blur(radius)
+    if (reuse) menuBaseFilters = MenuBaseFilters(brightness, radius, dialog, scope.renderEffect, scope.padding)
+  }
+
   /** Fixed outer constraints supply capacity; the child still measures its live outline. */
   @Composable
   private fun MenuRasterLayout(epoch: MenuMaterialRasterEpoch, content: @Composable () -> Unit) {
@@ -1175,7 +1210,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           transformOrigin = TransformOrigin(0f, 0f)
           scaleX = epoch.inverseScale
           scaleY = epoch.inverseScale
-          alpha = menuGroupOpacity
+          alpha = if (optimizeMenuEarlyFrames && !menuHasGroupedSource) 1f else menuGroupOpacity
         }
         menuRasterCommittedScale = epoch.scale
         menuRasterActualWidth = child.width
@@ -1220,7 +1255,34 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     // Only this one Compose drawing child is measured during a morph. The RN
     // host and its labels, buttons and accessibility bounds keep fixed layout.
     // Read progress in measurement, never the root composition/drawing setup.
-    Layout(content = content, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
+    val groupAlphaModifier = if (optimizeMenuEarlyFrames && !menuHasGroupedSource && menuMaterialCapacity != IntSize.Zero) {
+      Modifier.drawWithContent {
+        if (menuHasGroupedSource || menuGroupOpacity >= 1f) {
+          drawContent()
+        } else if (menuGroupOpacity > 0f) {
+          // This content is clipped by MenuMorphView to the live contour.
+          // Reserve that contour with an outward guard and align to small
+          // buckets so a growing shape need not allocate a new size each tick.
+          val edge = 2f
+          val bucket = 64f
+          val left = (floor((materialOffsetX * epoch.scale - edge) / bucket) * bucket).coerceIn(0f, size.width)
+          val top = (floor((materialOffsetY * epoch.scale - edge) / bucket) * bucket).coerceIn(0f, size.height)
+          val right = (ceil(((materialOffsetX + materialWidth) * epoch.scale + edge) / bucket) * bucket)
+            .coerceIn(left, size.width)
+          val bottom = (ceil(((materialOffsetY + materialHeight) * epoch.scale + edge) / bucket) * bucket)
+            .coerceIn(top, size.height)
+          if (right > left && bottom > top) {
+            val canvas = drawContext.canvas.nativeCanvas
+            val checkpoint = canvas.saveLayerAlpha(left, top, right, bottom, (menuGroupOpacity * 255f).roundToInt())
+            try { drawContent() } finally { canvas.restoreToCount(checkpoint) }
+            menuBoundedAlphaDraws++
+            menuBoundedAlphaMaxPixels = maxOf(menuBoundedAlphaMaxPixels,
+              (right - left).toLong() * (bottom - top).toLong())
+          }
+        }
+      }
+    } else Modifier
+    Layout(content = content, modifier = Modifier.fillMaxSize().then(groupAlphaModifier)) { measurables, constraints ->
       val fullWidth = constraints.maxWidth
       val fullHeight = constraints.maxHeight
       @Suppress("UNUSED_VARIABLE") val menuVersion = menuMaterialVersion

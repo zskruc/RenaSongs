@@ -87,14 +87,16 @@ assert.ok(sourceRecording.includes('node.beginRecording(bitmap.width, bitmap.hei
 assert.doesNotMatch(sourceRecording, /(?:setAlpha|setScale|setTranslation|setRenderEffect|\.draw\(software|Bitmap\.createBitmap|recycle)\s*\(/,
   'Re-recording missing source pixels must not change physical pose/alpha/sourceBlur or capture live views again');
 assert.ok(portal.includes('val grouped = hasSource && drawSource != null') &&
-  portal.includes('rowsNode.setAlpha(rowsOpacity)') &&
+  portal.includes('opacityInShader = !hasSource && !legacyEarlyFrames') &&
+  portal.includes('rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)') &&
+  portal.includes('activePortal = if (opacityInShader) opacityPortal else portal') &&
   portal.includes('GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)') &&
   portal.includes('sourceCompositeNode.setRenderEffect(') &&
   portal.includes('drawSource?.invoke(recording)') &&
   portal.includes('if (rowsVisible) recording.drawRenderNode(rowsNode)') &&
   portal.includes('recording.drawRenderNode(if (grouped) sourceCompositeNode else rowsNode)') &&
   portal.includes('rowsGaussian = if (blurX > 0f || blurY > 0f)') &&
-  portal.includes('portalEffect = RenderEffect.createRuntimeShaderEffect(portal, "content")') &&
+  portal.includes('portalEffect = RenderEffect.createRuntimeShaderEffect(activePortal, "content")') &&
   portal.includes('} ?: portalEffect else rowsGaussian)') &&
   portal.includes('if (!fused && (effectChanged || modeChanged)) foregroundNode.setRenderEffect(portalEffect)'),
   'Group source and rows must retain independent blur/reveal then compose before common portal blur/lens; ordinary fused-row behavior stays separate');
@@ -105,7 +107,8 @@ assert.ok(portal.includes('val fused = !hasSource && !grouped && !legacyForegrou
   portal.includes('rowsNode.setScaleY(if (fused) 1f / scale else 1f)') &&
   portal.includes('rowsNode.setTranslationX(if (fused) area.left else 0f)') &&
   portal.includes('rowsNode.setTranslationY(if (fused) area.top else 0f)') &&
-  portal.includes('canvas.drawRenderNode(if (fused) rowsNode else foregroundNode)'),
+  portal.includes('val node = if (fused) rowsNode else foregroundNode') &&
+  portal.includes('} else canvas.drawRenderNode(node)'),
   'Only a bounded non-glass-source path may fuse; grouped/legacy rows must restore identity transforms and continue through the independent common foreground node');
 assert.ok(material.includes('menuFieldShape ?: menuMorphShape ?: restingGlassShape') &&
   material.includes('menuFieldOptics!!.applyLens(this, epoch.scale, menuCommittedOpticalOrigin(),') &&
