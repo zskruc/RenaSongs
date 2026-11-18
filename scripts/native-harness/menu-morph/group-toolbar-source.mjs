@@ -62,6 +62,16 @@ assert.ok(foreground.includes('recording.drawBitmap(bitmap, null, RectF(') &&
   'All captured group glyphs need independent source opacity/zoom/blur tracks, not the rows fade');
 assert.doesNotMatch(foreground, /(?:getPixels|Bitmap\.createBitmap|\.recycle|\.draw\(software)\s*\(/,
   'Animated group replay may not recapture or recycle immutable source pixels');
+const groupReplay = foreground.slice(foreground.indexOf('fun draw(canvas:'), foreground.indexOf('fun diagnostics('));
+assert.ok(groupReplay.includes('if (node.alpha <= .001f) return') &&
+  groupReplay.includes('if (lastBlur <= .01f)') &&
+  groupReplay.includes('node.translationX + bitmap.width / 2f, node.translationY + bitmap.height / 2f') &&
+  groupReplay.includes('canvas.scale(node.scaleX, node.scaleY)') &&
+  groupReplay.includes('directPaint.alpha = (node.alpha * 255f).roundToInt().coerceIn(0, 255)') &&
+  groupReplay.includes('canvas.drawBitmap(bitmap, null, directRect, directPaint)') &&
+  groupReplay.includes('canvas.drawRenderNode(node)') &&
+  foreground.includes('RenderEffect.createBlurEffect(lastBlur, lastBlur, Shader.TileMode.DECAL)'),
+  'Only the already-unblurred source phase may draw immutable pixels directly with the same center/pivot/alpha; active sourceBlur must retain its independent Gaussian track');
 assert.ok(portal.includes('val grouped = hasSource && drawSource != null') &&
   portal.includes('rowsNode.setAlpha(rowsOpacity)') &&
   portal.includes('GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)') &&
