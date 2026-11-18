@@ -17,7 +17,7 @@ for motion_source in "$SOURCE"/*.kt; do
   esac
 done
 "$JAVA" -cp "$LIBS" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -jvm-target 17 -cp "$LIBS" -d "$OUT" \
-  "${MOTION_SOURCES[@]}" "$SOURCE/../MenuMaterialGeometry.kt" "$SOURCE/../MenuMaterialRaster.kt" "$SOURCE/../MenuUnderlayCachePolicy.kt" "$SOURCE/../RecordedBackdropBridge.kt" "$SOURCE/../BoundedRetirementQueue.kt" "$SOURCE/../BackdropSceneChanges.kt" "$SOURCE/../MenuMorphFieldCoordinates.kt" "$SOURCE/../MenuGroupSourceRecipe.kt" "$SOURCE/../MenuHandoffPatchGeometry.kt" "$HERE"/scene/*.kt "$HERE/AndroidGraphics.kt" "$HERE/MenuMorphHarness.kt" "$HERE/PortalRasterHarness.kt" "$HERE/MaterialRasterHarness.kt" "$HERE/MaterialRasterEpochHarness.kt" "$HERE/JellyInteractionHarness.kt" "$HERE/SourceOwnershipHarness.kt" "$HERE/SourcePixelsHarness.kt" "$HERE/SourceCaptureHarness.kt" "$HERE/MenuUnderlayCacheHarness.kt" "$HERE/BackdropSceneChangesHarness.kt" "$HERE/MenuFieldOpticsHarness.kt" "$HERE/MenuSourceHandoffHarness.kt" "$HERE/MenuHandoffPatchHarness.kt"
+  "${MOTION_SOURCES[@]}" "$SOURCE/../MenuMaterialGeometry.kt" "$SOURCE/../MenuMaterialRaster.kt" "$SOURCE/../MenuUnderlayCachePolicy.kt" "$SOURCE/../RecordedBackdropBridge.kt" "$SOURCE/../BoundedRetirementQueue.kt" "$SOURCE/../BackdropSceneChanges.kt" "$SOURCE/../MenuMorphFieldCoordinates.kt" "$SOURCE/../MenuGroupSourceRecipe.kt" "$SOURCE/../MenuHandoffPatchGeometry.kt" "$HERE"/scene/*.kt "$HERE/AndroidGraphics.kt" "$HERE/MenuMorphHarness.kt" "$HERE/PortalRasterHarness.kt" "$HERE/MaterialRasterHarness.kt" "$HERE/MaterialRasterEpochHarness.kt" "$HERE/JellyInteractionHarness.kt" "$HERE/SourceOwnershipHarness.kt" "$HERE/SourcePixelsHarness.kt" "$HERE/SourceCaptureHarness.kt" "$HERE/MenuUnderlayCacheHarness.kt" "$HERE/BackdropSceneChangesHarness.kt" "$HERE/MenuFieldOpticsHarness.kt" "$HERE/MenuSourceHandoffHarness.kt" "$HERE/MenuHandoffPatchHarness.kt" "$HERE/MenuAtomicHandoffHarness.kt"
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MenuMorphHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalRasterHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MaterialRasterHarnessKt
@@ -31,6 +31,7 @@ done
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.MenuFieldOpticsHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MenuSourceHandoffHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.MenuHandoffPatchHarnessKt
+"$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MenuAtomicHandoffHarnessKt
 # Real production Portal update/draw with call-counting Android fixtures; this
 # is separate from pure numeric invariants and does not claim GPU presentation.
 bash "$HERE/portal/run.sh"

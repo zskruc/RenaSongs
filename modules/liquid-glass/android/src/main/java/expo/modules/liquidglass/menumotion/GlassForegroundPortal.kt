@@ -15,6 +15,7 @@ import android.graphics.RenderNode
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.util.Log
 import android.view.View
 import androidx.annotation.RequiresApi
 import java.util.WeakHashMap
@@ -25,6 +26,18 @@ import kotlin.math.min
 /** Upstream foreground lens; the existing material remains a separate pass. */
 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
 internal class GlassForegroundPortal(density: Float) {
+  // A/B opt-out is read once for this renderer, never on the motion hot path.
+  private val legacyForeground = Log.isLoggable("ResonusGlassLegacyForeground", Log.DEBUG)
+  private val samplingExtent = RectF()
+  private var samplingExtentValid = false
+  private var lensDisplacement = 0f
+  private var rowsGaussian: RenderEffect? = null
+  private var portalEffect: RenderEffect? = null
+  private var drawMode = -1
+  private var fusedDraws = 0L
+  private var legacyDraws = 0L
+  private var groupedDraws = 0L
+  private var boundaryFallbackDraws = 0L
   private val portal = RuntimeShader(GlassForegroundPortalShader)
   private val texture = GlassFieldTexture()
   private val foregroundNode = RenderNode("ResonusMenu.foreground")
@@ -81,6 +94,7 @@ internal class GlassForegroundPortal(density: Float) {
     outgoing.set(frame.sourceLobe)
     outgoing.offset(-originX, -originY)
     this.hasSource = hasSource
+    updateSamplingExtent(frame, field)
     val rowsOpacity = frame.rowsOpacity.coerceIn(0f, 1f)
     rowsVisible = rowsOpacity > .001f
     sourceVisible = hasSource && frame.sourceOpacity > .001f
@@ -159,13 +173,15 @@ internal class GlassForegroundPortal(density: Float) {
     // With a real glass trigger, rows and source retain independent opacity
     // and Gaussian tracks before they meet the portal. A shared rows alpha or
     // fused rows blur would erase/blur the toolbar along the wrong timeline.
+    var gaussianChanged = false
     if (rowsVisible) {
       val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)
       val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, if (grouped) 0f else portalSigma, scale)
       if (blurX != rowsEffectX || blurY != rowsEffectY) {
         rowsEffectX = blurX; rowsEffectY = blurY
-        rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
-          RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null)
+        rowsGaussian = if (blurX > 0f || blurY > 0f)
+          RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null
+        gaussianChanged = true
         if (diagnosticsEnabled) rowsEffectRebuilds++
       }
     }
@@ -177,9 +193,27 @@ internal class GlassForegroundPortal(density: Float) {
       effectGeneration = generation; effectLeft = area.left; effectTop = area.top; effectScale = scale
       portal.setFloatUniform("nodeOrigin", area.left, area.top)
       portal.setFloatUniform("rasterScale", scale)
-      foregroundNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(portal, "content"))
+      portalEffect = RenderEffect.createRuntimeShaderEffect(portal, "content")
       if (diagnosticsEnabled) effectRebuilds++
     }
+    // The legacy intermediate clips its Gaussian output before portal sampling.
+    // Fuse only if EVERY possibly nonzero portal sample is strictly inside that
+    // domain, including smoothed-field interpolation and worst-case lens shift.
+    // At cropped window edges we retain the original two-node path.
+    val fused = !hasSource && !grouped && !legacyForeground && samplingFits(area, scale)
+    val nextMode = if (grouped) 2 else if (fused) 1 else 0
+    val modeChanged = drawMode != nextMode
+    rowsNode.setPivotX(0f); rowsNode.setPivotY(0f)
+    rowsNode.setScaleX(if (fused) 1f / scale else 1f)
+    rowsNode.setScaleY(if (fused) 1f / scale else 1f)
+    rowsNode.setTranslationX(if (fused) area.left else 0f)
+    rowsNode.setTranslationY(if (fused) area.top else 0f)
+    if (rowsVisible && (gaussianChanged || effectChanged || modeChanged)) {
+      rowsNode.setRenderEffect(if (fused) rowsGaussian?.let {
+        RenderEffect.createChainEffect(checkNotNull(portalEffect), it)
+      } ?: portalEffect else rowsGaussian)
+    }
+    if (!fused && (effectChanged || modeChanged)) foregroundNode.setRenderEffect(portalEffect)
     // A grouped source can stay visible after its rows have disappeared. Do
     // not record/filter a body that the composite will not draw. Keep the last
     // recorded generation: a reverse/reveal update advances generation, so its
@@ -214,14 +248,19 @@ internal class GlassForegroundPortal(density: Float) {
         if (rowsVisible) recording.drawRenderNode(rowsNode)
       } finally { sourceCompositeNode.endRecording() }
     }
-    if (dimensionsChanged || !foregroundNode.hasDisplayList() || grouped) {
+    if (!fused && (dimensionsChanged || !foregroundNode.hasDisplayList() || grouped || modeChanged)) {
       val recording = foregroundNode.beginRecording(width, height)
       try { recording.drawRenderNode(if (grouped) sourceCompositeNode else rowsNode) } finally { foregroundNode.endRecording() }
     }
     wasWarping = true
-    canvas.drawRenderNode(foregroundNode)
+    canvas.drawRenderNode(if (fused) rowsNode else foregroundNode)
+    drawMode = nextMode
     if (diagnosticsEnabled) {
       draws++
+      if (grouped) groupedDraws++ else if (fused) fusedDraws++ else {
+        legacyDraws++
+        if (!legacyForeground) boundaryFallbackDraws++
+      }
       maxPhysicalPixels = max(maxPhysicalPixels, (area.width() * area.height()).toLong())
       maxRasterPixels = max(maxRasterPixels, width.toLong() * height)
     }
@@ -247,6 +286,9 @@ internal class GlassForegroundPortal(density: Float) {
   }
 
   fun diagnostics(): Map<String, Number> = mapOf("portalDraws" to draws, "portalRecords" to records,
+    "portalFusedDraws" to fusedDraws, "portalLegacyDraws" to legacyDraws,
+    "portalGroupedDraws" to groupedDraws, "portalBoundaryFallbackDraws" to boundaryFallbackDraws,
+    "portalLegacyConfigured" to if (legacyForeground) 1 else 0,
     "portalInvisibleSkips" to invisibleSkips, "portalRasterReservations" to rasterReservations,
     "portalNodeResizes" to nodeResizes, "portalEffectRebuilds" to effectRebuilds,
     "portalRowsEffectRebuilds" to rowsEffectRebuilds, "portalMaxPhysicalPixels" to maxPhysicalPixels,
@@ -263,6 +305,10 @@ internal class GlassForegroundPortal(density: Float) {
     sourceCompositeNode.discardDisplayList()
     sourceCompositeNode.setRenderEffect(null)
     compositeBlur = Float.NaN
+    rowsGaussian = null; portalEffect = null; drawMode = -1
+    rowsNode.setScaleX(1f); rowsNode.setScaleY(1f)
+    rowsNode.setTranslationX(0f); rowsNode.setTranslationY(0f)
+    samplingExtentValid = false
     rowsEffectX = Float.NaN; rowsEffectY = Float.NaN
     effectGeneration = -1L; renderedGeneration = -1L
     nodeWidth = 0; nodeHeight = 0
@@ -276,6 +322,55 @@ internal class GlassForegroundPortal(density: Float) {
     texture.update(null)
     texture.bind(portal)
     texture.release()
+  }
+
+  /**
+   * Conservative analytic support proof for the unchanged shader:
+   * For zMax >= 1 the continuous-corner polynomial has Bernstein coefficients
+   * <= .125298 < .13, hence raw >= zMax - (.13 / .87).
+   * The alternate branch is >= 1 when zMax >= 1. Thus distance >= 6 outside
+   * incoming expanded by (.15 * expandedRadius + 6) / inverseAxis. The shader
+   * returns exact zero when distance > 5. Degenerate radii use its box branch.
+   * Inside the texture domain we assume ANY distance can cover, not that this
+   * approximate field is an exact SDF. Its whole domain is included instead.
+   */
+  private fun updateSamplingExtent(frame: GlassMorphFrame, field: GlassGaussianField?) {
+    samplingExtentValid = false
+    lensDisplacement = abs(frame.lensAmount)
+    val rx = abs(frame.radiusX); val ry = abs(frame.radiusY)
+    if (!rx.isFinite() || !ry.isFinite() || !lensDisplacement.isFinite() || !frame.lensHeight.isFinite()) return
+    val minimum = min(rx, ry)
+    val growX: Float
+    val growY: Float
+    if (minimum <= .000001f) {
+      growX = 6f; growY = 6f
+    } else {
+      val radius = min(max(rx, .001f), max(ry, .001f))
+      val expanded = radius * 1.5286649465560913f
+      growX = (.15f * expanded + 6f) * max(rx, .001f) / radius
+      growY = (.15f * expanded + 6f) * max(ry, .001f) / radius
+    }
+    samplingExtent.set(incoming.left - growX, incoming.top - growY,
+      incoming.right + growX, incoming.bottom + growY)
+    if (field != null) {
+      if (!field.step.isFinite() || field.step <= 0f || field.width < 2 || field.height < 2 ||
+        !field.originX.isFinite() || !field.originY.isFinite()) return
+      samplingExtent.set(min(samplingExtent.left, field.originX), min(samplingExtent.top, field.originY),
+        max(samplingExtent.right, field.originX + field.width * field.step),
+        max(samplingExtent.bottom, field.originY + field.height * field.step))
+    }
+    samplingExtentValid = samplingExtent.left.isFinite() && samplingExtent.top.isFinite() &&
+      samplingExtent.right.isFinite() && samplingExtent.bottom.isFinite()
+  }
+
+  private fun samplingFits(area: RectF, scale: Float): Boolean {
+    if (!samplingExtentValid || !scale.isFinite() || scale <= 0f) return false
+    // Analytic/normalized-half gradients and cubic interpolation have each
+    // component bounded by 1. Include 1% arithmetic slack plus two raster texels
+    // so interpolation and clip-edge roundoff never rely on exact equality.
+    val margin = lensDisplacement * 1.01f + 2f / scale
+    return samplingExtent.left - margin > area.left && samplingExtent.top - margin > area.top &&
+      samplingExtent.right + margin < area.right && samplingExtent.bottom + margin < area.bottom
   }
 
   private companion object {

@@ -10,6 +10,8 @@ const shaders = read('MenuMorphFieldShaders.kt'), backdrop = read('WindowBackdro
 const sourceOwnership = read('menumotion/MenuSourceOwnership.kt');
 const handoffPatch = read('MenuHandoffPatch.kt');
 const handoffGeometry = read('MenuHandoffPatchGeometry.kt');
+const atomic = read('MenuAtomicSourceHandoff.kt');
+const atomicPolicy = read('menumotion/MenuAtomicHandoffPolicy.kt');
 const kyantShaders = readFileSync(new URL('../../../modules/liquid-glass/android/vendor/backdrop-1.0.0/src/main/java/com/kyant/backdrop/Shaders.kt', import.meta.url), 'utf8');
 const start = host.slice(host.indexOf('private fun requestStart('), host.indexOf('private fun updateTarget('));
 assert.ok(start.includes('menuSourceTag(rect?.getOrNull(6))') &&
@@ -237,4 +239,43 @@ assert.ok(beginHandoff.indexOf('isMenuHandoffPatchCurrent(patch, this)') < begin
   terminal.indexOf('patch.draw(canvas, target.left, target.top, sourceFillBounds, liveFrame.sourceRadius)') < terminal.indexOf('drawSourceFill(canvas, 0f, false)') &&
   terminal.includes('preparedHandoffPatch = null'),
   'Only an exact pre-return patch may lock for handoff; terminal draws raw background before unchanged source fill/glyphs and rejects invalidated patches');
-console.log('Whole-toolbar source contract passed (explicit group/through, window ownership, independent tracks, shared optics, press presets and bounded opaque source-buffer handoff; complete device phases still required).');
+const atomicAvailable = host.slice(host.indexOf('private fun atomicSourceHandoffAvailable('), host.indexOf('private fun tryBeginAtomicSourceHandoff('));
+const beginAtomic = host.slice(host.indexOf('private fun tryBeginAtomicSourceHandoff('), host.indexOf('private fun finishSourceHandoff('));
+assert.ok(atomicAvailable.includes('Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE') &&
+  beginAtomic.includes('Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE') &&
+  beginHandoff.indexOf('if (tryBeginAtomicSourceHandoff(snapshot, ticket)) return true') < beginHandoff.indexOf('snapshot.restoreSourceForHandoff') &&
+  atomic.includes('sourceRoot !== targetRoot') && atomic.includes('sourceRoot.isAttachedToWindow && targetRoot.isAttachedToWindow') &&
+  atomic.includes('sourceRoot.isHardwareAccelerated && targetRoot.isHardwareAccelerated') &&
+  atomic.includes('sourceRoot.rootSurfaceControl != null && targetRoot.rootSurfaceControl != null'),
+  'API34 distinct attached hardware roots must qualify before primary atomic handoff; unsupported roots retain the existing fallback');
+assert.ok(atomic.includes('SurfaceSyncGroup("RenaSongsMenuSource")') &&
+  atomic.includes('addSource = { group.add(sourceRoot.rootSurfaceControl, null) }') &&
+  atomic.includes('addTarget = { group.add(targetRoot.rootSurfaceControl, null) }') &&
+  atomic.includes('commit.addTransactionCommittedListener(executor) { weak.get()?.onCommitted() }') &&
+  atomic.includes('group.addTransaction(commit)') && !atomic.includes('addSyncCompleteCallback('),
+  'Atomic source return must join both roots without add-runnable mutations and observe the merged SurfaceControl transaction commit, not merely sync readiness');
+assert.ok(atomicPolicy.indexOf('sourceJoined = addSource()') < atomicPolicy.indexOf('targetJoined = addTarget()') &&
+  atomicPolicy.indexOf('targetJoined = addTarget()') < atomicPolicy.indexOf('installCommit()') &&
+  atomicPolicy.indexOf('installCommit()') < atomicPolicy.indexOf('staged = stage()') &&
+  atomicPolicy.includes('stageUncertain = phase == "stage"') &&
+  atomicPolicy.includes('finally {\n    try {\n      markReady()'),
+  'Both membership successes and commit registration must precede stage; every created-group failure attempts readiness and stage exceptions cannot promise rollback');
+assert.ok(atomic.includes('try { sourceRoot.invalidate(); targetRoot.invalidate() }') &&
+  atomic.includes('finally { group.markSyncReady() }') &&
+  atomic.includes('try { transaction?.close() }') &&
+  atomic.includes('val weak = WeakReference(this)') && atomic.includes('fun cancel() { completion = null }') &&
+  atomic.includes('if (committed) return') && atomic.includes('completion = null'),
+  'Partial groups must trigger bounded root traversal and readiness, close only their donor transaction and leave no strong menu callback in the unremovable platform listener');
+assert.ok(beginAtomic.includes('handoffTicket == ticket && isAttachedToWindow') &&
+  beginAtomic.includes('activeSession == ticket.session && !requestedOpen && isAttachedToWindow') &&
+  beginAtomic.indexOf('snapshot.restoreSourceForHandoff') < beginAtomic.indexOf('drawing.hideForAtomicHandoff()') &&
+  beginAtomic.includes('if (!result.staged && !result.stageUncertain)') &&
+  beginAtomic.includes('mainHandler.postDelayed(timeout, 2_000L)') &&
+  !beginAtomic.includes('registerFrameCommitCallback('),
+  'Atomic stage must revalidate the exact presentation, return source and hide Dialog together; a possibly staged group waits for its own commit/watchdog instead of launching parallel fallback');
+assert.ok(finishHandoff.includes('atomicSourceHandoff?.cancel()') &&
+  finishHandoff.includes('atomicSourceHandoff = null') &&
+  owner.includes('visibility = if (atomicHandoffHidden) INVISIBLE else VISIBLE') &&
+  owner.includes('if (!suppressed && !atomicHandoffHidden) visibility = VISIBLE'),
+  'Reopen/detach/disposal must revoke the coordinator callback; capture restoration cannot resurrect the Dialog source hidden by an atomic handoff');
+console.log('Whole-toolbar source contract passed (explicit group/through, independent tracks/optics, bounded fallback patch and dual-root atomic handoff lifecycle; actual compositor presentation still requires device pixels).');

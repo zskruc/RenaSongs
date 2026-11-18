@@ -25,13 +25,20 @@ class RenderNode(val name: String) {
     private set
   private var displayList = false
   fun setPosition(left: Int, top: Int, right: Int, bottom: Int) = Unit
-  fun setPivotX(value: Float) = Unit
-  fun setPivotY(value: Float) = Unit
-  fun setScaleX(value: Float) = Unit
-  fun setScaleY(value: Float) = Unit
-  fun setTranslationX(value: Float) = Unit
-  fun setTranslationY(value: Float) = Unit
-  fun setClipToBounds(value: Boolean) = Unit
+  var actualPivotX = Float.NaN; private set
+  var actualPivotY = Float.NaN; private set
+  var actualScaleX = 1f; private set
+  var actualScaleY = 1f; private set
+  var actualTranslationX = 0f; private set
+  var actualTranslationY = 0f; private set
+  var clipped = false; private set
+  fun setPivotX(value: Float) { actualPivotX = value }
+  fun setPivotY(value: Float) { actualPivotY = value }
+  fun setScaleX(value: Float) { actualScaleX = value }
+  fun setScaleY(value: Float) { actualScaleY = value }
+  fun setTranslationX(value: Float) { actualTranslationX = value }
+  fun setTranslationY(value: Float) { actualTranslationY = value }
+  fun setClipToBounds(value: Boolean) { clipped = value }
   fun setAlpha(value: Float) { alphaValue = value }
   fun setRenderEffect(value: RenderEffect?) { effectUpdates++; effect = value }
   fun beginRecording(width: Int, height: Int): Canvas {
@@ -48,9 +55,10 @@ open class Shader { enum class TileMode { DECAL } }
 class RuntimeShader(source: String) : Shader() {
   fun setFloatUniform(name: String, vararg values: Float) = Unit
 }
-class RenderEffect(val kind: String, val x: Float = 0f, val y: Float = 0f) {
+class RenderEffect(val kind: String, val x: Float = 0f, val y: Float = 0f, val outer: RenderEffect? = null, val inner: RenderEffect? = null) {
   companion object {
     fun createBlurEffect(x: Float, y: Float, mode: Shader.TileMode) = RenderEffect("blur", x, y)
+    fun createChainEffect(outer: RenderEffect, inner: RenderEffect) = RenderEffect("chain", outer = outer, inner = inner)
     fun createRuntimeShaderEffect(shader: RuntimeShader, input: String) = RenderEffect("shader")
   }
 }

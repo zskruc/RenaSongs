@@ -18,3 +18,5 @@ done
 "$JAVA" -cp "$LIBS" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -nowarn -no-stdlib -no-reflect -jvm-target 17 \
   -cp "$LIBS" -d "$OUT" "${MOTION_SOURCES[@]}" "$HERE/AndroidGraphics.kt" "$HERE"/portal/*.kt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalRowsHarnessKt
+"$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalFuseHarnessKt
+"$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalFuseMotionHarnessKt
