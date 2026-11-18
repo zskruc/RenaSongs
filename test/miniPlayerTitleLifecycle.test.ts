@@ -8,6 +8,8 @@ import * as dockRules from '../src/lib/liquidDock';
 import * as buttonRules from '../src/lib/glassButtonMotion';
 import * as swipeRules from '../src/lib/miniPlayerSwipe';
 import { createPlayerRevealGuard } from '@/lib/playerRevealOwner';
+import { MenuMorphSession } from '@/lib/menuMorph';
+import { MenuPresentationRegistry } from '@/lib/menuPresentation';
 
 type Element = { type: unknown; props: Record<string, any> };
 const jsx = (type: unknown, props: object): Element => ({ type, props });
@@ -16,6 +18,7 @@ const mutable = (value: any) => ({ value, get() { return this.value; }, set(next
 // Actual MiniPlayer branching and props; Marquee's internal native identities,
 // measurement state and focus/foreground clocks are tested in marqueeLifecycle.
 function harness() {
+  const menus = new MenuPresentationRegistry();
   const appListeners = new Set<(state: string) => void>();
   const animationReaders: (() => any)[] = [];
   const dock = { amPlus: false, enabled: true, compact: false, hasSearch: false, progress: mutable(0) };
@@ -49,6 +52,7 @@ function harness() {
     '@/hooks/useFavoriteIds': { useFavoriteIds: () => null },
     '@/hooks/useLiquidDock': { useLiquidDock: () => dock, COMPACT_DOCK_GAP: 8, COMPACT_DOCK_SIZE: 48 },
     '@/hooks/useScreenSize': { useScreenSize: () => ({ width: 400, height: 800 }) },
+    '@/hooks/useMenuPresentationActive': { useMenuPresentationActive: menus.getSnapshot },
     '@/i18n': { useT: () => (text: string) => text },
     '@/lib/haptics': {}, '@/lib/liquidDock': dockRules, '@/lib/amppDock': ampp,
     '@/lib/glassButtonMotion': buttonRules, '@/lib/miniPlayerSwipe': swipeRules,
@@ -79,7 +83,7 @@ function harness() {
     const element = node as Element;
     return [...(element.type === type ? [{ node: element, path }] : []), ...find(element.props.children, type, `${path}.children`)];
   };
-  return { settings, song, dock, find,
+  return { settings, song, dock, find, menus,
     handlers, app: (state: string) => appListeners.forEach((listener) => listener(state)),
     cardMotion: () => animationReaders.map((read) => read()).find((style) => style.opacity !== undefined
       && style.transform?.length === 1 && style.transform[0].translateY !== undefined),
@@ -127,6 +131,26 @@ test('only real compact endpoints or the user setting change the mini title layo
   const tree = h.render();
   assert.equal(h.find(tree, 'MarqueeText').length, 0);
   assert.equal(h.find(tree, 'Text').length, 1, 'the explicit setting still selects ordinary ellipsized text');
+});
+
+test('a covered MiniPlayer pauses only its mounted marquee through the entire menu close and resumes afterwards', () => {
+  const h = harness(), menu = new MenuMorphSession(h.menus);
+  const original = h.find(h.render(), 'MarqueeText')[0];
+  const id = menu.begin();
+  const covered = h.find(h.render(), 'MarqueeText')[0];
+  assert.equal(covered.node.props.active, false);
+  assert.equal(covered.node.props.enabled, true);
+  assert.equal(covered.path, original.path, 'covering the app must retain the title tree/measurement/offset');
+  menu.complete(id, true); menu.close();
+  assert.equal(h.find(h.render(), 'MarqueeText')[0].node.props.active, false);
+  menu.complete(id + 1, false);
+  assert.equal(h.find(h.render(), 'MarqueeText')[0].node.props.active, false);
+  menu.complete(id, false);
+  const resumed = h.find(h.render(), 'MarqueeText')[0];
+  assert.equal(resumed.node.props.active, true);
+  assert.equal(resumed.path, original.path);
+  assert.equal(h.find(h.render(false), 'MarqueeText')[0].node.props.active, false,
+    'closing a popup cannot override an independently covered player route');
 });
 
 test('the real MiniPlayer only offers a playlist hold on its visible expanded favorite control', () => {

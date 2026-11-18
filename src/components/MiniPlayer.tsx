@@ -38,6 +38,7 @@ import { playerRevealGuard } from '@/lib/playerRevealOwner';
 import { pushOnce } from '@/lib/pushOnce';
 import { currentSong, useLiveInfo, usePlayerStore } from '@/store/player';
 import { useScreenSize } from '@/hooks/useScreenSize';
+import { useMenuPresentationActive } from '@/hooks/useMenuPresentationActive';
 import { useSettings } from '@/store/settings';
 import { useToast } from '@/store/toast';
 import { BOTTOM_BAR_HORIZONTAL_MARGIN, BOTTOM_BAR_MAX_WIDTH, MINI_PLAYER_HEIGHT, TAB_BAR_HEIGHT, fontSize, spacing, themed, useThemeMode } from '@/theme';
@@ -69,6 +70,7 @@ interface MiniPlayerProps {
 }
 
 export function MiniPlayer(props: MiniPlayerProps = {}) {
+  const menuActive = useMenuPresentationActive();
   const { width: screenW, height: screenH } = useScreenSize();
   const dock = useLiquidDock();
   const amPlus = dock.amPlus;
@@ -489,7 +491,7 @@ export function MiniPlayer(props: MiniPlayerProps = {}) {
                     text={live?.title ?? displayed?.title ?? song.title}
                     style={[styles.title, { color: foreground }]}
                     enabled={expandedControls}
-                    active={props.active ?? true}
+                    active={(props.active ?? true) && !menuActive}
                   /> : <Text style={[styles.title, { color: foreground }]} numberOfLines={1}>
                     {live?.title ?? displayed?.title ?? song.title}
                   </Text>}

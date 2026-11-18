@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import type { NativeSyntheticEvent } from 'react-native';
 import type Animated from 'react-native-reanimated';
 import type { MenuOriginRect } from './menuOrigin';
+import { menuPresentations, type MenuPresentationRegistry } from './menuPresentation';
 
 export type MenuMorphEvent = NativeSyntheticEvent<{ sessionId: number; open: boolean }>;
 export interface MenuMorphController {
@@ -29,11 +30,17 @@ export class MenuMorphSession {
   id = 0;
   phase: 'closed' | 'opening' | 'open' | 'closing' = 'closed';
   private after: (() => void) | undefined;
+  private readonly presentations: MenuPresentationRegistry;
+
+  constructor(presentations: MenuPresentationRegistry = menuPresentations) {
+    this.presentations = presentations;
+  }
 
   begin(): number {
     this.id = sessionId();
     this.phase = 'opening';
     this.after = undefined;
+    this.presentations.begin(this, this.id);
     return this.id;
   }
   close(after?: unknown): boolean {
@@ -53,12 +60,15 @@ export class MenuMorphSession {
     this.phase = 'closed';
     const after = this.after;
     this.after = undefined;
+    this.presentations.end(this, id);
     after?.();
     return true;
   }
   invalidate(): void {
+    const previous = this.id;
     this.id = sessionId();
     this.phase = 'closed';
     this.after = undefined;
+    this.presentations.end(this, previous);
   }
 }

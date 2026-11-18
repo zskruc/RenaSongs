@@ -65,6 +65,7 @@ function harness(presentation: 'amll' | 'resonus' = 'amll', amPlus = false) {
     '@/hooks/useLiquidDock': { useLiquidDock: () => ({ amPlus, enabled: true, compact: false, hasSearch: true, progress: mutable(0) }),
       COMPACT_DOCK_GAP: 8, COMPACT_DOCK_SIZE: 48 },
     '@/hooks/useScreenSize': { useScreenSize: () => ({ width: 400, height: 800 }) },
+    '@/hooks/useMenuPresentationActive': { useMenuPresentationActive: () => false },
     '@/i18n': { useT: () => (text: string) => text },
     '@/lib/haptics': {}, '@/lib/liquidDock': dockRules, '@/lib/amppDock': ampp,
     '@/lib/glassButtonMotion': buttonRules, '@/lib/miniPlayerSwipe': swipeRules,
