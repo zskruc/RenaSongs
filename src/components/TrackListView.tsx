@@ -51,6 +51,7 @@ import { useLiquidDockScrollHandler } from '@/hooks/useLiquidDock';
 import { centredPadding, useScreenSize } from '@/hooks/useScreenSize';
 import { useSelectionMenu } from '@/hooks/useSelectionMenu';
 import { MenuTriggerPressable } from '@/components/MenuTriggerPressable';
+import { MenuTriggerGroup } from '@/components/MenuTriggerGroup';
 import { useT } from '@/i18n';
 import { artistTargets } from '@/lib/artistNav';
 import { haptic } from '@/lib/haptics';
@@ -1322,7 +1323,7 @@ export function TrackListView({
             </Reanimated.Text>
             {appleMusic ? (
               <View style={voltaStyles.barActions}>
-                {minidisc || primusePalette ? <View style={[minidiscToolbar.group, { backgroundColor: (primusePalette ?? minidisc!.palette).controlFill }]}>
+                {minidisc || primusePalette ? <MenuTriggerGroup style={[minidiscToolbar.group, { backgroundColor: (primusePalette ?? minidisc!.palette).controlFill }]}>
                   {primusePalette && onSort ? <MenuTriggerPressable style={minidiscToolbar.button} accessibilityRole="button"
                     accessibilityLabel={t('Sort')} onPress={onSort}>
                     <Icon name="swap-vertical" size={22} color={primusePalette.text} />
@@ -1339,7 +1340,7 @@ export function TrackListView({
                     accessibilityLabel={t('More options')} onPress={onMenu}>
                     <Icon name="ellipsis-horizontal" size={23} color={(primusePalette ?? minidisc!.palette).text} />
                   </GlassPressable> : null}
-                </View> : onMenu ? <GlassPressable style={[voltaStyles.roundAction, artistPalette && { backgroundColor: 'rgba(0,0,0,0.28)' }]} accessibilityRole="button"
+                </MenuTriggerGroup> : onMenu ? <GlassPressable style={[voltaStyles.roundAction, artistPalette && { backgroundColor: 'rgba(0,0,0,0.28)' }]} accessibilityRole="button"
                   accessibilityLabel={t('More options')} onPress={onMenu}>
                   <Icon name="ellipsis-horizontal" size={23} color={pagePalette?.text ?? colors.text} />
                 </GlassPressable> : null}

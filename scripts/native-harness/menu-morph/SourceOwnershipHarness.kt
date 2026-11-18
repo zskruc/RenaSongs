@@ -59,22 +59,92 @@ fun main() {
   verify(replacement.detach(true, true, true), "Replacement did not independently restore its source")
   replacement.release()
 
-  // Fabric may recycle the same physical View and change its tag while our
-  // old transitionAlpha=0 remains. Cleanup owns that weak INSTANCE, not its
-  // later tag; it must restore its own zero without cloning the new control.
+  // Return the source lease synchronously on physical detach, before Fabric
+  // can reuse its tag. Returning the original does not retire immutable pixels
+  // or the foreground drawing owner needed to finish the closing animation.
   val recycledInstance = MenuSourceOwnership()
   recycledInstance.attach(true, true, true)
   val originalTag = 117
   val recycledTag = 219
   verify(originalTag != recycledTag, "Recycled-tag regression did not change identity")
-  verify(recycledInstance.detach(true, true, true),
-    "Same weak instance retained our zeroed alpha after its native tag changed")
-  verify(!recycledInstance.hidden && !recycledInstance.attached,
-    "Recycled weak instance retained old visual ownership")
+  verify(recycledInstance.returnSource(true, true, true),
+    "Physical detach did not return its exact original zeroed-alpha source lease")
+  verify(!recycledInstance.hidden && recycledInstance.attached && !recycledInstance.released,
+    "Returning the original prematurely retired the immutable closing foreground")
+  verify(!recycledInstance.returnSource(true, false, true), "A recycled source tag received late alpha restoration")
+  verify(!recycledInstance.detach(true, false, true), "Late close restored a source whose lease was already returned")
+  verify(!recycledInstance.hidden && !recycledInstance.attached, "Late close retained an already returned source lease")
   val differentInstance = MenuSourceOwnership()
   differentInstance.attach(true, true, true)
   verify(!differentInstance.detach(true, false, true),
     "Cleanup restored an unrelated physical source instead of the original weak instance")
+  // Some RN recycling/layout paths reset a tag before delivering detach. A
+  // still-owned zero belongs to the same weak INSTANCE; id-strict capture must
+  // not turn cleanup into a permanently transparent pooled control.
+  for (owner in listOf(false, true)) for (sameInstance in listOf(false, true)) for (alpha in listOf(0f, .4f, 1f)) {
+    val resetBeforeDetach = MenuSourceOwnership()
+    resetBeforeDetach.attach(true, true, true)
+    var instanceTag = originalTag
+    var instanceAlpha = alpha
+    instanceTag = recycledTag
+    val restored = resetBeforeDetach.returnSource(owner, sameInstance, instanceAlpha == 0f)
+    if (restored) instanceAlpha = .8f
+    verify(instanceTag == recycledTag && restored == (owner && sameInstance && alpha == 0f),
+      "Id reset before detach suppressed a valid physical-source restoration or adopted a new owner")
+    verify(instanceAlpha == if (owner && sameInstance && alpha == 0f) .8f else alpha,
+      "Source cleanup overwrote an unrelated owner/instance/nonzero alpha")
+    // The source weak ref is cleared on the real detach path, so the later
+    // close receives no exact source and can never touch its pooled reuse.
+    verify(!resetBeforeDetach.returnSource(true, false, true),
+      "Late close altered a reused View after detach returned/cleared the old source lease")
+    verify(!resetBeforeDetach.detach(true, false, true),
+      "Window disposal repeated a source restoration after lease return")
+  }
+  for (owner in listOf(false, true)) for (exact in listOf(false, true)) for (zeroAlpha in listOf(false, true)) {
+    val detached = MenuSourceOwnership()
+    detached.attach(true, true, true)
+    verify(detached.returnSource(owner, exact, zeroAlpha) == (owner && exact && zeroAlpha),
+      "Source detach restored a stale owner, a recycled tag or another animation's alpha")
+    verify(!detached.hidden && detached.attached && !detached.released,
+      "Source-only return changed the retained rendering lifetime")
+    verify(!detached.returnSource(true, true, true), "Duplicate source detach restored the same lease twice")
+    verify(!detached.detach(true, true, true), "Window teardown restored an already returned lease")
+    verify(detached.release() && !detached.release(), "Returned-source foreground disposal was not idempotent")
+  }
+
+  // The real handoff policy is separate from a compositor/fence simulation.
+  // It must observe commit before restoring the original, stay once-only and
+  // leave immutable drawing ownership alive until native finishes the window.
+  val commitOwner = MenuSourceOwnership()
+  commitOwner.attach(true, true, true)
+  val commitEvents = ArrayList<String>()
+  var liveSource = true
+  fun attemptCommit() = handoffMenuSourceAfterRegistration(
+    valid = { liveSource && commitOwner.hidden && commitOwner.attached && !commitOwner.released },
+    register = { commitEvents.add("register-commit"); true },
+    restore = { commitEvents.add("restore-source"); check(commitOwner.returnSource(true, true, true)) }
+  )
+  verify(attemptCommit(), "Valid original Activity could not register its commit handoff")
+  verify(commitEvents == listOf("register-commit", "restore-source"), "Original source was restored before commit observation registered")
+  verify(commitOwner.attached && !commitOwner.hidden && !commitOwner.released,
+    "Source commit registration discarded the closing immutable foreground")
+  verify(!attemptCommit() && commitEvents.size == 2, "Repeated handoff registered/restored the same source twice")
+  for (initialValid in listOf(false, true)) for (registerSuccess in listOf(false, true))
+      for (staysValid in listOf(false, true)) {
+    var valid = initialValid
+    val events = ArrayList<String>()
+    val result = handoffMenuSourceAfterRegistration(valid = { valid }, register = {
+      events.add("register"); valid = staysValid; registerSuccess
+    }, restore = { events.add("restore") })
+    verify(result == (initialValid && registerSuccess && staysValid), "Invalid/failed/replaced handoff claimed completion")
+    verify(events.count { it == "register" } == if (initialValid) 1 else 0,
+      "Detached or unowned source registered a frame callback")
+    verify(events.count { it == "restore" } == if (result) 1 else 0,
+      "Failed registration or stale callback restored a replacement source")
+  }
+  var exceptionalRestore = false
+  verify(!handoffMenuSourceAfterRegistration({ true }, { throw IllegalStateException("window disposed") }, { exceptionalRestore = true }) &&
+    !exceptionalRestore, "A failed public frame callback registration restored source pixels prematurely")
 
   // These are necessary coordinate/visibility conditions, not a simulation of
   // actual HWUI Canvas clip behavior. The source lives above a fixed card but

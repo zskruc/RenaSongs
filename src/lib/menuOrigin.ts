@@ -62,11 +62,27 @@ export function captureMenuTouchMove(event: GestureResponderEvent): void {
 /** A control's own press-in can promote the descendant measurement to the
  * complete button. Only an explicit ref authorizes native trigger capture;
  * currentTarget/target fallbacks supply geometry without hiding a shared row. */
-export function captureMenuTrigger(event: GestureResponderEvent, target?: unknown): void {
+export function captureMenuTrigger(event: GestureResponderEvent, target?: unknown, explicitGroup?: unknown): void {
   const at = point(event);
   if (!at) { tracker.clear(); return; }
   const sourceTag = tagOf(target);
-  tracker.start(at, sourceTag ?? tagOf(event.currentTarget) ?? tagOf(event.nativeEvent.target), sourceTag !== undefined);
+  tracker.start(at, sourceTag ?? tagOf(event.currentTarget) ?? tagOf(event.nativeEvent.target),
+    sourceTag !== undefined, sourceTag === undefined ? undefined : tagOf(explicitGroup));
+}
+
+/** Refresh a declared group's identity on the actual activation, not only
+ * press-in: a long held press may outlive the pointer TTL. Keyboard/a11y may
+ * use these exact refs, but cannot promote an implicit responder or old touch. */
+export function captureMenuTriggerActivation(event: GestureResponderEvent, target: unknown, explicitGroup: unknown): void {
+  const buttonTag = tagOf(target), groupTag = tagOf(explicitGroup);
+  const native = event?.nativeEvent;
+  if (!buttonTag || !groupTag || native?.touches?.length > 1 || native?.changedTouches?.length > 1) {
+    tracker.clear(); return;
+  }
+  const at = point(event);
+  if (at) tracker.start(at, buttonTag, true, groupTag);
+  else if (!native?.touches?.length && !native?.changedTouches?.length) tracker.activate(buttonTag, groupTag);
+  else tracker.clear(); // Malformed pointer data is not a keyboard activation.
 }
 
 export const takeMenuOrigin = () => tracker.take();

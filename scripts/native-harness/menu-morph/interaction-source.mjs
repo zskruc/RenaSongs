@@ -34,9 +34,10 @@ assert.doesNotMatch(retarget, /interaction\.reset\s*\(|clearMenuMorph\s*\(|reset
 assert.ok(trigger.includes('MenuTriggerSnapshots.owns(this)') &&
   trigger.includes('x - morphSourceWidth / 2f') && trigger.includes('y - morphSourceHeight / 2f'),
   'Live source refresh must retain weak-source ownership and normalized trigger dimensions');
-assert.ok(host.includes('private val sourceHasGlass = false') &&
-  host.includes('if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)') &&
-  host.includes('triggerSnapshot?.updateOverlay(motion.frame)'),
+assert.ok(host.includes('private var sourceHasGlass = false') &&
+  host.includes('sourceHasGlass = groupView != null && triggerSnapshot?.isGroupedSource == true') &&
+  host.includes('frame.contentProgress.coerceIn(0f, 1f)) }') &&
+  host.includes('liveFrame.copyFrom(motion.frame)') && host.includes('triggerSnapshot?.updateOverlay(liveFrame)'),
   'Plain triggers must retain the upstream plain-source absorption rather than gain a fake glass lobe');
 const rows = host.slice(host.indexOf('fun drawRows('), host.indexOf('if (portal != null', host.indexOf('fun drawRows(')));
 assert.ok(rows.includes('interaction.drawPlate(') && rows.indexOf('interaction.drawPlate(') < rows.indexOf('drawChild(recording,'),
@@ -60,8 +61,11 @@ assert.ok(multiPointer.includes('NativeGestureUtil.notifyNativeGestureStarted(ho
 assert.ok(interaction.includes('if (suppressUntilAllUp)') && interaction.includes('finishNative(event)'),
   'A cancelled multi-pointer stream must finish native ownership without selecting its first-finger UP');
 assert.ok(pressLight.includes('if (glow <= .001f') && pressLight.includes('blendMode = BlendMode.PLUS') &&
-  pressLight.includes('80f * density, .03f * glow') && pressLight.includes('.018f * glow') &&
-  pressLight.includes('.12f * glow') && pressLight.includes('return half4(half3(light), 0.0)'),
+  pressLight.includes('(if (trigger) 38f else 80f) * density') &&
+  pressLight.includes('(if (trigger) .07f else .03f) * glow') &&
+  pressLight.includes('(if (trigger) .055f else .018f) * glow') &&
+  pressLight.includes('(if (trigger) .3f else .12f) * glow') &&
+  pressLight.includes('trigger: Boolean = false') && pressLight.includes('return half4(half3(light), 0.0)'),
   'Transient light must preserve original press radius/gains and leave the unpressed recipe/alpha untouched');
 assert.ok(material.includes('resources.displayMetrics.density, epoch.scale,') &&
   material.includes('menuPressX - sampleLocation[0] - opticalMaterialOffsetX') &&

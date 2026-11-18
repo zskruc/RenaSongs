@@ -18,15 +18,16 @@ internal class MenuPressLight {
   private val shader = RuntimeShader(Source)
   private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { blendMode = BlendMode.PLUS }
   fun draw(canvas: Canvas, width: Float, height: Float, radius: Float, density: Float,
-    rasterScale: Float, x: Float, y: Float, glow: Float) {
+    rasterScale: Float, x: Float, y: Float, glow: Float, trigger: Boolean = false) {
     if (glow <= .001f || width <= 0f || height <= 0f) return
     shader.setFloatUniform("extent", width / rasterScale, height / rasterScale)
     shader.setFloatUniform("radius", radius)
     shader.setFloatUniform("density", density)
     shader.setFloatUniform("rasterScale", rasterScale)
-    shader.setFloatUniform("press", x, y, 80f * density, .03f * glow)
-    shader.setFloatUniform("pressLift", .018f * glow)
-    shader.setFloatUniform("rimLift", .12f * glow)
+    shader.setFloatUniform("press", x, y, (if (trigger) 38f else 80f) * density,
+      (if (trigger) .07f else .03f) * glow)
+    shader.setFloatUniform("pressLift", (if (trigger) .055f else .018f) * glow)
+    shader.setFloatUniform("rimLift", (if (trigger) .3f else .12f) * glow)
     paint.shader = shader
     canvas.drawRect(0f, 0f, width, height, paint)
   }

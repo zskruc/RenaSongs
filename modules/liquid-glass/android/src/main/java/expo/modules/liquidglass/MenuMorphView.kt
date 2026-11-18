@@ -3,6 +3,7 @@ package expo.modules.liquidglass
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Outline
 import android.graphics.Path
 import android.graphics.RectF
@@ -11,6 +12,8 @@ import android.graphics.Shader
 import android.os.Build
 import android.os.SystemClock
 import android.os.Trace
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.Choreographer
@@ -28,6 +31,9 @@ import expo.modules.liquidglass.menumotion.GlassFrameClock
 import expo.modules.liquidglass.menumotion.GlassMorphTuning
 import expo.modules.liquidglass.menumotion.GlassMotion
 import expo.modules.liquidglass.menumotion.GlassMorphFrame
+import expo.modules.liquidglass.menumotion.GlassAbsorbRecord
+import expo.modules.liquidglass.menumotion.GlassJelly
+import expo.modules.liquidglass.menumotion.MenuSourceHandoff
 import expo.modules.liquidglass.menumotion.menuSourceTag
 import kotlin.math.abs
 import kotlin.math.max
@@ -77,9 +83,33 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private val foregroundPortal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) GlassForegroundPortal(density) else null
   private val foregroundBounds = RectF()
   private var triggerSnapshot: MenuTriggerSnapshot? = null
-  // App buttons deliberately retain their original plain Pressable material.
-  // Upstream only adds a second glass lobe when the actual trigger is glass.
-  private val sourceHasGlass = false
+  private var groupForeground: MenuGroupForeground? = null
+  private var windowDrawing: MenuMorphWindowOwner? = null
+  private var groupFillColor: Int? = null
+  private val sourceFillPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+  private val sourceFillBounds = RectF()
+  private val terminalSourceLight by lazy { if (Build.VERSION.SDK_INT >= 33) MenuPressLight() else null }
+  private val sourceHandoff = MenuSourceHandoff()
+  private val mainHandler = Handler(Looper.getMainLooper())
+  private var handoffTicket: MenuSourceHandoff.Ticket? = null
+  private var handoffObserver: ViewTreeObserver? = null
+  private var handoffCommitCallback: Runnable? = null
+  private var handoffTimeout: Runnable? = null
+  private var handoffStartedAt = 0L
+  private var sourceHandoffRegistered = 0
+  private var sourceHandoffCommits = 0
+  private var sourceHandoffFallbacks = 0
+  private var sourceHandoffLastReason = "none"
+  private var sourceHandoffLastMs = 0L
+  internal val menuTargetLeft get() = target.left
+  internal val menuTargetTop get() = target.top
+  // Only the explicitly registered whole toolbar has a glass source. Generic
+  // and single-icon origins retain their existing nonglass fallback.
+  private var sourceHasGlass = false
+  private var groupRequested = false
+  private var groupEligible = false
+  private var sourceJelly: GlassJelly? = null
+  private var sourceControlHeight = 1f
   private var requestedOpen = false
   private var requestedReady = false
   private var requestedSession = 0
@@ -124,7 +154,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (value.isFinite()) requestedRadius = value.toFloat().coerceIn(0f, 200f)
   }
   internal fun setSourceRect(value: List<Double>?) {
-    requestedSource = value?.takeIf { it.size >= 4 && it.take(5).all(Double::isFinite) }?.take(6)?.toList()
+    requestedSource = value?.takeIf { it.size >= 4 && it.take(5).all(Double::isFinite) }?.take(7)?.toList()
   }
   internal fun setMenuRows(value: List<MenuMorphRowRecord>?) {
     finiteRows = !value.isNullOrEmpty()
@@ -139,6 +169,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   /** Called after Expo has applied the whole prop batch, irrespective of order. */
   internal fun commitProps() {
     if (activeSession != requestedSession) {
+      cancelSourceHandoff()
       stopFrames()
       activeSession = requestedSession
       initialized = false
@@ -148,6 +179,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       frameClock.restart(animationScale)
       interaction.reset()
       jellyFrames = 0L; plateFrames = 0L
+      sourceHandoffRegistered = 0; sourceHandoffCommits = 0; sourceHandoffFallbacks = 0
+      sourceHandoffLastReason = "none"; sourceHandoffLastMs = 0L
       setInteractive(false)
       (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
       releaseTrigger()
@@ -155,6 +188,16 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // A reused native view must not flash the preceding menu's display list.
       resetContent()
       invalidate()
+    }
+    if (sourceHandoff.pending && requestedOpen) {
+      // Reopen starts a fresh source lease. The old committed-buffer callback
+      // must neither remove this presentation nor complete its JS controller.
+      cancelSourceHandoff()
+      releaseTrigger()
+      foregroundPortal?.release()
+      initialized = false; settled = false; emittedStart = false; completedOpen = null
+      (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
+      resetContent()
     }
     if (initialized && motion.expanded != requestedOpen) {
       if (!requestedOpen) {
@@ -196,6 +239,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   override fun onDetachedFromWindow() {
+    cancelSourceHandoff()
     stopFrames()
     interaction.reset()
     if (preDrawRegistered && viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(this)
@@ -217,9 +261,14 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onWindowVisibilityChanged(visibility: Int) {
     super.onWindowVisibilityChanged(visibility)
     if (visibility != VISIBLE) {
-      interaction.close(); stopFrames(); triggerSnapshot?.detachOverlay()
+      handoffTicket?.let { finishSourceHandoff(it, false, "window-hidden") }
+      interaction.close(); stopFrames(); triggerSnapshot?.detachOverlay(); windowDrawing?.detach()
     } else if (isAttachedToWindow) {
-      if (triggerSnapshot?.attachOverlay(rootView) == false) releaseTrigger()
+      if (sourceHasGlass && windowDrawing?.attach(rootView, captureEnvelope) != true) {
+        releaseTrigger()
+        applyFrame()
+      }
+      if (triggerSnapshot?.attachOverlay(rootView) == false) { releaseTrigger(); applyFrame() }
       frameClock.restart(animationScale)
       requestStart()
       if (initialized && (!settled || !interaction.motion.isSettled)) beginMotion()
@@ -229,7 +278,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   override fun onPreDraw(): Boolean {
     preDrawSeen = true
     requestStart()
-    if (initialized) updateTarget()
+    if (initialized && !sourceHandoff.pending) updateTarget()
     return true
   }
 
@@ -266,16 +315,64 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     // Only an explicit exact Pressable ref may hide a source. Geometry-only
     // root touches never borrow a global pending descendant/toolbar snapshot.
     val sourceTag = menuSourceTag(rect?.getOrNull(5))
-    val sourceView = sourceTag?.let { tag ->
+    val buttonView = sourceTag?.let { tag ->
       try { appContext.findView<View>(tag)?.takeIf { it.id == tag } } catch (_: Exception) { null }
     }
-    triggerSnapshot = traceMenu("RenaMenu/captureTrigger") {
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.take(source, sourceView) else null
-    }
     through.set(source)
+    val groupTag = menuSourceTag(rect?.getOrNull(6))
+    groupRequested = groupTag != null
+    val groupView = groupTag?.let { tag ->
+      try { (appContext.findView<View>(tag) as? MenuTriggerGroupView)?.takeIf {
+        it.id == tag && it.isAttachedToWindow && it.sourceFillColor() != null &&
+          buttonView != null && isGroupDescendant(buttonView, it)
+      } } catch (_: Exception) { null }
+    }
+    groupEligible = groupView != null
+    if (groupView != null) {
+      // Through is the specific button; source is the entire explicit pill.
+      // Synchronous exact measurements also cover a fast tap before JS's async
+      // geometry callback, without turning a common ancestor into an anchor.
+      buttonView?.let { setScreenBounds(it, through, normalizeTouch = true) }
+      setScreenBounds(groupView, source, normalizeTouch = false)
+    }
+    triggerSnapshot = traceMenu("RenaMenu/captureTrigger") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.take(source, groupView ?: buttonView,
+        authorizedGroup = groupView != null) else null
+    }
+    sourceHasGlass = groupView != null && triggerSnapshot?.isGroupedSource == true
+    groupFillColor = if (sourceHasGlass) groupView?.sourceFillColor() else null
+    sourceJelly = if (sourceHasGlass) groupView?.jelly else null
+    sourceControlHeight = groupView?.height?.toFloat() ?: 1f
+    if (groupView != null && !sourceHasGlass) {
+      source.set(through)
+      triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+        MenuTriggerSnapshots.take(source, buttonView) else null
+      through.set(source)
+    } else if (groupView == null) through.set(source)
     reserveMaterialEnvelope()
+    if (sourceHasGlass) {
+      val drawing = MenuMorphWindowOwner(this)
+      val pixels = triggerSnapshot?.groupForegroundBitmap
+      if (pixels != null && drawing.attach(rootView, captureEnvelope)) {
+        windowDrawing = drawing
+        groupForeground = MenuGroupForeground(pixels, pixels.width.toFloat(), pixels.height.toFloat())
+        triggerSnapshot?.setGroupedRendering(true)
+      } else {
+        drawing.detach()
+        // No window drawing owner means no permission to erase a whole group.
+        // Fall back to the exact single trigger, retaining the successful 191
+        // independent-small-View path and never hiding the pill by itself.
+        releaseTrigger()
+        source.set(through)
+        triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+          MenuTriggerSnapshots.take(source, buttonView) else null
+        through.set(source)
+        reserveMaterialEnvelope()
+      }
+    }
     targetRadius = requestedRadius * density
-    motion.initialize(source, target, targetRadius, density, through, false, GlassMorphTuning(null, null))
+    motion.initialize(source, target, targetRadius, density, through, false,
+      GlassMorphTuning(null, if (sourceHasGlass) GlassAbsorbRecord(duration = .48f) else null))
     motion.retarget(true)
     initialized = true
     settled = false
@@ -283,13 +380,13 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     frameClock.restart(animationScale)
     beginMotion()
     applyFrame()
-    if (triggerSnapshot?.attachOverlay(rootView) == false) releaseTrigger()
+    if (triggerSnapshot?.attachOverlay(rootView) == false) { releaseTrigger(); applyFrame() }
     // Initial source geometry is drawn in this pre-draw before the first tick.
     invalidate()
   }
 
   private fun updateTarget() {
-    if (!initialized || width <= 0 || height <= 0) return
+    if (!initialized || sourceHandoff.pending || width <= 0 || height <= 0) return
     getLocationOnScreen(location)
     val left = location[0].toFloat()
     val top = location[1].toFloat()
@@ -339,6 +436,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
       motionFrames++
       settled = motion.advanceBy(seconds)
+      sourceJelly?.advance(seconds)
       interaction.motion.advance(seconds)
       if (!interaction.motion.jellySettled) jellyFrames++
       if (interaction.motion.plateAlpha > .001f) plateFrames++
@@ -354,8 +452,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private fun applyFrame() {
     traceMenu("RenaMenu/applyFrame") {
       if (!initialized) return
-      triggerSnapshot?.updateOverlay(motion.frame)
       liveFrame.copyFrom(motion.frame)
+      updateSourcePose(liveFrame)
+      triggerSnapshot?.updateOverlay(liveFrame)
+      groupForeground?.update(liveFrame, target.left, target.top)
       interaction.motion.deform(liveFrame.bounds,
         if (source.centerX() > rootLocation[0] + rootView.width / 2f) -1f else 1f,
         if (target.centerY() < source.centerY()) -1f else 1f)
@@ -366,6 +466,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       traceMenu("RenaMenu/portalState") {
         foregroundPortal?.update(frame, target.left, target.top, sourceHasGlass, outline.smoothedField)
       }
+      (getChildAt(0) as? LiquidGlassView)?.updateMenuField(frame, outline.path, target.left, target.top,
+        sourceHasGlass && !settled, outline.smoothedField)
       localIncoming.set(frame.bounds)
       localIncoming.offset(-target.left, -target.top)
       contentClip.rewind()
@@ -377,16 +479,24 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
         // The Gaussian neck can gently bulge outside either lobe's rectangle.
         materialBounds.inset(-frame.smoothing, -frame.smoothing)
       }
+      val menuGlow = interaction.motion.glowValue * frame.contentProgress
+      val jelly = sourceJelly
+      val groupGlow = (jelly?.glowValue ?: 0f) * (1f - frame.contentProgress)
+      val groupLight = jelly != null && groupGlow > menuGlow
       (getChildAt(0) as? LiquidGlassView)?.updateMenuPressLight(
-        target.left + interaction.motion.lightPositionX, target.top + interaction.motion.lightPositionY,
-        interaction.motion.glowValue * frame.contentProgress)
+        if (groupLight) source.left + jelly!!.lightPositionX else target.left + interaction.motion.lightPositionX,
+        if (groupLight) source.top + jelly!!.lightPositionY else target.top + interaction.motion.lightPositionY,
+        max(menuGlow, groupGlow), groupLight)
       traceMenu("RenaMenu/materialState") { (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
         target.left + materialBounds.left, target.top + materialBounds.top,
         target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY,
         // A completely closed host is not drawn. Leave its bounded layers in
         // place until teardown rather than allocating a hidden full-size frame.
         !settled || !requestedOpen || interaction.isGestureActive || !interaction.motion.isSettled,
-        if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)) }
+        // The existing toolbar has a plain RGBA fill. Crossfade that actual
+        // source recipe into the unchanged menu recipe, rather than flashing a
+        // new glass material over the pill at takeover or at final restoration.
+        frame.contentProgress.coerceIn(0f, 1f)) }
       val sx = localIncoming.width() / max(width.toFloat(), 1f)
       val sy = localIncoming.height() / max(height.toFloat(), 1f)
       val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
@@ -413,12 +523,22 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // Native child transforms also transform Android/RN touch coordinates.
       setInteractive(requestedOpen && reveal > 0.78f)
       invalidate()
+      windowDrawing?.invalidate()
       (parent as? View)?.invalidate()
     }
   }
 
   override fun dispatchDraw(canvas: Canvas) {
-    if (!initialized || (settled && !requestedOpen)) return
+    if (windowDrawing != null) return
+    drawWindowFrame(canvas)
+  }
+
+  internal fun drawWindowFrame(canvas: Canvas) {
+    if (!initialized) return
+    if (settled && !requestedOpen) {
+      if (sourceHandoff.pending) drawTerminalSource(canvas)
+      return
+    }
     val material = getChildAt(0) ?: return
     val save = canvas.save()
     try {
@@ -428,6 +548,16 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // into the changing shell: that makes the page slide/zoom inside glass.
       traceMenu("RenaMenu/drawMaterial") { drawChild(canvas, material, drawingTime) }
     } finally { canvas.restoreToCount(save) }
+    drawSourceFill(canvas, liveFrame.contentProgress, true)
+    if (sourceHasGlass) {
+      val lightSave = canvas.save()
+      canvas.clipPath(outline.path)
+      canvas.translate(materialBounds.left, materialBounds.top)
+      (material as? LiquidGlassView)?.drawMenuWindowPressLight(canvas,
+        target.left + materialBounds.left, target.top + materialBounds.top,
+        materialBounds.width(), materialBounds.height())
+      canvas.restoreToCount(lightSave)
+    }
     val portal = foregroundPortal
     val materialView = material as? LiquidGlassView
     fun drawRows(recording: Canvas) {
@@ -438,7 +568,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       }
     }
     if (portal != null && canvas.isHardwareAccelerated && !settled) {
-      traceMenu("RenaMenu/drawPortal") { portal.draw(canvas, foregroundBounds, true, ::drawRows) }
+      traceMenu("RenaMenu/drawPortal") { portal.draw(canvas, foregroundBounds, true, ::drawRows,
+        if (sourceHasGlass) ({ recording -> groupForeground?.draw(recording) }) else null) }
     } else if (portal != null && canvas.isHardwareAccelerated) {
       val contentSave = canvas.save()
       canvas.clipPath(contentClip)
@@ -449,8 +580,51 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       canvas.clipPath(contentClip)
       drawRows(canvas)
       canvas.restoreToCount(contentSave)
+      groupForeground?.draw(canvas)
     }
     // A bounded source View in the window overlay stays outside card clipping.
+  }
+
+  private fun drawSourceFill(canvas: Canvas, progress: Float, clipToMorph: Boolean) {
+    val color = groupFillColor ?: return
+    sourceFillBounds.set(liveFrame.sourceLobe)
+    sourceFillBounds.offset(-target.left, -target.top)
+    val alpha = menuGroupSourceFillAlpha(color, progress)
+    if (alpha == 0) return
+    sourceFillPaint.color = color
+    sourceFillPaint.alpha = alpha
+    val save = canvas.save()
+    if (clipToMorph) canvas.clipPath(outline.path)
+    canvas.drawRoundRect(sourceFillBounds, liveFrame.sourceRadius, liveFrame.sourceRadius, sourceFillPaint)
+    canvas.restoreToCount(save)
+  }
+
+  /** No rows, material, incoming-circle clip or portal remains at handoff. */
+  private fun drawTerminalSource(canvas: Canvas) {
+    liveFrame.copyFrom(motion.frame)
+    updateSourcePose(liveFrame)
+    groupForeground?.update(liveFrame, target.left, target.top)
+    drawSourceFill(canvas, 0f, false)
+    val jelly = sourceJelly
+    if (jelly != null && jelly.glowValue > .001f && canvas.isHardwareAccelerated) {
+      val save = canvas.save()
+      canvas.translate(sourceFillBounds.left, sourceFillBounds.top)
+      terminalSourceLight?.draw(canvas, sourceFillBounds.width(), sourceFillBounds.height(),
+        liveFrame.sourceRadius, density, 1f,
+        source.left + jelly.lightPositionX - target.left - sourceFillBounds.left,
+        source.top + jelly.lightPositionY - target.top - sourceFillBounds.top,
+        jelly.glowValue, trigger = true)
+      canvas.restoreToCount(save)
+    }
+    groupForeground?.draw(canvas)
+  }
+
+  private fun updateSourcePose(frame: GlassMorphFrame) {
+    sourceJelly?.let { jelly ->
+      val swell = jelly.swell(sourceControlHeight, density, 1f) - 1f
+      frame.sourceLobe.inset(-frame.sourceLobe.width() * swell / 2f, -frame.sourceLobe.height() * swell / 2f)
+      frame.sourceRadius = min(frame.sourceLobe.width(), frame.sourceLobe.height()) / 2f
+    }
   }
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
@@ -479,28 +653,98 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
         rootLocation[0] + rootView.width.toFloat(), rootLocation[1] + rootView.height.toFloat())) return
     val capacity = menuLayerCapacity(target.width(), target.height(), source.height(), density)
     material.reserveMenuMorph(captureEnvelope, capacity.width, capacity.height)
-    foregroundPortal?.reserve(target, target.left, target.top, captureEnvelope)
+    foregroundPortal?.reserve(target, target.left, target.top, captureEnvelope, sourceHasGlass)
     lockedFieldStep = max(5f * density, max(captureEnvelope.width(), captureEnvelope.height()) / 64f)
     foregroundBounds.set(captureEnvelope)
     foregroundBounds.offset(-target.left, -target.top)
+    windowDrawing?.attach(rootView, captureEnvelope)
   }
   private fun stopFrames() {
     if (callbackPosted) Choreographer.getInstance().removeFrameCallback(this)
     callbackPosted = false
     frameClock.restart(animationScale)
   }
-  private fun emitComplete(open: Boolean) {
+  private fun emitComplete(open: Boolean, allowHandoff: Boolean = true) {
     if (completedOpen == open) return
+    if (!open && allowHandoff && sourceHasGlass && beginSourceHandoff()) return
     completedOpen = open
+    val completedSource = triggerSnapshot
+    val wasGroupedSource = sourceHasGlass
+    val hadGroupForeground = groupForeground != null
+    val sourceFill = groupFillColor
+    val completedWindow = windowDrawing
+    // Log the actual return, not a promise to restore the source after logging.
+    if (!open) { releaseTrigger(); foregroundPortal?.release() }
     if (motionTrace) Log.d("ResonusGlass", "menuMotion session=$activeSession open=$open " +
       "durationMs=${SystemClock.uptimeMillis() - motionStartedAt} frames=$motionFrames " +
       "portal=${foregroundPortal?.diagnostics()} " +
       "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()} " +
       "menuJellyFrames=$jellyFrames menuPlateFrames=$plateFrames menuSelectionDispatches=${interaction.selectionDispatches} " +
-      "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${triggerSnapshot != null} " +
-      "sourceClone=${triggerSnapshot?.diagnostics()} sourceCapture=${MenuTriggerSnapshots.captureDiagnostics()}")
-    if (!open) { releaseTrigger(); foregroundPortal?.release() }
+      "menuGroupRequested=$groupRequested menuGroupEligible=$groupEligible menuGroupedSource=$wasGroupedSource " +
+      "menuGroupForeground=$hadGroupForeground menuWindowOwner=${completedWindow?.diagnostics()} " +
+      "menuSourceBounds=$source menuThroughBounds=$through menuSourceFillAlpha=${sourceFill?.ushr(24)} " +
+      "sourceHandoffRegistered=$sourceHandoffRegistered sourceHandoffCommits=$sourceHandoffCommits " +
+      "sourceHandoffFallbacks=$sourceHandoffFallbacks sourceHandoffReason=$sourceHandoffLastReason sourceHandoffMs=$sourceHandoffLastMs " +
+      "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${completedSource != null} " +
+      "sourceClone=${completedSource?.diagnostics()} sourceCapture=${MenuTriggerSnapshots.captureDiagnostics()}")
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
+  }
+
+  private fun beginSourceHandoff(): Boolean {
+    if (sourceHandoff.pending) return true
+    val snapshot = triggerSnapshot ?: return false
+    val ticket = sourceHandoff.begin(activeSession) ?: return false
+    handoffTicket = ticket
+    handoffStartedAt = SystemClock.uptimeMillis()
+    val registered = snapshot.restoreSourceForHandoff { sourceRoot ->
+      val observer = sourceRoot.viewTreeObserver
+      if (!observer.isAlive || !sourceRoot.isAttachedToWindow || !sourceRoot.isHardwareAccelerated) false
+      else {
+        val callback = Runnable { mainHandler.post { finishSourceHandoff(ticket, true, "source-buffer-committed") } }
+        handoffObserver = observer
+        handoffCommitCallback = callback
+        observer.registerFrameCommitCallback(callback)
+        sourceRoot.invalidate()
+        true
+      }
+    }
+    if (!registered) {
+      cancelSourceHandoff()
+      sourceHandoffLastReason = "source-unavailable"
+      sourceHandoffFallbacks++
+      return false
+    }
+    sourceHandoffRegistered++
+    val timeout = Runnable { finishSourceHandoff(ticket, false, "commit-timeout") }
+    handoffTimeout = timeout
+    mainHandler.postDelayed(timeout, 200L)
+    windowDrawing?.invalidate()
+    return true
+  }
+
+  private fun finishSourceHandoff(ticket: MenuSourceHandoff.Ticket, committed: Boolean, reason: String) {
+    if (!sourceHandoff.finish(ticket, activeSession, requestedOpen)) return
+    clearHandoffCallbacks()
+    sourceHandoffLastMs = SystemClock.uptimeMillis() - handoffStartedAt
+    sourceHandoffLastReason = reason
+    if (committed) sourceHandoffCommits++ else sourceHandoffFallbacks++
+    emitComplete(false, allowHandoff = false)
+  }
+
+  private fun clearHandoffCallbacks() {
+    handoffTimeout?.let { mainHandler.removeCallbacks(it) }
+    handoffTimeout = null
+    val callback = handoffCommitCallback
+    val observer = handoffObserver
+    if (callback != null && observer?.isAlive == true) {
+      try { observer.unregisterFrameCommitCallback(callback) } catch (_: RuntimeException) { }
+    }
+    handoffCommitCallback = null; handoffObserver = null; handoffTicket = null
+  }
+
+  private fun cancelSourceHandoff() {
+    sourceHandoff.cancel()
+    clearHandoffCallbacks()
   }
   private fun resetContent() {
     for (index in 1 until childCount) {
@@ -511,7 +755,33 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     }
     getChildAt(0)?.alpha = 1f
   }
-  private fun releaseTrigger() { triggerSnapshot?.release(); triggerSnapshot = null }
+  private fun releaseTrigger() {
+    triggerSnapshot?.release(); triggerSnapshot = null
+    windowDrawing?.detach(); windowDrawing = null
+    groupForeground?.release(); groupForeground = null
+    sourceJelly = null; sourceHasGlass = false; groupFillColor = null
+  }
+
+  private fun isGroupDescendant(view: View, group: View): Boolean {
+    var current: View? = view
+    while (current != null) {
+      if (current === group) return true
+      current = current.parent as? View
+    }
+    return false
+  }
+
+  private fun setScreenBounds(view: View, out: RectF, normalizeTouch: Boolean) {
+    view.getLocationOnScreen(location)
+    val w = view.width * abs(view.scaleX)
+    val h = view.height * abs(view.scaleY)
+    val normalizedW = if (normalizeTouch) max(w, 44f * density) else w
+    val normalizedH = if (normalizeTouch) max(h, 44f * density) else h
+    val centerX = location[0] + w / 2f
+    val centerY = location[1] + h / 2f
+    out.set(centerX - normalizedW / 2f, centerY - normalizedH / 2f,
+      centerX + normalizedW / 2f, centerY + normalizedH / 2f)
+  }
 }
 
 /** Window-independent screen coordinates, measured on MAIN across RN Modals. */

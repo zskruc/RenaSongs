@@ -29,7 +29,7 @@ assert.ok(suppress.includes('WindowBackdrops.onMenuSourceCaptureStaging(ownerRoo
   backdrop.includes('fun onMenuSourceCaptureStaging(root: View) { windows[root]?.onForeignCaptureStaging() }'),
   'The actually affected window must use the existing bounded capture-redraw budget');
 assert.ok(restore.includes('captureState.finish(true, MenuTriggerSnapshots.owns(this) && ownership.attached && !ownership.released)') &&
-  restore.includes('sourceOwner.visibility = View.VISIBLE') && restore.includes('sourceOwner.invalidate()') &&
+  restore.includes('sourceOwner.visibility = if (groupedRendering) View.INVISIBLE else View.VISIBLE') && restore.includes('sourceOwner.invalidate()') &&
   restore.includes('overlayRoot.get()?.invalidate()'),
   'Restoration must restore visibility and dirty BOTH the source View and actual overlay host, once for the current lease');
 assert.ok(begin.includes('captureDepth++') && begin.includes('capturedOwners.add(WeakReference(it))') &&
@@ -37,18 +37,18 @@ assert.ok(begin.includes('captureDepth++') && begin.includes('capturedOwners.add
   end.indexOf('if (captureDepth != 0) return') < end.indexOf('owners.forEach') &&
   end.includes('capturedOwners.clear()'),
   'Nested root captures must retain weak staged owners and restore only once at the outermost end');
-assert.match(transaction, /try\s*\{\s*MenuTriggerSnapshots\.beginCapture\(root, captureSource, activityDecor\)/,
+assert.match(transaction, /try\s*\{\s*MenuMorphWindowOwners\.beginCapture\(captureSource\)\s*MenuTriggerSnapshots\.beginCapture\(root, captureSource, activityDecor\)/,
   'Capture staging must be inside the protected transaction');
 assert.ok(transaction.indexOf('MenuTriggerSnapshots.beginCapture(') < transaction.indexOf('return capture()') &&
   transaction.indexOf('isCapturing = wasCapturing') < transaction.indexOf('MenuTriggerSnapshots.endCapture()'),
   'The source must be suppressed before capture and may restore only after capture mode is unwound');
-assert.match(transaction, /finally\s*\{\s*MenuTriggerSnapshots\.endCapture\(\)\s*\}/,
+assert.match(transaction, /finally\s*\{\s*try\s*\{\s*MenuTriggerSnapshots\.endCapture\(\)\s*\}\s*finally\s*\{\s*MenuMorphWindowOwners\.endCapture\(\)\s*\}/,
   'Even a failed glass/selection-host restore must unwind source capture depth in its own finally');
 assert.doesNotMatch(suppress + restore + owner, /(?:postFrameCallback|postOnAnimation|postDelayed|Choreographer)/,
   'Bounded source capture restoration must not introduce an independent recurring frame loop');
 assert.ok(source.includes('"sourceCaptureSuppressCount" to captureSuppressions') &&
   source.includes('"sourceCaptureRestoreCount" to captureRestores') &&
   source.includes('"sourceOwnerCaptureDraws" to captureDraws') &&
-  source.includes('"sourceOwnerKind" to "bounded-view"'),
+  source.includes('"sourceOwnerKind" to if (groupedRendering) "group-window-foreground" else "bounded-view"'),
   'Actual device validation must distinguish source-owner identity, capture exclusion and matched restoration');
 console.log('Menu source capture contract passed (real bounded View, relevant-root staging, outermost exception-safe finally, owner-cache invalidation and no independent frame loop).');

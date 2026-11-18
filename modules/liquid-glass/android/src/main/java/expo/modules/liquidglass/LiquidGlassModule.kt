@@ -13,6 +13,7 @@ class LiquidGlassModule : Module() {
     Name("ResonusLiquidGlass")
     Constant("isSupported") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
     Constant("menuMorphSupported") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
+    Constant("menuTriggerGroupSupported") { Build.VERSION.SDK_INT >= Build.VERSION_CODES.S }
     Constant("themeTraceEnabled") { GlassThemeTrace.enabled }
     Constant("artistFocusTraceEnabled") { Log.isLoggable("ResonusArtistFocus", Log.DEBUG) }
     Constant("artistImageTraceEnabled") { Log.isLoggable("ResonusArtistImage", Log.DEBUG) }
@@ -177,6 +178,11 @@ class LiquidGlassModule : Module() {
       Events("onClipHostReady")
       Prop("initialOpacity") { view: PlayerSurfaceClipView, value: Double -> view.setInitialOpacity(value) }
       Prop("interactive") { view: PlayerSurfaceClipView, value: Boolean -> view.setInteractive(value) }
+    }
+
+    View(MenuTriggerGroupView::class) {
+      Name("MenuTriggerGroup")
+      Prop("sourceFillColor") { view: MenuTriggerGroupView, value: Int? -> view.setSourceFillColor(value) }
     }
 
     View(MenuMorphView::class) {

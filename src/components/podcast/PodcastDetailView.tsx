@@ -11,6 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import type { PodcastChannel, PodcastEpisode } from '@/api/podcasts';
 import { BackChevron } from '@/components/BackChevron';
+import { MenuTriggerGroup } from '@/components/MenuTriggerGroup';
 import { DetailHeroScene } from '@/components/DetailHeroScene';
 import { PrimuseAlbumHeader } from '@/components/primuse/PrimuseAlbumHeader';
 import { PrimuseAlbumBackdrop } from '@/components/primuse/PrimuseAlbumBackdrop';
@@ -138,7 +139,7 @@ export function PodcastDetailView({ channel, episodes, offline, refreshing, onRe
           <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: palette.backgroundTop }, barBackground]} />
           <BackChevron size={28} color={palette.text} style={[styles.back, { backgroundColor: palette.controlFill }]} />
           <Animated.Text numberOfLines={1} style={[styles.compactTitle, { color: palette.text }, compactName]}>{channel.title}</Animated.Text>
-          <View style={[styles.toolbar, { backgroundColor: palette.controlFill }]}>{toolbar(palette)}</View>
+          <MenuTriggerGroup style={[styles.toolbar, { backgroundColor: palette.controlFill }]}>{toolbar(palette)}</MenuTriggerGroup>
         </View>
       </PrimuseAlbumScene>
     </DetailHeroScene>

@@ -29,12 +29,14 @@ internal class GlassForegroundPortal(density: Float) {
   private val texture = GlassFieldTexture()
   private val foregroundNode = RenderNode("ResonusMenu.foreground")
   private val rowsNode = RenderNode("ResonusMenu.rows")
+  private val sourceCompositeNode = RenderNode("RenaMenu.sourceAndRows")
   private val raster = GlassPortalRaster(density)
   private val incoming = RectF()
   private val outgoing = RectF()
   private val contentBlur = WeakHashMap<View, Float>()
   private var hasSource = false
   private var rowsVisible = false
+  private var sourceVisible = false
   private var rowsSigmaX = 0f
   private var rowsSigmaY = 0f
   private var portalBlur = 0f
@@ -46,6 +48,7 @@ internal class GlassForegroundPortal(density: Float) {
   private var effectScale = Float.NaN
   private var rowsEffectX = Float.NaN
   private var rowsEffectY = Float.NaN
+  private var compositeBlur = Float.NaN
   private var nodeWidth = 0
   private var nodeHeight = 0
   private var wasWarping = false
@@ -65,8 +68,8 @@ internal class GlassForegroundPortal(density: Float) {
 
   /** Called at session attachment or an actual target/window layout change. */
   fun reserve(target: RectF, @Suppress("UNUSED_PARAMETER") originX: Float,
-    @Suppress("UNUSED_PARAMETER") originY: Float, windowBounds: RectF) {
-    if (raster.reserve(target.width(), target.height(), windowBounds.width(), windowBounds.height(), hasSource))
+    @Suppress("UNUSED_PARAMETER") originY: Float, windowBounds: RectF, hasGlassSource: Boolean = false) {
+    if (raster.reserve(target.width(), target.height(), windowBounds.width(), windowBounds.height(), hasGlassSource))
       rasterReservations++
   }
 
@@ -80,13 +83,14 @@ internal class GlassForegroundPortal(density: Float) {
     this.hasSource = hasSource
     val rowsOpacity = frame.rowsOpacity.coerceIn(0f, 1f)
     rowsVisible = rowsOpacity > .001f
+    sourceVisible = hasSource && frame.sourceOpacity > .001f
     // Opacity belongs to the bounded raster node. Applying it to the full-size
     // RN body promotes that native View to a full physical hardware alpha layer
     // before this portal's sampling transform, defeating the pixel budget.
     rowsNode.setAlpha(rowsOpacity)
     generation++
     // Invisible rows are skipped by GlassMenuSession before foreground draw.
-    if (!rowsVisible) return
+    if (!rowsVisible && !sourceVisible) return
     portal.setFloatUniform("center", incoming.centerX(), incoming.centerY())
     portal.setFloatUniform("halfSize", incoming.width() / 2f, incoming.height() / 2f)
     portal.setFloatUniform("cornerRadii", frame.radiusX, frame.radiusY)
@@ -109,14 +113,17 @@ internal class GlassForegroundPortal(density: Float) {
    * Raster coordinates map back to physical field/lens coordinates. Only
    * transient images are downsampled; settled native content draws directly.
    */
-  fun draw(canvas: Canvas, bounds: RectF, warp: Boolean, drawContent: (Canvas) -> Unit) {
+  fun draw(canvas: Canvas, bounds: RectF, warp: Boolean, drawContent: (Canvas) -> Unit,
+    drawSource: ((Canvas) -> Unit)? = null) {
     if (!warp || !canvas.isHardwareAccelerated) {
       // As upstream, retain the fixed nodes until the presentation ends. They
       // are not drawn while settled, but closing can reuse the same capacity.
       drawContent(canvas)
+      if (sourceVisible) drawSource?.invoke(canvas)
       return
     }
-    if (!rowsVisible) {
+    val grouped = hasSource && drawSource != null
+    if (!rowsVisible && !(grouped && sourceVisible)) {
       if (diagnosticsEnabled) invisibleSkips++
       return
     }
@@ -132,11 +139,13 @@ internal class GlassForegroundPortal(density: Float) {
       nodeWidth = width; nodeHeight = height
       rowsNode.setPosition(0, 0, width, height)
       foregroundNode.setPosition(0, 0, width, height)
+      sourceCompositeNode.setPosition(0, 0, width, height)
       foregroundNode.setPivotX(0f); foregroundNode.setPivotY(0f)
       // The reserved guard already includes all filter reach. Explicit bounds
       // clipping prevents Skia from adding changing blur-outset layer sizes.
       rowsNode.setClipToBounds(true)
       foregroundNode.setClipToBounds(true)
+      sourceCompositeNode.setClipToBounds(true)
       if (diagnosticsEnabled) nodeResizes++
     }
     foregroundNode.setScaleX(1f / scale)
@@ -147,8 +156,11 @@ internal class GlassForegroundPortal(density: Float) {
     // Both original Gaussian passes precede the lens. Their variances add,
     // so one anisotropic Gaussian preserves both blur phases while avoiding
     // another filtered intermediate image (RN body has no trigger composite).
-    val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, portalSigma, scale)
-    val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, portalSigma, scale)
+    // With a real glass trigger, rows and source retain independent opacity
+    // and Gaussian tracks before they meet the portal. A shared rows alpha or
+    // fused rows blur would erase/blur the toolbar along the wrong timeline.
+    val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)
+    val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, if (grouped) 0f else portalSigma, scale)
     if (blurX != rowsEffectX || blurY != rowsEffectY) {
       rowsEffectX = blurX; rowsEffectY = blurY
       rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
@@ -177,9 +189,28 @@ internal class GlassForegroundPortal(density: Float) {
       renderedGeneration = generation
       if (diagnosticsEnabled) records++
     }
-    if (dimensionsChanged || !foregroundNode.hasDisplayList()) {
+    if (grouped) {
+      val portalRadius = GlassPortalBlur.radius(portalSigma * scale)
+      if (compositeBlur != portalRadius) {
+        compositeBlur = portalRadius
+        sourceCompositeNode.setRenderEffect(if (portalRadius > .01f)
+          RenderEffect.createBlurEffect(portalRadius, portalRadius, Shader.TileMode.DECAL) else null)
+      }
+      val recording = sourceCompositeNode.beginRecording(width, height)
+      try {
+        if (sourceVisible) {
+          val save = recording.save()
+          recording.scale(scale, scale)
+          recording.translate(-area.left, -area.top)
+          drawSource?.invoke(recording)
+          recording.restoreToCount(save)
+        }
+        if (rowsVisible) recording.drawRenderNode(rowsNode)
+      } finally { sourceCompositeNode.endRecording() }
+    }
+    if (dimensionsChanged || !foregroundNode.hasDisplayList() || grouped) {
       val recording = foregroundNode.beginRecording(width, height)
-      try { recording.drawRenderNode(rowsNode) } finally { foregroundNode.endRecording() }
+      try { recording.drawRenderNode(if (grouped) sourceCompositeNode else rowsNode) } finally { foregroundNode.endRecording() }
     }
     wasWarping = true
     canvas.drawRenderNode(foregroundNode)
@@ -223,6 +254,9 @@ internal class GlassForegroundPortal(density: Float) {
     foregroundNode.setRenderEffect(null)
     rowsNode.discardDisplayList()
     foregroundNode.discardDisplayList()
+    sourceCompositeNode.discardDisplayList()
+    sourceCompositeNode.setRenderEffect(null)
+    compositeBlur = Float.NaN
     rowsEffectX = Float.NaN; rowsEffectY = Float.NaN
     effectGeneration = -1L; renderedGeneration = -1L
     nodeWidth = 0; nodeHeight = 0

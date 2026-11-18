@@ -35,7 +35,7 @@ test('reopen, replacement and unmount invalidate old native acknowledgements and
   assert.doesNotThrow(() => session.complete(session.id, false));
 });
 
-function harness(native = true) {
+function harness(native = true, origin = [10, 20, 44, 44, 22, 77]) {
   const callbacks: (() => void)[] = []; let consumed = 0; let renders = 0; let hook: any;
   const dependencies: Record<string, any> = {
     react: React,
@@ -50,7 +50,7 @@ function harness(native = true) {
     'react-native-worklets': { scheduleOnRN: (call: (...args: any[]) => void, ...args: any[]) => call(...args) },
     '../../modules/liquid-glass': { isMenuMorphAvailable: native },
     '@/lib/menuMorph': { MenuMorphSession },
-    '@/lib/menuOrigin': { takeMenuOrigin: () => { consumed++; return [10, 20, 44, 44, 22, 77]; } },
+    '@/lib/menuOrigin': { takeMenuOrigin: () => { consumed++; return origin; } },
     '@/theme/motion': { SHEET_IN: { duration: 240 }, SHEET_OUT: { duration: 160 }, motion: { reduceMotion: { essential: 0 } } },
   };
   const api: Record<string, any> = {};
@@ -103,6 +103,21 @@ test('hidden sheets do not consume a source and ordinary owner rerenders cannot 
     assert.equal(h.consumed, 1); assert.equal(h.hook.motion.sessionId, id);
     assert.equal(h.hook.motion.open, false); assert.equal(h.hook.motion.sourceRect, source);
     assert.deepEqual(Array.from(source), [10, 20, 44, 44, 22, 77]);
+  } finally { await act(async () => root?.unmount()); }
+});
+
+test('whole-group identity and pressed-through geometry remain one transaction through a retained close', async () => {
+  const h = harness(true, [10, 20, 44, 44, 22, 77, 900]);
+  let root!: ReactTestRenderer;
+  try {
+    await act(async () => { root = create(React.createElement(h.Probe, { open: true, onClose() {} })); });
+    const source = h.hook.motion.sourceRect, id = h.hook.motion.sessionId;
+    assert.deepEqual(Array.from(source), [10, 20, 44, 44, 22, 77, 900]);
+    await act(async () => h.hook.dismiss());
+    assert.equal(h.hook.motion.sourceRect, source, 'closing cannot replace the registered group with its selected menu row');
+    assert.equal(h.hook.motion.sessionId, id);
+    assert.equal(h.consumed, 1);
+    await act(async () => h.hook.motion.onMotionComplete(h.event(id, false)));
   } finally { await act(async () => root?.unmount()); }
 });
 

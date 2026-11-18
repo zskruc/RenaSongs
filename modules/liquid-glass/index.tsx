@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, processColor, View, type ColorValue, type NativeSyntheticEvent, type ViewProps } from 'react-native';
+import { Platform, processColor, StyleSheet, View, type ColorValue, type NativeSyntheticEvent, type ViewProps } from 'react-native';
 import { requireNativeView, requireOptionalNativeModule } from 'expo';
 
 export type LiquidGlassMaterialPreset = 'custom' | 'button' | 'tabs' | 'dialog' | 'amPlus' | 'mediaPopup' | 'mediaPopupBottom' | 'mediaMenu';
@@ -116,7 +116,7 @@ export type LiquidGlassDiagnostics = {
 };
 
 const nativeModule = Platform.OS === 'android'
-  ? requireOptionalNativeModule<{ isSupported: boolean; menuMorphSupported?: boolean; themeTraceEnabled?: boolean; artistFocusTraceEnabled?: boolean; artistImageTraceEnabled?: boolean; getDiagnostics(): Promise<LiquidGlassDiagnostics>;
+  ? requireOptionalNativeModule<{ isSupported: boolean; menuMorphSupported?: boolean; menuTriggerGroupSupported?: boolean; themeTraceEnabled?: boolean; artistFocusTraceEnabled?: boolean; artistImageTraceEnabled?: boolean; getDiagnostics(): Promise<LiquidGlassDiagnostics>;
     updateTabsMotion: UpdateTabsMotion; updateDockProgress: UpdateDockProgress;
     updateButtonMotion: UpdateButtonMotion; readDockScrollIntent: ReadDockScrollIntent;
     expandDockScrollInput: ExpandDockScrollInput; restoreDockScrollTarget: RestoreDockScrollTarget;
@@ -149,6 +149,35 @@ export const isArtistImageTraceEnabled = Boolean(nativeModule?.artistImageTraceE
 
 /** Capability gated so an old APK can keep the JS/Reanimated fallback safely. */
 export const isMenuMorphAvailable = Boolean(nativeModule?.menuMorphSupported);
+export const isMenuTriggerGroupAvailable = Boolean(nativeModule?.menuTriggerGroupSupported);
+const NativeMenuTriggerGroup = isMenuTriggerGroupAvailable
+  ? requireNativeView<ViewProps & { sourceFillColor: number | null } & React.RefAttributes<View>>('ResonusLiquidGlass', 'MenuTriggerGroup')
+  : null;
+
+/** The foreground capture excludes the host background. Authorize its separate
+ * fill only when JS can prove that the existing style is one static solid color. */
+function menuTriggerGroupFill(style: ViewProps['style']): number | null {
+  try {
+    const flat = StyleSheet.flatten(style);
+    if (!flat || flat.backgroundColor == null) return null;
+    const paint = flat as Record<string, unknown>;
+    if (typeof paint.borderRadius !== 'number' || !Number.isFinite(paint.borderRadius) || paint.borderRadius < 48
+      || Object.entries(paint).some(([key, value]) => key !== 'borderRadius' && /^border.+Radius$/.test(key)
+        && value != null && (typeof value !== 'number' || !Number.isFinite(value) || value < 48))
+      || paint.backgroundImage != null || paint.experimental_backgroundImage != null || paint.boxShadow != null
+      || paint.filter != null || Object.entries(paint).some(([key, value]) =>
+        (/^border.*Width$/.test(key) || key === 'shadowOpacity' || key === 'shadowRadius' || key === 'elevation')
+          && value != null && value !== 0)) return null;
+    const fill = processColor(flat.backgroundColor);
+    return typeof fill === 'number' && Number.isFinite(fill) ? fill : null;
+  } catch { return null; }
+}
+
+/** Explicit whole-toolbar source; old APKs/platforms preserve the same View. */
+export const MenuTriggerGroupView = React.forwardRef<View, ViewProps>(function MenuTriggerGroupView(props, ref) {
+  if (!NativeMenuTriggerGroup) return <View {...props} ref={ref} collapsable={false} />;
+  return <NativeMenuTriggerGroup {...props} ref={ref} collapsable={false} sourceFillColor={menuTriggerGroupFill(props.style)} />;
+});
 /** Screen DP [x, y, width, height, radius], measured on Android's UI thread. */
 export const measureNativeMenuOrigin = nativeModule?.measureMenuOrigin ?? null;
 

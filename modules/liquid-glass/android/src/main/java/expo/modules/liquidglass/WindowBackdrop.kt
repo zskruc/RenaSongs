@@ -155,6 +155,7 @@ internal object WindowBackdrops {
     val wasCapturing = isCapturing
     isCapturing = true
     try {
+      MenuMorphWindowOwners.beginCapture(captureSource)
       MenuTriggerSnapshots.beginCapture(root, captureSource, activityDecor)
       // A Modal also stages/restores glass in its Activity underlay. Those
       // mutations invalidate that other window's hosts, not just this capture's
@@ -190,7 +191,9 @@ internal object WindowBackdrops {
               } finally { suppressedHosts.clear() }
             }
           }
-        } finally { MenuTriggerSnapshots.endCapture() }
+        } finally {
+          try { MenuTriggerSnapshots.endCapture() } finally { MenuMorphWindowOwners.endCapture() }
+        }
       }
     }
   }
@@ -1151,11 +1154,15 @@ internal class WindowBackdrop(
           (activityLocation[1] - location[1]).toFloat())
         menuSourceRecording = true
         try {
+          MenuMorphWindowOwners.beginCapture(underlay)
           MenuTriggerSnapshots.beginCapture(root, underlay, null)
           underlay.draw(recording)
         } finally {
           try { recording.restoreToCount(checkpoint) }
-          finally { try { MenuTriggerSnapshots.endCapture() } finally { menuSourceRecording = false } }
+          finally {
+            try { MenuTriggerSnapshots.endCapture() }
+            finally { try { MenuMorphWindowOwners.endCapture() } finally { menuSourceRecording = false } }
+          }
         }
         // Scrim is deliberately not baked into this source. Both the direct
         // bridge and immutable GPU image receive its current paint at sampling.

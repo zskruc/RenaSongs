@@ -5,6 +5,20 @@ internal fun menuSourceTag(value: Double?): Int? = value?.takeIf {
   it.isFinite() && it > 0.0 && it <= Int.MAX_VALUE.toDouble() && it == kotlin.math.floor(it)
 }?.toInt()
 
+/** Register the public window-commit observation before returning source
+ * drawing. Registration may synchronously invalidate/replace the old owner. */
+internal fun handoffMenuSourceAfterRegistration(
+  valid: () -> Boolean,
+  register: () -> Boolean,
+  restore: () -> Unit
+): Boolean {
+  if (!valid()) return false
+  val registered = try { register() } catch (_: RuntimeException) { false }
+  if (!registered || !valid()) return false
+  restore()
+  return true
+}
+
 /** Main-thread lifecycle boundary, independent of Android's rendering timing. */
 internal class MenuSourceOwnership {
   var attached = false
@@ -20,10 +34,14 @@ internal class MenuSourceOwnership {
     return true
   }
   /** Restore only our own zeroed alpha; never overwrite another animation. */
-  fun detach(currentOwner: Boolean, exactSource: Boolean, alphaStillHidden: Boolean): Boolean {
+  fun returnSource(currentOwner: Boolean, exactSource: Boolean, alphaStillHidden: Boolean): Boolean {
     val restore = hidden && currentOwner && exactSource && alphaStillHidden
-    attached = false
     hidden = false
+    return restore
+  }
+  fun detach(currentOwner: Boolean, exactSource: Boolean, alphaStillHidden: Boolean): Boolean {
+    val restore = returnSource(currentOwner, exactSource, alphaStillHidden)
+    attached = false
     return restore
   }
   fun release(): Boolean {

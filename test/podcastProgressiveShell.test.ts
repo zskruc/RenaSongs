@@ -47,6 +47,7 @@ function harness() {
     '@/api/podcasts': { podcastCover: (show: any) => show.artFile ?? show.imageUrl },
     '@/components/Cover': { Cover: 'Cover' }, '@/components/ExplicitBadge': { ExplicitBadge: 'ExplicitBadge' },
     '@/components/Icon': { __esModule: true, default: 'Icon' },
+    '@/components/MenuTriggerGroup': { MenuTriggerGroup: 'MenuTriggerGroup' },
     '@/components/BackChevron': { BackChevron: (props: any) => element('Back', { ...props, onPress: () => { backs++; } }) },
     '@/components/RouteImageResources': { useRouteImageLease: () => React.useMemo(() => ({ active: true }), []) },
     '@/components/volta/ArtistPagePalette': { ArtistPagePaletteProvider: ({ children }: any) => children },

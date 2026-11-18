@@ -8,9 +8,12 @@ const measurement = host.slice(host.indexOf('internal fun measureMenuOrigin('));
 assert.doesNotMatch(measurement, /MenuTriggerSnapshots\.(?:register|take)\s*\(/,
   'Generic origin measurement must remain read-only and cannot authorize hiding a source');
 assert.ok(host.includes('menuSourceTag(rect?.getOrNull(5))') && host.includes('takeIf { it.id == tag }') &&
-  host.includes('MenuTriggerSnapshots.take(source, sourceView)'),
+  host.includes('MenuTriggerSnapshots.take(source, groupView ?: buttonView,') &&
+  host.includes('authorizedGroup = groupView != null'),
   'Only an explicit validated source tag resolved synchronously to the same native View may own a clone');
-assert.ok(source.includes('interactiveCount(view, 0) > 1') && source.includes('containsGlass(view, 0)'),
+assert.ok(source.includes('if (!groupedSource && interactiveCount(view, 0) > 1) return null') &&
+  source.includes('val groupedSource = authorizedGroup && view is MenuTriggerGroupView') &&
+  source.includes('if (authorizedGroup && !groupedSource) return null') && source.includes('containsGlass(view, 0)'),
   'A small toolbar or unsupported glass hierarchy must not be hidden as one ordinary trigger');
 assert.doesNotMatch(source, /\binit\s*\{\s*view\.transitionAlpha\s*=\s*0f/,
   'Capturing pixels must not hide a source before its replacement View has attached');
@@ -66,16 +69,28 @@ const closeDiagnostics = source.slice(source.indexOf('fun beginClosing('), sourc
 assert.ok(closeDiagnostics.indexOf('if (!diagnosticsEnabled) return') < closeDiagnostics.indexOf('SystemClock.uptimeMillis()'),
   'Normal close must not start phase-clock/sample allocation merely for diagnostics');
 const detach = source.slice(source.indexOf('fun detachOverlay('), source.indexOf('fun updateOverlay('));
+const sourceLease = source.slice(source.indexOf('private fun returnSourceLease('), source.indexOf('private fun sameSourcePlacement('));
 assert.ok(detach.includes('remove(sourceOwner)') && detach.includes('overlayRoot.clear()') &&
-  detach.includes('ownership.detach(MenuTriggerSnapshots.owns(this), view != null, view?.transitionAlpha == 0f)') &&
-  detach.includes('view?.transitionAlpha = originalTransitionAlpha'),
+  detach.includes('returnSourceLease(view)') && sourceLease.includes('ownership.returnSource(') &&
+  sourceLease.includes('view?.transitionAlpha = originalTransitionAlpha'),
   'Window detach must remove its small View and conditionally restore only the exact active source\'s own hidden alpha');
 assert.ok(attach.includes('view.id != sourceId') && source.includes('view.id != sourceId || !view.isShown'),
   'Cloning/refresh must still reject a recycled tag even when cleanup restores the same weak physical instance');
 assert.ok(detach.includes('catch (_: RuntimeException)') && detach.includes('finally'),
   'A failed overlay removal must not block node disposal or native motion completion');
-assert.ok(detach.indexOf('view?.transitionAlpha = originalTransitionAlpha') < detach.indexOf('remove(sourceOwner)'),
+assert.ok(detach.indexOf('returnSourceLease(view)') < detach.indexOf('remove(sourceOwner)'),
   'A window handoff must restore its exact source before removing the replacement View');
+assert.ok(sourceLease.includes('if (sourceLeaseReturned) return') &&
+  sourceLease.includes('val exactSource = view != null && source.get() === view') &&
+  !sourceLease.includes('view.id == sourceId') &&
+  sourceLease.includes('view?.transitionAlpha == 0f') &&
+  attach.includes('view.addOnAttachStateChangeListener(sourceAttachListener)') &&
+  source.includes('override fun onViewDetachedFromWindow(view: View) { onSourceDetached(view) }'),
+  'Early detach must return a lease once; same weak owned instance may repair its own zero alpha if a tag changed first, while capture/attach remain tag-strict');
+const sourceDetached = source.slice(source.indexOf('internal fun onSourceDetached('), source.indexOf('private fun returnSourceLease('));
+assert.ok(sourceDetached.indexOf('returnSourceLease(view)') < sourceDetached.indexOf('source.clear()') &&
+  sourceDetached.includes('sourceParent.clear()') && sourceDetached.includes('sourceRoot.clear()'),
+  'Detach returns the original source before clearing weak identities; a later animation close cannot change a newly pooled source');
 const release = source.slice(source.lastIndexOf('fun release('));
 assert.ok(release.includes('if (!ownership.release()) return') && release.includes('detachOverlay()') &&
   release.includes('source.clear()') && release.includes('captureState.release()') && release.includes('sourceOwner.setRenderEffect(null)'),

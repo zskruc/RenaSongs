@@ -1,14 +1,17 @@
-import { forwardRef, useCallback, useRef } from 'react';
+import { forwardRef, useCallback, useContext, useRef } from 'react';
 import { Pressable, type PressableProps, type View } from 'react-native';
 
-import { captureMenuTrigger } from '@/lib/menuOrigin';
+import { captureMenuTrigger, captureMenuTriggerActivation } from '@/lib/menuOrigin';
+import { MenuTriggerGroupContext } from './MenuTriggerGroup';
 
 /** Preserve the original button while giving a popup one exact native anchor.
- * A shared toolbar or the touched icon must never stand in for this control. */
+ * Only an explicitly opted-in group may supply the separate whole-pill source;
+ * this control remains the exact pressed/through geometry in either case. */
 export const MenuTriggerPressable = forwardRef<View, PressableProps>(function MenuTriggerPressable({
-  onPressIn, ...props
+  onPressIn, onPress, ...props
 }, forwardedRef) {
   const host = useRef<View | null>(null);
+  const group = useContext(MenuTriggerGroupContext);
   const setHost = useCallback((view: View | null) => {
     host.current = view;
     if (typeof forwardedRef === 'function') {
@@ -19,8 +22,12 @@ export const MenuTriggerPressable = forwardRef<View, PressableProps>(function Me
     } else if (forwardedRef) forwardedRef.current = view;
   }, [forwardedRef]);
   return <Pressable {...props} ref={setHost} collapsable={false}
+    onPress={group ? (event) => {
+      captureMenuTriggerActivation(event, host.current, group.current);
+      onPress?.(event);
+    } : onPress}
     onPressIn={(event) => {
-      captureMenuTrigger(event, host.current);
+      captureMenuTrigger(event, host.current, group?.current);
       onPressIn?.(event);
     }} />;
 });

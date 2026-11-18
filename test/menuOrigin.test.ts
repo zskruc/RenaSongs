@@ -50,6 +50,36 @@ test('generic or implicit origins never authorize hidden-source capture, includi
   assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22]);
 });
 
+test('explicit groups preserve pressed-button through geometry and both identities before and after native measurement', async () => {
+  const native = deferred<unknown>();
+  const tracker = createMenuOriginTracker(() => native.promise, () => 100);
+  tracker.start({ x: 100, y: 200 }, 40, true, 500);
+  assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22, 40, 500], 'a fast tap cannot wait for measuring either native owner');
+  tracker.start({ x: 100, y: 200 }, 40, true, 600);
+  native.resolve([80, 180, 44, 44, 22, 999, 888]); await settle();
+  assert.deepEqual(tracker.take(), [80, 180, 44, 44, 22, 40, 600],
+    'measurement may improve only the through rect, not replace either explicit identity');
+  assert.equal(tracker.take(), null);
+});
+
+test('group ownership cannot be inferred, revived after movement, or carried into a replacement ordinary press', async () => {
+  const late = deferred<unknown>();
+  const tracker = createMenuOriginTracker(() => late.promise, () => 100);
+  tracker.start({ x: 100, y: 200 }, 40, false, 500);
+  assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22], 'a group ref without an exact authorized button cannot hide anything');
+  for (const group of [40, 0, -1, NaN, Infinity, 2 ** 31, 1.5]) {
+    tracker.start({ x: 100, y: 200 }, 40, true, group);
+    assert.deepEqual(tracker.take(), [78, 178, 44, 44, 22, 40], 'invalid/same-host group falls back to the exact button');
+  }
+  tracker.start({ x: 100, y: 200 }, 40, true, 500);
+  tracker.move({ x: 100, y: 220 });
+  late.resolve([80, 180, 44, 44, 22]); await settle();
+  assert.equal(tracker.take(), null, 'a scrolling gesture must invalidate whole-group ownership too');
+  tracker.start({ x: 100, y: 200 }, 40, true, 500);
+  tracker.start({ x: 200, y: 300 }, 60, true); await settle();
+  assert.deepEqual(tracker.take(), [178, 278, 44, 44, 22, 60], 'an old group cannot leak into the next exact source');
+});
+
 test('superseded measurements, source clears and expired presses never contaminate another menu', async () => {
   let now = 100;
   const first = deferred<unknown>(), second = deferred<unknown>();
@@ -117,6 +147,16 @@ test('event currentTarget alone retains geometry fallback but cannot authorize h
   await settle(); assert.deepEqual(h.requests, [99]);
   h.native.resolve([80, 180, 132, 44, 22]); await settle();
   assert.deepEqual(Array.from(h.api.takeMenuOrigin()), [80, 180, 132, 44, 22]);
+});
+
+test('adapter carries an explicit group separately and measures only the pressed control', async () => {
+  const h = adapter();
+  h.api.captureMenuTrigger(event(), { tag: 44 }, { tag: 500 });
+  await settle(); assert.deepEqual(h.requests, [44]);
+  h.native.resolve([80, 180, 44, 44, 22]); await settle();
+  assert.deepEqual(Array.from(h.api.takeMenuOrigin()), [80, 180, 44, 44, 22, 44, 500]);
+  h.api.captureMenuTrigger(event(), undefined, { tag: 500 });
+  assert.equal(h.api.takeMenuOrigin().length, 5, 'generic currentTarget plus a group cannot authorize capture');
 });
 
 test('touch release promotion works, while keyboard activation and multi-touch clear an unrelated origin', () => {

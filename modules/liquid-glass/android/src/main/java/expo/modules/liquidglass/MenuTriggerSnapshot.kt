@@ -21,6 +21,7 @@ import expo.modules.liquidglass.menumotion.GlassMorphFrame
 import expo.modules.liquidglass.menumotion.MenuSourceOwnership
 import expo.modules.liquidglass.menumotion.menuSourcePixels
 import expo.modules.liquidglass.menumotion.MenuSourceCapture
+import expo.modules.liquidglass.menumotion.handoffMenuSourceAfterRegistration
 import java.io.File
 import java.io.FileOutputStream
 import java.lang.ref.WeakReference
@@ -53,24 +54,34 @@ internal object MenuTriggerSnapshots {
     owners.forEach { it.get()?.restoreAfterCapture() }
   }
 
-  fun take(sourceScreen: RectF, exactView: View?): MenuTriggerSnapshot? {
+  fun take(sourceScreen: RectF, exactView: View?, authorizedGroup: Boolean = false): MenuTriggerSnapshot? {
     lastCapture = mapOf("sourceCaptureMode" to "geometry-only")
     // A replacement owns the real source, including if it reuses the same view.
     active.get()?.release()
     if (!valid(sourceScreen)) return null
     val view = exactView ?: return null
+    val groupedSource = authorizedGroup && view is MenuTriggerGroupView
+    if (authorizedGroup && !groupedSource) return null
+    // The source material keeps its real solid RGBA separately from foreground
+    // pixels. Unknown gradient/image backgrounds cannot be faithfully handed
+    // to that field, so keep the original group instead of baking/doubling it.
+    if (groupedSource && (view as MenuTriggerGroupView).sourceFillColor() == null) return null
     val metadata = linkedMapOf<String, Any>("sourceCaptureMode" to "software-once",
       "sourceCaptureClass" to view.javaClass.name, "sourceCaptureChildCount" to if (view is ViewGroup) view.childCount else 0,
       "sourceCaptureTag" to view.id, "sourceCaptureWidth" to view.width, "sourceCaptureHeight" to view.height,
-      "sourceCaptureViewAlpha" to view.alpha, "sourceCaptureTransitionAlpha" to view.transitionAlpha)
+      "sourceCaptureViewAlpha" to view.alpha, "sourceCaptureTransitionAlpha" to view.transitionAlpha,
+      "sourceCaptureExplicitGroup" to groupedSource)
     lastCapture = metadata
     val density = view.resources.displayMetrics.density
     if (!density.isFinite() || density <= 0f || !view.isAttachedToWindow || !view.isShown ||
       view.width <= 0 || view.height <= 0 || view.alpha <= 0f || view.transitionAlpha <= 0f) return null
     // Never erase a whole list row, page, or a native glass surface to obtain a glyph.
     if (view.width > 256f * density || view.height > 96f * density || view.width.toLong() * view.height > MAX_PIXEL_COUNT ||
-      view.scrollX != 0 || view.scrollY != 0 || containsGlass(view, 0) ||
-      interactiveCount(view, 0) > 1) return null
+      view.scrollX != 0 || view.scrollY != 0 || containsGlass(view, 0)) return null
+    // Only the dedicated, explicitly referenced native group may contain more
+    // than one control. A coincidentally small shared row is still not a group.
+    if (!groupedSource && interactiveCount(view, 0) > 1) return null
+    if (groupedSource && interactiveCount(view, 0, 6) > 6) return null
     val location = IntArray(2)
     view.getLocationOnScreen(location)
     val live = RectF(location[0].toFloat(), location[1].toFloat(),
@@ -79,8 +90,8 @@ internal object MenuTriggerSnapshots {
     if (!sameOrigin(sourceScreen, live, tolerance)) return null
     // An exact-ref fast tap need not wait for JS measurement. Reconcile the
     // same normalized hit envelope against that live control synchronously.
-    val sourceWidth = max(live.width(), 44f * density)
-    val sourceHeight = max(live.height(), 44f * density)
+    val sourceWidth = if (groupedSource) live.width() else max(live.width(), 44f * density)
+    val sourceHeight = if (groupedSource) live.height() else max(live.height(), 44f * density)
     sourceScreen.set(live.centerX() - sourceWidth / 2f, live.centerY() - sourceHeight / 2f,
       live.centerX() + sourceWidth / 2f, live.centerY() + sourceHeight / 2f)
     // A hardware view.draw(RenderNode canvas) can retain live child display-list
@@ -94,7 +105,11 @@ internal object MenuTriggerSnapshots {
       mutable.density = view.resources.displayMetrics.densityDpi
       val software = Canvas(mutable)
       software.clipRect(0, 0, view.width, view.height)
-      view.draw(software)
+      // The source glass is rendered by the menu's shared material field.
+      // Capture only group children, exactly like upstream recordContent(), so
+      // its original JS/native background is not tinted/drawn a second time.
+      if (groupedSource) (view as MenuTriggerGroupView).drawMenuForeground(software)
+      else view.draw(software)
       val pixels = IntArray(view.width * view.height)
       mutable.getPixels(pixels, 0, view.width, 0, 0, view.width, view.height)
       val stats = menuSourcePixels(view.width, view.height, pixels)
@@ -144,13 +159,18 @@ internal object MenuTriggerSnapshots {
       metadata["sourceCaptureResult"] = "owner-budget-rejected"
       return null
     }
-    val snapshot = MenuTriggerSnapshot(view, immutable, metadata.toMap(), density, sourceScreen.width(), sourceScreen.height())
+    val snapshot = MenuTriggerSnapshot(view, immutable, metadata.toMap(), density,
+      sourceScreen.width(), sourceScreen.height(), groupedSource)
     active = WeakReference(snapshot)
     return snapshot
   }
 
   internal fun owns(snapshot: MenuTriggerSnapshot): Boolean = active.get() === snapshot
   internal fun forget(snapshot: MenuTriggerSnapshot) { if (owns(snapshot)) active.clear() }
+  /** Restore before RN can recycle the original physical group's native tag. */
+  internal fun releaseSource(view: View) {
+    active.get()?.takeIf { it.referencesSource(view) }?.onSourceDetached(view)
+  }
 
   private fun valid(rect: RectF): Boolean = rect.left.isFinite() && rect.top.isFinite() &&
     rect.right.isFinite() && rect.bottom.isFinite() && rect.width() > 0f && rect.height() > 0f
@@ -164,20 +184,25 @@ internal object MenuTriggerSnapshots {
     if (view is LiquidGlassView || view is MenuMorphView || view is SurfaceView || view is TextureView) return true
     if (view !is ViewGroup) return false
     if (depth >= 4 || view.childCount > 16) return true
-    for (index in 0 until view.childCount) if (containsGlass(view.getChildAt(index), depth + 1)) return true
+    for (index in 0 until view.childCount) {
+      val child = view.getChildAt(index) ?: return true
+      if (child.parent !== view || containsGlass(child, depth + 1)) return true
+    }
     return false
   }
 
   /** A toolbar can be small, but it is not one trigger. Fail closed on opaque trees. */
-  private fun interactiveCount(view: View, depth: Int): Int {
+  private fun interactiveCount(view: View, depth: Int, maximum: Int = 1): Int {
     val role = view.getTag(R.id.accessibility_role)?.toString()?.uppercase()
     var count = if (view.isClickable || view.isLongClickable || role in setOf(
       "BUTTON", "IMAGEBUTTON", "LINK", "MENUITEM", "CHECKBOX", "RADIO", "SWITCH", "TOGGLEBUTTON")) 1 else 0
     if (view !is ViewGroup) return count
-    if (depth >= 8 || view.childCount > 64) return 2
+    if (depth >= 8 || view.childCount > 64) return maximum + 1
     for (index in 0 until view.childCount) {
-      count += interactiveCount(view.getChildAt(index), depth + 1)
-      if (count > 1) return count
+      val child = view.getChildAt(index) ?: continue
+      if (child.parent !== view) return maximum + 1
+      count += interactiveCount(child, depth + 1, maximum)
+      if (count > maximum) return count
     }
     return count
   }
@@ -187,7 +212,8 @@ internal object MenuTriggerSnapshots {
 @RequiresApi(Build.VERSION_CODES.S)
 internal class MenuTriggerSnapshot internal constructor(view: View,
   @Suppress("unused") private val sourcePixels: Bitmap, private val captureMetadata: Map<String, Any>,
-  private val density: Float, private val morphSourceWidth: Float, private val morphSourceHeight: Float) {
+  private val density: Float, private val morphSourceWidth: Float, private val morphSourceHeight: Float,
+  internal val isGroupedSource: Boolean = false) {
   private companion object {
     val CLOSING_SAMPLE_TIMES_MS = longArrayOf(50L, 100L, 150L, 200L, 300L, 450L)
   }
@@ -198,6 +224,8 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     Log.isLoggable("ResonusGlassSource", Log.DEBUG)
   private val source = WeakReference(view)
   private val sourceId = view.id
+  private val sourceParent = WeakReference(view.parent as? View)
+  private val sourceRoot = WeakReference(view.rootView)
   private val originalTransitionAlpha = view.transitionAlpha
   private val width = view.width.toFloat()
   private val height = view.height.toFloat()
@@ -214,6 +242,28 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
   private val clip = Rect()
   private val glyphBounds = RectF()
   private var hasFrame = false
+  private var groupedRendering = false
+  private var sourceLeaseReturned = false
+  private var sourceLeaseReturnCount = 0L
+  private var sourceAlphaRestoreCount = 0L
+  private var idChangedBeforeReturn = false
+  private var sourceListenerAttached = false
+  private val sourceAttachListener = object : View.OnAttachStateChangeListener {
+    override fun onViewAttachedToWindow(view: View) = Unit
+    override fun onViewDetachedFromWindow(view: View) { onSourceDetached(view) }
+  }
+  /** Borrow immutable pixels only; the drawing owner must never recycle them. */
+  internal val groupForegroundBitmap: Bitmap? get() = sourcePixels.takeIf { isGroupedSource && !ownership.released }
+  internal val groupForegroundWidth: Int get() = sourcePixels.width
+  internal val groupForegroundHeight: Int get() = sourcePixels.height
+
+  /** Called only after the native window foreground owner is really attached.
+   * It must own group pixels and glass in one portal, never a second old copy. */
+  internal fun setGroupedRendering(enabled: Boolean) {
+    if (!isGroupedSource || ownership.released || groupedRendering == enabled) return
+    if (!enabled && ownership.attached) detachOverlay()
+    groupedRendering = enabled
+  }
   private var draws = 0L
   private var clipMisses = 0L
   private var lastRecordingAt = 0L
@@ -243,14 +293,68 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     }
   }
 
+  internal fun referencesSource(view: View): Boolean = source.get() === view
+
+  /** Returning an original View is separate from retiring its drawing owner.
+   * Immutable foreground pixels may finish a close after the source detaches. */
+  internal fun onSourceDetached(view: View) {
+    if (source.get() !== view) return
+    returnSourceLease(view)
+    source.clear()
+    sourceParent.clear()
+    sourceRoot.clear()
+  }
+
+  private fun returnSourceLease(view: View?) {
+    if (sourceLeaseReturned) return
+    sourceLeaseReturned = true
+    val currentOwner = MenuTriggerSnapshots.owns(this)
+    // Capture/retarget remain tag-strict. Cleanup owns the weak physical
+    // instance's still-zero alpha, including an id reset before detach.
+    val exactSource = view != null && source.get() === view
+    val hadLease = ownership.hidden
+    idChangedBeforeReturn = hadLease && currentOwner && exactSource && view?.id != sourceId
+    if (hadLease && currentOwner && exactSource) sourceLeaseReturnCount++
+    if (ownership.returnSource(currentOwner, exactSource, view?.transitionAlpha == 0f)) {
+      view?.transitionAlpha = originalTransitionAlpha
+      sourceAlphaRestoreCount++
+    }
+    if (isGroupedSource && hadLease && currentOwner && exactSource)
+      (view as? MenuTriggerGroupView)?.setMenuSourceActive(false)
+    if (sourceListenerAttached) view?.removeOnAttachStateChangeListener(sourceAttachListener)
+    sourceListenerAttached = false
+  }
+
+  private fun sameSourcePlacement(view: View): Boolean = !isGroupedSource ||
+    (view.parent === sourceParent.get() && view.rootView === sourceRoot.get())
+
+  /** Keep the immutable group foreground alive until its real Activity has
+   * committed the restored original. The native owner supplies bounded wait /
+   * cancellation; a missing or replaced source must never block dismissal. */
+  internal fun restoreSourceForHandoff(registerBeforeRestore: (View) -> Boolean): Boolean {
+    val view = source.get() ?: return false
+    val root = sourceRoot.get() ?: return false
+    return handoffMenuSourceAfterRegistration(
+      valid = { isGroupedSource && !ownership.released && !sourceLeaseReturned && ownership.attached && ownership.hidden &&
+        MenuTriggerSnapshots.owns(this) && source.get() === view && view.id == sourceId &&
+        view.transitionAlpha == 0f && view.isAttachedToWindow && view.isShown && sameSourcePlacement(view) && view.rootView === root &&
+        root.isAttachedToWindow && root.isHardwareAccelerated && root.isShown &&
+        root.windowVisibility == View.VISIBLE && root.viewTreeObserver.isAlive },
+      register = { registerBeforeRestore(root) },
+      restore = { returnSourceLease(view) }
+    )
+  }
+
   /** A bounded View owns pixels/filtering; no Drawable or borrowed RenderNode. */
   fun attachOverlay(root: View): Boolean {
-    if (ownership.released || !hasFrame || root !is ViewGroup || !root.isAttachedToWindow ||
+    if (ownership.released || sourceLeaseReturned || (isGroupedSource && !groupedRendering) || !hasFrame || root !is ViewGroup || !root.isAttachedToWindow ||
       !root.isHardwareAccelerated || root.width <= 0 || root.height <= 0 || !MenuTriggerSnapshots.owns(this)) return false
     val view = source.get() ?: return false
-    if (!view.isAttachedToWindow || view.id != sourceId || !view.isShown ||
+    if (!view.isAttachedToWindow || view.id != sourceId || !view.isShown || !sameSourcePlacement(view) ||
       (!ownership.hidden && view.transitionAlpha != originalTransitionAlpha)) return false
-    if (overlayRoot.get() !== root) detachOverlay()
+    val previousRoot = overlayRoot.get()
+    if (previousRoot != null && previousRoot !== root) { detachOverlay(); return false }
+    if (ownership.attached && previousRoot === root) return true
     overlayRoot = WeakReference(root)
     val ownerWidth = width.toInt() + guard * 2
     val ownerHeight = height.toInt() + guard * 2
@@ -265,9 +369,12 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     if (!ownership.attach(MenuTriggerSnapshots.owns(this), view.id == sourceId, sourceOwner.parent != null)) {
       root.overlay.remove(sourceOwner); overlayRoot.clear(); return false
     }
-    sourceOwner.visibility = View.VISIBLE
+    sourceOwner.visibility = if (groupedRendering) View.INVISIBLE else View.VISIBLE
     applyOwnerFrame()
     view.transitionAlpha = 0f
+    view.addOnAttachStateChangeListener(sourceAttachListener)
+    sourceListenerAttached = true
+    if (isGroupedSource) (view as? MenuTriggerGroupView)?.setMenuSourceActive(true)
     sourceOwner.invalidate()
     root.invalidate()
     return true
@@ -275,8 +382,8 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
 
   fun detachOverlay() {
     val view = source.get()
-    if (ownership.detach(MenuTriggerSnapshots.owns(this), view != null, view?.transitionAlpha == 0f))
-      view?.transitionAlpha = originalTransitionAlpha
+    returnSourceLease(view)
+    ownership.detach(false, false, false)
     sourceOwner.visibility = View.INVISIBLE
     try { (overlayRoot.get() as? ViewGroup)?.overlay?.remove(sourceOwner) }
     catch (_: RuntimeException) { /* cleanup cannot block completion */ }
@@ -333,7 +440,7 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
 
   fun restoreAfterCapture() {
     if (!captureState.finish(true, MenuTriggerSnapshots.owns(this) && ownership.attached && !ownership.released)) return
-    sourceOwner.visibility = View.VISIBLE
+    sourceOwner.visibility = if (groupedRendering) View.INVISIBLE else View.VISIBLE
     sourceOwner.invalidate()
     overlayRoot.get()?.invalidate()
     captureRestores++
@@ -354,7 +461,11 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
         "transitionAlpha" to ancestor.transitionAlpha, "visibility" to ancestor.visibility))
       ancestor = ancestor.parent as? View
     }
-    return mapOf("sourceOverlayAttached" to ownership.attached, "sourceOwnerKind" to "bounded-view",
+    return mapOf("sourceOverlayAttached" to ownership.attached,
+      "sourceOwnerKind" to if (groupedRendering) "group-window-foreground" else "bounded-view",
+      "sourceCaptureExplicitGroup" to isGroupedSource,
+      "sourceLeaseReturned" to sourceLeaseReturned, "idChangedBeforeReturn" to idChangedBeforeReturn,
+      "sourceLeaseReturnCount" to sourceLeaseReturnCount, "sourceAlphaRestoreCount" to sourceAlphaRestoreCount,
       "sourceOwnerWidth" to sourceOwner.width, "sourceOwnerHeight" to sourceOwner.height,
       "sourceOwnerPixels" to sourceOwner.width.toLong() * sourceOwner.height,
       "sourceOwnerRootClass" to (root?.javaClass?.name ?: "none"),
@@ -374,9 +485,9 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
 
   /** Refresh only the same live weak source; never resolve a replacement row/tag. */
   fun currentScreenBounds(out: RectF): Boolean {
-    if (ownership.released || !MenuTriggerSnapshots.owns(this)) return false
+    if (ownership.released || sourceLeaseReturned || !MenuTriggerSnapshots.owns(this)) return false
     val view = source.get() ?: return false
-    if (!view.isAttachedToWindow || view.id != sourceId || !view.isShown || view.width <= 0 || view.height <= 0) return false
+    if (!view.isAttachedToWindow || view.id != sourceId || !view.isShown || !sameSourcePlacement(view) || view.width <= 0 || view.height <= 0) return false
     val location = IntArray(2)
     view.getLocationOnScreen(location)
     val sx = abs(view.scaleX)
@@ -422,6 +533,8 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     detachOverlay()
     if (MenuTriggerSnapshots.owns(this)) MenuTriggerSnapshots.forget(this)
     source.clear()
+    sourceParent.clear()
+    sourceRoot.clear()
     captureState.release()
     sourceOwner.alpha = 0f
     sourceOwner.setRenderEffect(null)

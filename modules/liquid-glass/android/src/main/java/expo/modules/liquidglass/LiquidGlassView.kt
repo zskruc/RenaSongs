@@ -6,6 +6,7 @@ import android.graphics.Color as AndroidColor
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Path
 import android.os.Build
 import android.util.Log
 import android.view.MotionEvent
@@ -71,6 +72,8 @@ import kotlin.math.ceil
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
+import expo.modules.liquidglass.menumotion.GlassMorphFrame
+import expo.modules.liquidglass.menumotion.GlassGaussianField
 
 /** Background-only host: all taps and accessibility remain with the RN control. */
 open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(context, appContext), ReactPointerEventsView {
@@ -192,6 +195,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuPressX = 0f
   private var menuPressY = 0f
   private var menuPressGlow = 0f
+  private var menuPressTrigger = false
   private var menuPressDirty = false
   private var menuPressVersion by mutableIntStateOf(0)
   private val menuPressLight by lazy { if (Build.VERSION.SDK_INT >= 33) MenuPressLight() else null }
@@ -199,6 +203,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuMaterialVersion by mutableIntStateOf(0)
   private var menuPlacementVersion by mutableIntStateOf(0)
   private var menuMorphShape by mutableStateOf<RoundedCornerShape?>(null)
+  private var menuFieldShape by mutableStateOf<Shape?>(null)
+  private var menuFieldVersion by mutableIntStateOf(0)
+  private var menuFieldDirty = false
+  private val menuFieldOptics by lazy { if (Build.VERSION.SDK_INT >= 33) MenuMorphFieldOptics() else null }
+  private val menuFieldLocation = IntArray(2)
   private var menuCornerRadiusPx = Float.NaN
   private val composeOffsetX get() = if (menuMaterial.active) menuMaterial.captureLeft else 0
   private val composeOffsetY get() = if (menuMaterial.active) menuMaterial.captureTop else 0
@@ -385,7 +394,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     "materialRasterRequestedScale" to menuRasterScale,
     "materialRasterCommittedScale" to menuRasterCommittedScale,
     "materialRasterNativeAlpha" to alpha,
-    "materialRasterGroupAlpha" to menuGroupOpacity
+    "materialRasterGroupAlpha" to menuGroupOpacity,
+    "materialFieldOptics" to (menuFieldOptics?.diagnostics() ?: emptyMap<String, Any>())
   )
 
   internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float,
@@ -413,8 +423,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       menuCornerRadiusPx = radius
       menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)
     }
-    if (!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged && !menuPressDirty) return
+    if (!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged && !menuPressDirty && !menuFieldDirty) return
     menuPressDirty = false
+    menuFieldDirty = false
     // Measurement owns only this Compose drawing child, as with the native dock.
     if (menuMaterial.sizeChanged || rasterChanged) menuMaterialVersion++
     if (menuMaterial.placementChanged || rasterChanged) menuPlacementVersion++
@@ -426,12 +437,47 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     invalidate()
   }
 
-  internal fun updateMenuPressLight(x: Float, y: Float, glow: Float) {
+  internal fun updateMenuPressLight(x: Float, y: Float, glow: Float, trigger: Boolean = false) {
     val amount = glow.coerceIn(0f, 1f)
-    if (menuPressX == x && menuPressY == y && menuPressGlow == amount) return
+    if (menuPressX == x && menuPressY == y && menuPressGlow == amount && menuPressTrigger == trigger) return
     menuPressX = x; menuPressY = y; menuPressGlow = amount
+    menuPressTrigger = trigger
     menuPressDirty = true
     menuPressVersion++
+  }
+
+  /** A whole-group source crossfades two background recipes. Its original
+   * press field is one independent contribution, not multiplied a second time
+   * by either recipe's opacity. This pass owns no offscreen layer. */
+  internal fun drawMenuWindowPressLight(canvas: Canvas, screenLeft: Float, screenTop: Float,
+    width: Float, height: Float) {
+    if (menuFieldShape == null || menuPressGlow <= .001f) return
+    menuFieldOptics?.drawPressLight(canvas, width, height, 1f, Offset(screenLeft, screenTop),
+      resources.displayMetrics.density, menuPressX, menuPressY, menuPressGlow, menuPressTrigger)
+  }
+
+  private fun menuCommittedOpticalOrigin(): Offset {
+    getLocationOnScreen(menuFieldLocation)
+    return Offset(menuFieldLocation[0] + opticalMaterialOffsetX.toFloat(),
+      menuFieldLocation[1] + opticalMaterialOffsetY.toFloat())
+  }
+
+  /** One physical field is shared by clip, background optics and foreground. */
+  internal fun updateMenuField(frame: GlassMorphFrame, path: Path, fieldOriginX: Float,
+    fieldOriginY: Float, enabled: Boolean, field: GlassGaussianField?) {
+    if (!enabled) {
+      if (menuFieldShape != null) {
+        menuFieldShape = null; menuFieldVersion++; menuFieldDirty = true
+        menuFieldOptics?.release()
+      }
+      return
+    }
+    val physical = Path(path)
+    physical.offset(fieldOriginX, fieldOriginY)
+    menuFieldShape = MenuMorphFieldShape(physical, resources.displayMetrics.density, ::menuCommittedOpticalOrigin)
+    menuFieldOptics?.update(frame, fieldOriginX, fieldOriginY, true, field)
+    menuFieldVersion++
+    menuFieldDirty = true
   }
 
   internal fun clearMenuMorph() {
@@ -445,7 +491,13 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     composeView.scaleX = 1f
     composeView.scaleY = 1f
     menuMorphShape = null
+    menuFieldShape = null
+    menuFieldOptics?.release()
+    menuFieldOptics?.resetDiagnostics()
+    menuFieldDirty = false
+    menuFieldVersion++
     menuPressGlow = 0f
+    menuPressTrigger = false
     menuPressDirty = false
     menuPressVersion++
     menuCornerRadiusPx = Float.NaN
@@ -969,10 +1021,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
         // Radius is a drawing/layer dependency, not a composition dependency.
         // Keep immutable shapes so the clip, lens and highlight all observe
         // the same current outline even after pixel dimensions stop changing.
-        val glassShape: () -> Shape = { menuMorphShape ?: restingGlassShape }
+        val glassShape: () -> Shape = { menuFieldShape ?: menuMorphShape ?: restingGlassShape }
         val decorationShape = ShapeProvider(glassShape)
         val materialHighlight: () -> Highlight? = {
-          when {
+          @Suppress("UNUSED_VARIABLE") val fieldVersion = menuFieldVersion
+          val highlight = when {
             mediaMoreMenu -> null
             officialMaterial -> {
               val base = if (dialogMaterial) Highlight(style = HighlightStyle.Plain) else Highlight.Default
@@ -983,6 +1036,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             }
             else -> Highlight(width = glassHighlightWidth.dp, alpha = glassHighlightOpacity)
           }
+          if (highlight != null && menuFieldShape != null && menuFieldOptics != null)
+            highlight.copy(style = menuFieldOptics!!.highlightStyle(highlight.style, epoch.scale, ::menuCommittedOpticalOrigin))
+          else highlight
         }
         fun materialModifier(leading: Modifier = Modifier, withHighlight: Boolean = true): Modifier =
           leading.fillMaxSize().drawBackdrop(
@@ -1011,10 +1067,15 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
                   val lensAmount = if (amPlusMaterial) MaterialTuningMask.lensAmount(edge,
                     glassRefraction.dp.toPx(), tuningMask)
                     else if (boundedLens) edge else glassRefraction.dp.toPx()
-                  lens(lensHeight, lensAmount,
-                    depthEffect = glassDepthEffect,
-                    chromaticAberration = glassChromaticAberration
-                  )
+                  @Suppress("UNUSED_VARIABLE") val fieldVersion = menuFieldVersion
+                  if (menuFieldShape != null && menuFieldOptics != null) {
+                    menuFieldOptics!!.applyLens(this, epoch.scale, menuCommittedOpticalOrigin(),
+                      lensHeight, lensAmount, glassDepthEffect, glassChromaticAberration)
+                  } else {
+                    lens(lensHeight, lensAmount,
+                      depthEffect = glassDepthEffect,
+                      chromaticAberration = glassChromaticAberration)
+                  }
                 }
               }
             },
@@ -1048,10 +1109,12 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
               if (menuMaterial.active && menuPressGlow > .001f) {
                 getLocationOnScreen(sampleLocation)
                 drawIntoCanvas { canvas ->
-                  menuPressLight?.draw(canvas.nativeCanvas, size.width, size.height,
-                    menuCornerRadiusPx, resources.displayMetrics.density, epoch.scale,
-                    menuPressX - sampleLocation[0] - opticalMaterialOffsetX,
-                    menuPressY - sampleLocation[1] - opticalMaterialOffsetY, menuPressGlow)
+                  if (menuFieldShape == null) {
+                    menuPressLight?.draw(canvas.nativeCanvas, size.width, size.height,
+                      menuCornerRadiusPx, resources.displayMetrics.density, epoch.scale,
+                      menuPressX - sampleLocation[0] - opticalMaterialOffsetX,
+                      menuPressY - sampleLocation[1] - opticalMaterialOffsetY, menuPressGlow, menuPressTrigger)
+                  }
                 }
               }
               if (amPlusButtonHighlight != null && dockRole == "mini") {

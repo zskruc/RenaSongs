@@ -6,7 +6,9 @@ const native = new URL('modules/liquid-glass/android/src/main/java/expo/modules/
 const host = readFileSync(new URL('MenuMorphView.kt', native), 'utf8');
 const material = readFileSync(new URL('LiquidGlassView.kt', native), 'utf8');
 const windowBackdrop = readFileSync(new URL('WindowBackdrop.kt', native), 'utf8');
-const draw = host.slice(host.indexOf('override fun dispatchDraw('), host.indexOf('override fun dispatchTouchEvent('));
+// Separate foreground/light passes legitimately translate their own local
+// coordinates. The backdrop child itself must never inherit those matrices.
+const draw = host.slice(host.indexOf('internal fun drawWindowFrame('), host.indexOf('drawSourceFill(canvas, liveFrame.contentProgress, true)'));
 assert.ok(draw.includes('drawChild(canvas, material, drawingTime)'), 'Draw the existing material at its native physical origin');
 assert.doesNotMatch(draw, /canvas\.(?:scale|concat|setMatrix|translate)\s*\(/,
   'A Canvas matrix on the material would move/scale its already captured page texture');
@@ -31,7 +33,7 @@ assert.match(windowBackdrop, /surfaces\.any\s*\{\s*nativeMenuOwner\(it\) == null
 assert.match(material, /shadow = if \(officialMaterial && menuMaterialCapacity == IntSize\.Zero\)/,
   'Only the already-clipped native menu may skip its invisible shadow; normal materials must retain their shadow');
 assert.ok(material.includes('val restingGlassShape = if (amPlusMaterial)') &&
-  material.includes('val glassShape: () -> Shape = { menuMorphShape ?: restingGlassShape }') &&
+  material.includes('val glassShape: () -> Shape = { menuFieldShape ?: menuMorphShape ?: restingGlassShape }') &&
   material.includes('shape = glassShape,') &&
   material.includes('menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)'),
   'The physical spring radius must be read by the actual drawing provider, without eager root-composition state reads');
@@ -58,7 +60,7 @@ assert.ok(highlightModifier.includes('shapeProvider.shape.createOutline(size, la
 const materialComposition = material.slice(material.indexOf('private fun GlassMaterial(epoch:'));
 assert.equal((materialComposition.match(/\bmenuMorphShape\b/g) ?? []).length, 1,
   'GlassMaterial may reference animated shape only in its deferred provider, not add another eager composition read');
-assert.ok(/if \(!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged(?: && !menuPressDirty)?\) return/.test(material),
+assert.ok(/if \(!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged(?: && !menuPressDirty)?(?: && !menuFieldDirty)?\) return/.test(material),
   'A stationary integer box must still update its changing optical radius');
 console.log('Stationary material source contract passed (no texture transform; image and RenderNode share physical origin).');
 
