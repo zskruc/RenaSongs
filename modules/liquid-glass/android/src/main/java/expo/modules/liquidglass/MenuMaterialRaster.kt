@@ -8,7 +8,10 @@ import expo.modules.liquidglass.menumotion.GlassPortalBlur
  * including its native alpha group. Coordinates outside this helper stay in
  * physical pixels. At rest the original full-resolution recipe is restored.
  */
-internal class MenuMaterialRaster(private val maxPixels: Int = 720_000) {
+internal class MenuMaterialRaster(
+  private val maxPixels: Int = 720_000,
+  val forceFullResolution: Boolean = false
+) {
   var animationScale = 1f
     private set
   var scale = 1f
@@ -26,7 +29,9 @@ internal class MenuMaterialRaster(private val maxPixels: Int = 720_000) {
     // This is reservation work, never a per-frame search or scale adjustment.
     val budget = maxPixels.coerceAtLeast(1).toLong()
     fun area(s: Double) = ceil(w * s).toLong().coerceAtLeast(1) * ceil(h * s).toLong().coerceAtLeast(1)
-    if (w.toLong() * h <= budget) animationScale = 1f
+    // Explicit experiment only: keep one full-resolution epoch throughout the
+    // presentation, rather than changing the optical recipe or spring motion.
+    if (forceFullResolution || w.toLong() * h <= budget) animationScale = 1f
     else {
       var low = 0.0
       var high = 1.0
@@ -40,7 +45,7 @@ internal class MenuMaterialRaster(private val maxPixels: Int = 720_000) {
   }
 
   fun setAnimating(animated: Boolean): Boolean {
-    val next = if (animated) animationScale else 1f
+    val next = if (forceFullResolution || !animated) 1f else animationScale
     if (scale == next) return false
     scale = next
     return true

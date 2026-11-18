@@ -7,6 +7,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
 import android.os.Build
+import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import androidx.compose.foundation.layout.Box
@@ -171,7 +172,10 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var materialWidth = 0
   private var materialHeight = 0
   private val menuMaterial = MenuMaterialGeometry()
-  private val menuRaster = MenuMaterialRaster()
+  // Capture once per native instance; changing a log property during motion
+  // cannot split the committed density/source/layout cohort.
+  private val menuRaster = MenuMaterialRaster(forceFullResolution =
+    Log.isLoggable("ResonusGlassFullMaterial", Log.DEBUG))
   private var menuRasterScale by mutableFloatStateOf(1f)
   private var menuGroupOpacity by mutableFloatStateOf(1f)
   private var menuRasterCompositionAttached = false
@@ -367,6 +371,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
 
   internal fun menuRasterDiagnostics(): Map<String, Any> = mapOf(
     "materialRasterScale" to menuRaster.animationScale,
+    "materialRasterForceFullResolution" to menuRaster.forceFullResolution,
     "materialRasterMaxPixels" to menuRasterMaxMaterialPixels,
     "materialRasterMaxWidth" to menuRasterMaxWidth,
     "materialRasterMaxHeight" to menuRasterMaxHeight,
@@ -1105,7 +1110,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
         menuRasterCommittedScale = epoch.scale
         menuRasterActualWidth = child.width
         menuRasterActualHeight = child.height
-        if (epoch.scale < 1f) menuRasterMaxViewportPixels = maxOf(menuRasterMaxViewportPixels,
+        if (epoch.scale < 1f || menuRaster.forceFullResolution) menuRasterMaxViewportPixels = maxOf(menuRasterMaxViewportPixels,
           child.width.toLong() * child.height)
         menuRasterCompositionAttached = true
       }
@@ -1154,7 +1159,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
         materialHeight = menuMaterial.height
         val rasterWidth = epoch.pixels(materialWidth)
         val rasterHeight = epoch.pixels(materialHeight)
-        if (epoch.scale < 1f) {
+        if (epoch.scale < 1f || menuRaster.forceFullResolution) {
           menuRasterMaxMaterialPixels = maxOf(menuRasterMaxMaterialPixels, rasterWidth.toLong() * rasterHeight)
           menuRasterMaxWidth = maxOf(menuRasterMaxWidth, rasterWidth)
           menuRasterMaxHeight = maxOf(menuRasterMaxHeight, rasterHeight)

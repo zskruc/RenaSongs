@@ -2,7 +2,7 @@
   "expo": {
     "name": "RenaSongs",
     "slug": "resonus",
-    "version": "0.8.8.1-preview.17",
+    "version": "0.8.8.1-preview.18",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "resonus",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.juananzzz.resonus",
-      "versionCode": 196,
+      "versionCode": 197,
       "adaptiveIcon": {
         "backgroundColor": "#650019",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
