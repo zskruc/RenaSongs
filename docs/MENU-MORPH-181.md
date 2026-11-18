@@ -304,3 +304,35 @@ Implementation checks and Samsung visual acceptance remain separate; the phone
 is in use and no further installation or interaction is included in this
 build-only iteration. 190 remains a failed candidate, and 191 must pass a new
 actual-glyph video check before claiming the visual issue resolved.
+
+
+### 192: remove avoidable per-frame composition and source recording
+
+191 physical video acceptance showed the trigger glyph during absorption and
+rebound for Sort, Download, More and selected Refresh. Repeated opens/cancels
+kept one glyph without a residual copy. A separate mixed interaction recording
+still reported 118 deadline misses among 1,627 frames (7.25%); those aggregate
+figures do not establish the animation's actual present cadence.
+
+The candidate keeps the 191 small source View, immutable pixels, exact ownership,
+13dp blur guard and capture restoration. Its bitmap content no longer receives
+an explicit invalidation for every transform/opacity tick. First attachment and
+post-capture restoration still invalidate the content and its host. Per-record
+clip/timing diagnostics are DEBUG-only, and current View-property samples are
+labelled separately from the last actual Canvas recording. Initial nonempty
+pixel validation and saved material recipes remain unchanged.
+
+The dynamic menu shape is now read by its deferred shape provider rather than
+at the root GlassMaterial composition. Placement clipping observes the current
+immutable inner shape, while effects/highlights/borders observe the same
+provider; a radius-only change therefore cannot depend on a new measure or
+root recomposition to update the outline. The vendor change keeps the same
+shape values and the 187 physical-coordinate raster cohort. It removes the
+known root-composition -> modifier update -> effect-cache refresh path without
+freezing radius, reducing optical parameters or changing animation springs.
+
+Static RenaMenu trace sections are enabled only while Android tracing is active.
+They distinguish animation updates, outline, material-state update, foreground
+recording and drawing. Actual 120Hz acceptance requires an unrecorded-screen
+FrameTimeline comparison, separate cold/warm menu windows, and a real glyph
+regression video. A callback count or requested 120Hz mode is not acceptance.

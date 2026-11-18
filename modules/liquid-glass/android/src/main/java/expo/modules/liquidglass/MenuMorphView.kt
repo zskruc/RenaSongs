@@ -10,6 +10,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import android.os.SystemClock
+import android.os.Trace
 import android.provider.Settings
 import android.util.Log
 import android.view.Choreographer
@@ -31,6 +32,13 @@ import expo.modules.liquidglass.menumotion.menuSourceTag
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
+
+/** Static markers are inactive unless a shell/app trace is being recorded. */
+private inline fun <T> traceMenu(name: String, block: () -> T): T {
+  val tracing = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && Trace.isEnabled()
+  if (tracing) Trace.beginSection(name)
+  return try { block() } finally { if (tracing) Trace.endSection() }
+}
 
 /**
  * A fixed Fabric layout with the source-to-menu motion from
@@ -261,8 +269,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val sourceView = sourceTag?.let { tag ->
       try { appContext.findView<View>(tag)?.takeIf { it.id == tag } } catch (_: Exception) { null }
     }
-    triggerSnapshot = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
-      MenuTriggerSnapshots.take(source, sourceView) else null
+    triggerSnapshot = traceMenu("RenaMenu/captureTrigger") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MenuTriggerSnapshots.take(source, sourceView) else null
+    }
     through.set(source)
     reserveMaterialEnvelope()
     targetRadius = requestedRadius * density
@@ -324,80 +333,88 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   override fun doFrame(frameTimeNanos: Long) {
-    callbackPosted = false
-    if (!initialized || !isAttachedToWindow || windowVisibility != VISIBLE) return
-    val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
-    motionFrames++
-    settled = motion.advanceBy(seconds)
-    interaction.motion.advance(seconds)
-    if (!interaction.motion.jellySettled) jellyFrames++
-    if (interaction.motion.plateAlpha > .001f) plateFrames++
-    applyFrame()
-    if (settled) {
-      setInteractive(requestedOpen)
-      emitComplete(requestedOpen)
+    traceMenu("RenaMenu/doFrame") {
+      callbackPosted = false
+      if (!initialized || !isAttachedToWindow || windowVisibility != VISIBLE) return
+      val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
+      motionFrames++
+      settled = motion.advanceBy(seconds)
+      interaction.motion.advance(seconds)
+      if (!interaction.motion.jellySettled) jellyFrames++
+      if (interaction.motion.plateAlpha > .001f) plateFrames++
+      applyFrame()
+      if (settled) {
+        setInteractive(requestedOpen)
+        emitComplete(requestedOpen)
+      }
+      if (!settled || (requestedOpen && !interaction.motion.isSettled)) beginMotion()
     }
-    if (!settled || (requestedOpen && !interaction.motion.isSettled)) beginMotion()
   }
 
   private fun applyFrame() {
-    if (!initialized) return
-    triggerSnapshot?.updateOverlay(motion.frame)
-    liveFrame.copyFrom(motion.frame)
-    interaction.motion.deform(liveFrame.bounds,
-      if (source.centerX() > rootLocation[0] + rootView.width / 2f) -1f else 1f,
-      if (target.centerY() < source.centerY()) -1f else 1f)
-    val frame = liveFrame
-    outline.update(frame, target.left, target.top, settled, sourceHasGlass, lockedFieldStep)
-    foregroundPortal?.update(frame, target.left, target.top, sourceHasGlass, outline.smoothedField)
-    localIncoming.set(frame.bounds)
-    localIncoming.offset(-target.left, -target.top)
-    contentClip.rewind()
-    contentClip.addRoundRect(localIncoming, frame.radiusX, frame.radiusY, Path.Direction.CW)
-    materialBounds.set(localIncoming)
-    if (!settled && sourceHasGlass) {
-      materialBounds.union(frame.sourceLobe.left - target.left, frame.sourceLobe.top - target.top,
-        frame.sourceLobe.right - target.left, frame.sourceLobe.bottom - target.top)
-      // The Gaussian neck can gently bulge outside either lobe's rectangle.
-      materialBounds.inset(-frame.smoothing, -frame.smoothing)
-    }
-    (getChildAt(0) as? LiquidGlassView)?.updateMenuPressLight(
-      target.left + interaction.motion.lightPositionX, target.top + interaction.motion.lightPositionY,
-      interaction.motion.glowValue * frame.contentProgress)
-    (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
-      target.left + materialBounds.left, target.top + materialBounds.top,
-      target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY,
-      // A completely closed host is not drawn. Leave its bounded layers in
-      // place until teardown rather than allocating a hidden full-size frame.
-      !settled || !requestedOpen || interaction.isGestureActive || !interaction.motion.isSettled,
-      if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f))
-    val sx = localIncoming.width() / max(width.toFloat(), 1f)
-    val sy = localIncoming.height() / max(height.toFloat(), 1f)
-    val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
-    val zoom = if (settled) 1f else frame.contentZoom
-    for (index in 1 until childCount) {
-      val child = getChildAt(index)
-      child.pivotX = width / 2f - child.left
-      child.pivotY = height / 2f - child.top
-      child.translationX = localIncoming.centerX() - width / 2f
-      child.translationY = localIncoming.centerY() - height / 2f
-      child.scaleX = sx * zoom
-      child.scaleY = sy * zoom
-      // The portal composites reveal in its bounded rows RenderNode. Setting
-      // native body alpha first promotes the original full-layout RN view to
-      // a second physical-size offscreen layer before it reaches that node.
-      child.alpha = if (foregroundPortal != null && isHardwareAccelerated) 1f else reveal
-      val contentBlur = if (settled) 0f else frame.contentBlur
-      if (foregroundPortal != null) foregroundPortal.setContentBlur(child, contentBlur, child.scaleX, child.scaleY)
-      else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val corrected = contentBlur / max(min(abs(child.scaleX), abs(child.scaleY)), 0.25f)
-        child.setRenderEffect(if (corrected > 0.01f) RenderEffect.createBlurEffect(corrected, corrected, Shader.TileMode.DECAL) else null)
+    traceMenu("RenaMenu/applyFrame") {
+      if (!initialized) return
+      triggerSnapshot?.updateOverlay(motion.frame)
+      liveFrame.copyFrom(motion.frame)
+      interaction.motion.deform(liveFrame.bounds,
+        if (source.centerX() > rootLocation[0] + rootView.width / 2f) -1f else 1f,
+        if (target.centerY() < source.centerY()) -1f else 1f)
+      val frame = liveFrame
+      traceMenu("RenaMenu/outline") {
+        outline.update(frame, target.left, target.top, settled, sourceHasGlass, lockedFieldStep)
       }
+      traceMenu("RenaMenu/portalState") {
+        foregroundPortal?.update(frame, target.left, target.top, sourceHasGlass, outline.smoothedField)
+      }
+      localIncoming.set(frame.bounds)
+      localIncoming.offset(-target.left, -target.top)
+      contentClip.rewind()
+      contentClip.addRoundRect(localIncoming, frame.radiusX, frame.radiusY, Path.Direction.CW)
+      materialBounds.set(localIncoming)
+      if (!settled && sourceHasGlass) {
+        materialBounds.union(frame.sourceLobe.left - target.left, frame.sourceLobe.top - target.top,
+          frame.sourceLobe.right - target.left, frame.sourceLobe.bottom - target.top)
+        // The Gaussian neck can gently bulge outside either lobe's rectangle.
+        materialBounds.inset(-frame.smoothing, -frame.smoothing)
+      }
+      (getChildAt(0) as? LiquidGlassView)?.updateMenuPressLight(
+        target.left + interaction.motion.lightPositionX, target.top + interaction.motion.lightPositionY,
+        interaction.motion.glowValue * frame.contentProgress)
+      traceMenu("RenaMenu/materialState") { (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
+        target.left + materialBounds.left, target.top + materialBounds.top,
+        target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY,
+        // A completely closed host is not drawn. Leave its bounded layers in
+        // place until teardown rather than allocating a hidden full-size frame.
+        !settled || !requestedOpen || interaction.isGestureActive || !interaction.motion.isSettled,
+        if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f)) }
+      val sx = localIncoming.width() / max(width.toFloat(), 1f)
+      val sy = localIncoming.height() / max(height.toFloat(), 1f)
+      val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
+      val zoom = if (settled) 1f else frame.contentZoom
+      for (index in 1 until childCount) {
+        val child = getChildAt(index)
+        child.pivotX = width / 2f - child.left
+        child.pivotY = height / 2f - child.top
+        child.translationX = localIncoming.centerX() - width / 2f
+        child.translationY = localIncoming.centerY() - height / 2f
+        child.scaleX = sx * zoom
+        child.scaleY = sy * zoom
+        // The portal composites reveal in its bounded rows RenderNode. Setting
+        // native body alpha first promotes the original full-layout RN view to
+        // a second physical-size offscreen layer before it reaches that node.
+        child.alpha = if (foregroundPortal != null && isHardwareAccelerated) 1f else reveal
+        val contentBlur = if (settled) 0f else frame.contentBlur
+        if (foregroundPortal != null) foregroundPortal.setContentBlur(child, contentBlur, child.scaleX, child.scaleY)
+        else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+          val corrected = contentBlur / max(min(abs(child.scaleX), abs(child.scaleY)), 0.25f)
+          child.setRenderEffect(if (corrected > 0.01f) RenderEffect.createBlurEffect(corrected, corrected, Shader.TileMode.DECAL) else null)
+        }
+      }
+      // Native child transforms also transform Android/RN touch coordinates.
+      setInteractive(requestedOpen && reveal > 0.78f)
+      invalidate()
+      (parent as? View)?.invalidate()
     }
-    // Native child transforms also transform Android/RN touch coordinates.
-    setInteractive(requestedOpen && reveal > 0.78f)
-    invalidate()
-    (parent as? View)?.invalidate()
   }
 
   override fun dispatchDraw(canvas: Canvas) {
@@ -409,17 +426,19 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // The background's native drawing child moves/measures in physical
       // pixels and samples its true screen origin. Never scale a captured page
       // into the changing shell: that makes the page slide/zoom inside glass.
-      drawChild(canvas, material, drawingTime)
+      traceMenu("RenaMenu/drawMaterial") { drawChild(canvas, material, drawingTime) }
     } finally { canvas.restoreToCount(save) }
     val portal = foregroundPortal
     val materialView = material as? LiquidGlassView
     fun drawRows(recording: Canvas) {
-      interaction.drawPlate(recording, localIncoming, if (settled) 1f else liveFrame.contentZoom,
-        materialView?.dark ?: false, materialView?.highlightOpacity ?: 1f)
-      for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
+      traceMenu("RenaMenu/recordRows") {
+        interaction.drawPlate(recording, localIncoming, if (settled) 1f else liveFrame.contentZoom,
+          materialView?.dark ?: false, materialView?.highlightOpacity ?: 1f)
+        for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
+      }
     }
     if (portal != null && canvas.isHardwareAccelerated && !settled) {
-      portal.draw(canvas, foregroundBounds, true, ::drawRows)
+      traceMenu("RenaMenu/drawPortal") { portal.draw(canvas, foregroundBounds, true, ::drawRows) }
     } else if (portal != null && canvas.isHardwareAccelerated) {
       val contentSave = canvas.save()
       canvas.clipPath(contentClip)
@@ -431,8 +450,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       drawRows(canvas)
       canvas.restoreToCount(contentSave)
     }
-    // The source glyph has a full-window Drawable owner. A fixed card's HWUI
-    // recording bounds must never clip its above-card absorption/rebound.
+    // A bounded source View in the window overlay stays outside card clipping.
   }
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {

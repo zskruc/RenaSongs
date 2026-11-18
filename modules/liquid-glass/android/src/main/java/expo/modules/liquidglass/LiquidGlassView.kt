@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
@@ -949,12 +950,17 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             dockCompactWidth.dp.toPx(), GlassBarCollapsePolicy.GAP_DP.dp.toPx()),
             if (enabled) glassBlur.dp.toPx() else 0f)
         }
-        val glassShape = menuMorphShape ?: if (amPlusMaterial) RoundedCornerShape(50) else RoundedCornerShape(
+        val restingGlassShape = if (amPlusMaterial) RoundedCornerShape(50) else RoundedCornerShape(
           topStart = (if (isLtr) topLeft else topRight).dp,
           topEnd = (if (isLtr) topRight else topLeft).dp,
           bottomEnd = (if (isLtr) bottomRight else bottomLeft).dp,
           bottomStart = (if (isLtr) bottomLeft else bottomRight).dp
         )
+        // Radius is a drawing/layer dependency, not a composition dependency.
+        // Keep immutable shapes so the clip, lens and highlight all observe
+        // the same current outline even after pixel dimensions stop changing.
+        val glassShape: () -> Shape = { menuMorphShape ?: restingGlassShape }
+        val decorationShape = ShapeProvider(glassShape)
         val materialHighlight: () -> Highlight? = {
           when {
             mediaMoreMenu -> null
@@ -975,7 +981,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             clipCompositingStrategy = if (surfaceCapacity != IntSize.Zero) CompositingStrategy.Auto
               else CompositingStrategy.Offscreen,
             // Physical corners map to start/end for RTL, as with the RN card.
-            shape = { glassShape },
+            shape = glassShape,
             effects = {
               if (enabled) {
                 if (dialogMaterial) {
@@ -1047,7 +1053,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
             }
           ).then(if (mediaMoreMenu) Modifier.border(.6.dp, Brush.linearGradient(listOf(
             Color.White.copy(alpha = .28f), Color.White.copy(alpha = .07f),
-            Color.White.copy(alpha = .18f))), glassShape) else Modifier)
+            Color.White.copy(alpha = .18f))), decorationShape.shape) else Modifier)
         val density = LocalDensity.current
         val cacheable = cacheStaticDecoration && enabled && staticBackground != null &&
           staticBackground ushr 24 == 0xff && !isProgressiveBlur && tabsCount == 0 &&
@@ -1068,7 +1074,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           StaticDecorationRaster(style,
             original = { Box(materialModifier()) },
             body = { Box(materialModifier(it, withHighlight = false)) },
-            highlight = { Box(it.fillMaxSize().then(HighlightElement(ShapeProvider { glassShape }, materialHighlight))) }
+            highlight = { Box(it.fillMaxSize().then(HighlightElement(decorationShape, materialHighlight))) }
           )
         } else Box(materialModifier())
       }

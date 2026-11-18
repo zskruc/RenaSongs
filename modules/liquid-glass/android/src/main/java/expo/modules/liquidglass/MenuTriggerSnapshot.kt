@@ -188,6 +188,14 @@ internal object MenuTriggerSnapshots {
 internal class MenuTriggerSnapshot internal constructor(view: View,
   @Suppress("unused") private val sourcePixels: Bitmap, private val captureMetadata: Map<String, Any>,
   private val density: Float, private val morphSourceWidth: Float, private val morphSourceHeight: Float) {
+  private companion object {
+    val CLOSING_SAMPLE_TIMES_MS = longArrayOf(50L, 100L, 150L, 200L, 300L, 450L)
+  }
+
+  // Resolve once per source session. Ordinary motion must not allocate diagnostic
+  // samples or query Canvas clips/uptime while HWUI replays the immutable pixels.
+  private val diagnosticsEnabled = Log.isLoggable("ResonusGlass", Log.DEBUG) ||
+    Log.isLoggable("ResonusGlassSource", Log.DEBUG)
   private val source = WeakReference(view)
   private val sourceId = view.id
   private val originalTransitionAlpha = view.transitionAlpha
@@ -208,7 +216,10 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
   private var hasFrame = false
   private var draws = 0L
   private var clipMisses = 0L
+  private var lastRecordingAt = 0L
+  private var lastRecordedClipMiss = false
   private var closingAt = 0L
+  private var nextClosingSample = 0
   private var captureSuppressions = 0L
   private var captureRestores = 0L
   private var captureDraws = 0L
@@ -222,11 +233,13 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     }
     override fun onDraw(canvas: Canvas) {
       if (!hasFrame || ownership.released) return
-      if (WindowBackdrops.isCapturing) captureDraws++
       // Real pixels always live in this independent small View display list.
       // Capture exclusion changes visibility, never erases this drawing body.
       canvas.drawBitmap(sourcePixels, null, pixelRect, sourcePaint)
-      recordDraw(canvas)
+      if (diagnosticsEnabled) {
+        if (WindowBackdrops.isCapturing) captureDraws++
+        recordDraw(canvas)
+      }
     }
   }
 
@@ -275,7 +288,9 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     overlayFrame.copyFrom(frame)
     hasFrame = true
     applyOwnerFrame()
-    sourceOwner.invalidate()
+    // Only RenderNode properties change during motion. The bitmap drawing body
+    // remains valid; invalidating it here would re-record identical pixels each
+    // tick instead of letting HWUI replay the sourceOwner's cached display list.
   }
 
   private fun applyOwnerFrame() {
@@ -301,6 +316,7 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
       frame.sourceLobe.centerY() - overlayLocation[1] - height * sy / 2f,
       frame.sourceLobe.centerX() - overlayLocation[0] + width * sx / 2f,
       frame.sourceLobe.centerY() - overlayLocation[1] + height * sy / 2f)
+    if (diagnosticsEnabled) recordOwnerFrame()
   }
 
   fun suppressForCapture(root: View, captureSource: View, activityDecor: View?): Boolean {
@@ -323,7 +339,12 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     captureRestores++
   }
 
-  fun beginClosing() { closingAt = SystemClock.uptimeMillis(); samples.clear() }
+  fun beginClosing() {
+    if (!diagnosticsEnabled) return
+    closingAt = SystemClock.uptimeMillis()
+    nextClosingSample = 0
+    samples.clear()
+  }
   fun diagnostics(): Map<String, Any> {
     val root = overlayRoot.get()
     val chain = ArrayList<Map<String, Any>>()
@@ -340,8 +361,14 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
       "sourceOwnerRootAlpha" to (root?.alpha ?: -1f), "sourceOwnerRootTransitionAlpha" to (root?.transitionAlpha ?: -1f),
       "sourceOwnerChain" to chain, "sourceCaptureSuppressCount" to captureSuppressions,
       "sourceCaptureRestoreCount" to captureRestores, "sourceOwnerCaptureDraws" to captureDraws,
+      "sourceOwnerDiagnosticsEnabled" to diagnosticsEnabled,
+      "sourceOwnerDisplayListRecordings" to draws,
+      // Compatibility alias: these count onDraw/display-list recordings, not
+      // visible GPU frames. Cached pixels can be visible without another onDraw.
       "sourceCloneDraws" to draws, "sourceCloneClipMisses" to clipMisses,
       "sourceCloneLastBounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
+      "sourceOwnerLastRecordedLocalClip" to if (draws > 0L) listOf(clip.left, clip.top, clip.right, clip.bottom) else emptyList<Int>(),
+      "sourceOwnerLastRecordedClipMiss" to lastRecordedClipMiss,
       "sourceCloneClosingSamples" to samples.values.toList(), "sourceCapture" to captureMetadata)
   }
 
@@ -364,17 +391,29 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
   }
 
   private fun recordDraw(canvas: Canvas) {
+    // Called only by the DEBUG onDraw path. This is a real local Canvas clip at
+    // display-list recording time, not an assertion that a GPU frame was drawn.
     canvas.getClipBounds(clip)
-    val missed = !Rect.intersects(clip, pixelRect)
+    lastRecordedClipMiss = !Rect.intersects(clip, pixelRect)
+    lastRecordingAt = SystemClock.uptimeMillis()
     draws++
-    if (missed) clipMisses++
-    if (closingAt > 0L) {
-      val elapsed = SystemClock.uptimeMillis() - closingAt
-      for (at in intArrayOf(50, 100, 150, 200, 300, 450)) if (elapsed >= at && !samples.containsKey(at)) {
-        samples[at] = mapOf("atMs" to elapsed, "sourceAlpha" to sourceOwner.alpha,
-          "bounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
-          "localClip" to listOf(clip.left, clip.top, clip.right, clip.bottom), "clipMiss" to missed)
-      }
+    if (lastRecordedClipMiss) clipMisses++
+  }
+
+  private fun recordOwnerFrame() {
+    if (closingAt == 0L || nextClosingSample >= CLOSING_SAMPLE_TIMES_MS.size) return
+    val now = SystemClock.uptimeMillis()
+    val elapsed = now - closingAt
+    while (nextClosingSample < CLOSING_SAMPLE_TIMES_MS.size &&
+      elapsed >= CLOSING_SAMPLE_TIMES_MS[nextClosingSample]) {
+      val at = CLOSING_SAMPLE_TIMES_MS[nextClosingSample++].toInt()
+      samples[at] = mapOf("atMs" to elapsed, "sampleOrigin" to "view-properties",
+        "sourceAlpha" to sourceOwner.alpha,
+        "bounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
+        "displayListRecordings" to draws,
+        "lastRecordingAgeMs" to if (lastRecordingAt > 0L) now - lastRecordingAt else -1L,
+        "lastRecordedLocalClip" to if (draws > 0L) listOf(clip.left, clip.top, clip.right, clip.bottom) else emptyList<Int>(),
+        "lastRecordedClipMiss" to lastRecordedClipMiss)
     }
   }
 

@@ -296,7 +296,10 @@ private class DrawBackdropNode(
 
     private val layoutLayerBlock: GraphicsLayerScope.() -> Unit = {
         clip = true
-        shape = shapeProvider.shape
+        // Observe the current immutable shape in this placement-layer scope.
+        // A stable outline wrapper can otherwise retain the preceding clip
+        // when radius changes without a new measure or root composition.
+        shape = shapeProvider.innerShape
         compositingStrategy = clipCompositingStrategy
     }
 

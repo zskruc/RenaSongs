@@ -41,10 +41,30 @@ assert.ok(placement.includes('root.getLocationOnScreen(overlayLocation)') &&
 const dispatch = host.slice(host.indexOf('override fun dispatchDraw('), host.indexOf('override fun dispatchTouchEvent('));
 assert.doesNotMatch(dispatch, /triggerSnapshot\?\.(?:draw|drawSource)\s*\(/,
   'The source clone must no longer be drawn through the fixed menu host\'s possible ancestor clips');
-assert.ok(source.includes('canvas.getClipBounds(clip)') && source.includes('"localClip" to listOf(clip.left, clip.top, clip.right, clip.bottom)') &&
+assert.ok(source.includes('canvas.getClipBounds(clip)') && source.includes('"lastRecordedLocalClip" to if (draws > 0L)') &&
   source.includes('"bounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom)') &&
-  source.includes('"sourceAlpha" to sourceOwner.alpha'),
-  'Record actual source-draw Canvas clipping/geometry/alpha for real-device acceptance instead of assuming JVM visibility');
+  source.includes('"sourceAlpha" to sourceOwner.alpha') && source.includes('"sampleOrigin" to "view-properties"') &&
+  source.includes('"lastRecordingAgeMs" to if (lastRecordingAt > 0L)'),
+  'Distinguish current View properties from the last real Canvas recording clip; cached pixels are not a new onDraw per GPU frame');
+const updateOwner = source.slice(source.indexOf('fun updateOverlay('), source.indexOf('private fun applyOwnerFrame('));
+assert.doesNotMatch(updateOwner, /(?:sourceOwner|root|overlayRoot\.get\(\)\??)\.invalidate\s*\(/,
+  'Transform-only source motion must reuse its immutable drawing body instead of re-recording identical bitmap pixels');
+assert.ok(attach.includes('sourceOwner.invalidate()') && attach.includes('root.invalidate()'),
+  'Initial takeover must still dirty both replacement pixels and the actual host');
+const ownerDrawing = source.slice(source.indexOf('override fun onDraw(canvas: Canvas)'), source.indexOf('fun attachOverlay('));
+assert.ok(ownerDrawing.indexOf('canvas.drawBitmap(') < ownerDrawing.indexOf('if (diagnosticsEnabled)') &&
+  /if \(diagnosticsEnabled\)\s*\{[\s\S]*?recordDraw\(canvas\)/.test(ownerDrawing),
+  'Ordinary source drawing must paint pixels while clip/uptime diagnostics remain DEBUG-only');
+const applyOwner = source.slice(source.indexOf('private fun applyOwnerFrame('), source.indexOf('fun suppressForCapture('));
+assert.ok(applyOwner.includes('if (diagnosticsEnabled) recordOwnerFrame()') &&
+  source.includes('private val diagnosticsEnabled = Log.isLoggable("ResonusGlass", Log.DEBUG) ||') &&
+  source.includes('Log.isLoggable("ResonusGlassSource", Log.DEBUG)') &&
+  source.includes('"sourceOwnerDiagnosticsEnabled" to diagnosticsEnabled') &&
+  source.includes('"sourceOwnerDisplayListRecordings" to draws'),
+  'Resolve diagnostic ownership once per source session and label display-list recordings separately from visible frames');
+const closeDiagnostics = source.slice(source.indexOf('fun beginClosing('), source.indexOf('fun diagnostics('));
+assert.ok(closeDiagnostics.indexOf('if (!diagnosticsEnabled) return') < closeDiagnostics.indexOf('SystemClock.uptimeMillis()'),
+  'Normal close must not start phase-clock/sample allocation merely for diagnostics');
 const detach = source.slice(source.indexOf('fun detachOverlay('), source.indexOf('fun updateOverlay('));
 assert.ok(detach.includes('remove(sourceOwner)') && detach.includes('overlayRoot.clear()') &&
   detach.includes('ownership.detach(MenuTriggerSnapshots.owns(this), view != null, view?.transitionAlpha == 0f)') &&

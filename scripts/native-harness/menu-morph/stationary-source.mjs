@@ -26,9 +26,34 @@ assert.match(windowBackdrop, /surfaces\.any\s*\{\s*nativeMenuOwner\(it\) == null
   'The direct program must remain gated to native menu hosts');
 assert.match(material, /shadow = if \(officialMaterial && menuMaterialCapacity == IntSize\.Zero\)/,
   'Only the already-clipped native menu may skip its invisible shadow; normal materials must retain their shadow');
-assert.ok(material.includes('val glassShape = menuMorphShape ?:') &&
+assert.ok(material.includes('val restingGlassShape = if (amPlusMaterial)') &&
+  material.includes('val glassShape: () -> Shape = { menuMorphShape ?: restingGlassShape }') &&
+  material.includes('shape = glassShape,') &&
   material.includes('menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)'),
-  'The native menu material, lens and highlight must share the current physical spring radius');
+  'The physical spring radius must be read by the actual drawing provider, without eager root-composition state reads');
+const backdropModifier = readFileSync(new URL('modules/liquid-glass/android/vendor/backdrop-1.0.0/src/main/java/com/kyant/backdrop/DrawBackdropModifier.kt', root), 'utf8');
+const shapeProvider = readFileSync(new URL('modules/liquid-glass/android/vendor/backdrop-1.0.0/src/main/java/com/kyant/backdrop/ShapeProvider.kt', root), 'utf8');
+const highlightModifier = readFileSync(new URL('modules/liquid-glass/android/vendor/backdrop-1.0.0/src/main/java/com/kyant/backdrop/highlight/HighlightModifier.kt', root), 'utf8');
+const layerBlock = backdropModifier.slice(backdropModifier.indexOf('private val layoutLayerBlock:'), backdropModifier.indexOf('private var layoutCoordinates:'));
+assert.ok(layerBlock.includes('shape = shapeProvider.innerShape') && !layerBlock.includes('shape = shapeProvider.shape'),
+  'The actual graphics-layer observer must read the current immutable Shape; a stable wrapper could cache a stale clip');
+assert.ok(backdropModifier.includes('override val shape: Shape get() = shapeProvider.innerShape') &&
+  shapeProvider.includes('val innerShape\n        get() = shapeBlock()'),
+  'Lens effects and placement clipping must dereference the same current shape provider');
+assert.ok(material.includes('val decorationShape = ShapeProvider(glassShape)') &&
+  material.includes('decorationShape.shape) else Modifier)') &&
+  material.includes('HighlightElement(decorationShape, materialHighlight)'),
+  'The existing border and decoration highlight must retain the same deferred radius instead of freezing or removing their outline');
+const shapedBackdrop = backdropModifier.slice(backdropModifier.indexOf('fun Modifier.drawBackdrop('), backdropModifier.indexOf('private data class DrawBackdropElement'));
+assert.match(shapedBackdrop, /HighlightElement\(\s*shapeProvider = shapeProvider,/,
+  'The regular material highlight must consume the exact provider used by clipping and lens effects');
+assert.ok(highlightModifier.includes('shapeProvider.shape.createOutline(size, layoutDirection, density)') &&
+  shapeProvider.includes('val shape = shapeBlock()') && shapeProvider.includes('if (_shape != shape)') &&
+  shapeProvider.includes('_outline = null'),
+  'Radius-only changes at a stationary size must invalidate the real cached outline for border/highlight too');
+const materialComposition = material.slice(material.indexOf('private fun GlassMaterial(epoch:'));
+assert.equal((materialComposition.match(/\bmenuMorphShape\b/g) ?? []).length, 1,
+  'GlassMaterial may reference animated shape only in its deferred provider, not add another eager composition read');
 assert.ok(/if \(!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged(?: && !menuPressDirty)?\) return/.test(material),
   'A stationary integer box must still update its changing optical radius');
 console.log('Stationary material source contract passed (no texture transform; image and RenderNode share physical origin).');
