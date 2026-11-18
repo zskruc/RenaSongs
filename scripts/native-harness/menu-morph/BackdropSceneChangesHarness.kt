@@ -176,5 +176,84 @@ fun main() {
   animated.progress.progress = 78
   verify(animationObserver.hasChanged(animated.root), "Progress update during animation was lost")
 
-  println("Backdrop scene changes harness passed ($checks assertions: production visitor, persistent-dirty negative control, default compatibility, complete metadata mutations, glass-content exclusion and honest diagnostics; actual OnDraw/GPU remains device-only).")
+  // RN ReactModalHostView forwards the logical child getters to a separate
+  // DialogRootViewGroup. Those returned children physically belong to another
+  // window. This fixture reproduces that contract without naming a special
+  // Android/RN class in the production visitor or rewriting its fingerprint.
+  class ForwardingHost(private val dialogRoot: ViewGroup) : ViewGroup() {
+    override val childCount get() = dialogRoot.childCount
+    override fun getChildAt(index: Int): View = dialogRoot.getChildAt(index)
+  }
+  val activityRoot = ViewGroup()
+  val realTitle = TextView().apply { this.text = "Actual Activity title" }
+  val realCover = ImageView().apply { drawable = Drawable() }
+  val dialogRoot = ViewGroup()
+  val modalHost = ForwardingHost(dialogRoot)
+  val foreignScrim = ViewGroup()
+  val foreignBody = ViewGroup()
+  val foreignTitle = TextView().apply { this.text = "Dialog item" }
+  val foreignCover = ImageView().apply { drawable = Drawable() }
+  foreignBody.addView(foreignTitle); foreignBody.addView(foreignCover)
+  activityRoot.addView(realTitle); activityRoot.addView(realCover); activityRoot.addView(modalHost)
+  val activityModes = listOf(BackdropSceneChanges(), BackdropSceneChanges(includeGlassContent = true, observeLeafDirty = false))
+  val dialogModes = listOf(BackdropSceneChanges(), BackdropSceneChanges(includeGlassContent = true, observeLeafDirty = false))
+  activityModes.forEach { verify(it.hasChanged(activityRoot), "Activity portal fixture failed to initialize") }
+  dialogModes.forEach { verify(it.hasChanged(dialogRoot), "Dialog portal fixture failed to initialize") }
+  val activitySignaturesBeforeForeign = activityModes.map { it.signatureChangeCount }
+
+  fun foreignChange(name: String, mutate: () -> Unit) {
+    mutate()
+    activityModes.forEach { observer ->
+      verify(!observer.hasChanged(activityRoot), "$name leaked from a virtual Modal child into the Activity signature")
+      verify(observer.leafOnlyObservationCount == 0L, "$name portal fixture accidentally relied on dirty suppression")
+    }
+    dialogModes.forEach { observer ->
+      verify(observer.hasChanged(dialogRoot), "$name was lost when observing its actual DialogRoot source")
+      verify(!observer.hasChanged(dialogRoot), "$name remained unstable in an otherwise unchanged DialogRoot")
+    }
+  }
+
+  foreignChange("first foreign child inserted") { dialogRoot.addView(foreignScrim) }
+  verify(modalHost.childCount == 1 && modalHost.getChildAt(0) === foreignScrim &&
+    foreignScrim.parent === dialogRoot && foreignScrim.parent !== modalHost,
+    "Negative control must expose the real RN logical-getter/physical-parent mismatch")
+  foreignChange("foreign body inserted") { dialogRoot.addView(foreignBody) }
+  repeat(20) { frame ->
+    foreignChange("foreign scrim opacity/matrix frame $frame") {
+      foreignScrim.alpha = .2f + frame * .025f
+      foreignScrim.matrix.setValue(5, 3f + frame * 7.25f)
+    }
+  }
+  foreignChange("foreign body title") { foreignTitle.text = "Another dialog action" }
+  foreignChange("foreign body text foreground") { foreignTitle.currentTextColor = 0xff31bb72.toInt() }
+  foreignChange("foreign body cover") { foreignCover.drawable = Drawable() }
+  foreignChange("foreign body shape") { foreignBody.right = 245; foreignBody.bottom = 390 }
+  foreignChange("foreign body removed") { dialogRoot.removeView(foreignBody) }
+  foreignChange("last foreign child removed") { dialogRoot.removeView(foreignScrim) }
+  verify(modalHost.childCount == 0, "Virtual zero-child transition fixture did not run")
+  activityModes.forEachIndexed { index, observer ->
+    verify(observer.signatureChangeCount == activitySignaturesBeforeForeign[index],
+      "Virtual foreign child count, opacity or content consumed an Activity metadata epoch")
+  }
+
+  // Filtering must be about physical ownership, never an entire Activity/Modal
+  // class skip. Real Activity siblings still refresh while the logical host is
+  // present, and a real child under a host with that same class remains visible.
+  realTitle.text = "New actual Activity song"
+  activityModes.forEach { verify(it.hasChanged(activityRoot), "Filtering portals suppressed real Activity text") }
+  realCover.drawable = Drawable()
+  activityModes.forEach { verify(it.hasChanged(activityRoot), "Filtering portals suppressed real Activity cover") }
+  activityModes.forEach { verify(!it.hasChanged(activityRoot), "Unchanged real Activity source did not settle") }
+  foreignChange("new foreign child after Activity update") { dialogRoot.addView(foreignScrim) }
+  activityRoot.removeView(realTitle)
+  dialogRoot.addView(realTitle)
+  activityModes.forEach { verify(it.hasChanged(activityRoot), "A real Activity child removal was ignored") }
+  dialogModes.forEach { verify(it.hasChanged(dialogRoot), "A reparented real DialogRoot child was ignored") }
+  verify(realTitle.parent === dialogRoot && modalHost.getChildAt(1) === realTitle,
+    "Reparented fixture did not retain its forwarded/physical relationship")
+  realTitle.text = "Only the actual DialogRoot sees this"
+  activityModes.forEach { verify(!it.hasChanged(activityRoot), "Reparented text still leaked through the logical host") }
+  dialogModes.forEach { verify(it.hasChanged(dialogRoot), "Real text after reparenting stopped refreshing its DialogRoot") }
+
+  println("Backdrop scene changes harness passed ($checks assertions: production visitor, persistent-dirty negative control, default compatibility, complete metadata mutations, physical-parent Modal forwarding, glass-content exclusion and honest diagnostics; actual OnDraw/GPU remains device-only).")
 }

@@ -101,7 +101,7 @@ assert.ok(preDraw.includes('if (liveMenuPaint) notifyBackdropDrawingChanged(visi
 assert.ok(scene.includes('private val observeLeafDirty: Boolean = true') &&
   scene.includes('val changed = signatureChanged || (observeLeafDirty && dirtyLeaf)') &&
   scene.includes('else if (dirtyLeaf) leafOnlyObservationCount++') &&
-  scene.includes('else if (view.isDirty)') &&
+  scene.includes('if (physicalChildren == 0 && view.isDirty)') &&
   source.includes('private val backgroundChanges = BackdropSceneChanges()'),
   'Only trusted-menu metadata mode may ignore level-triggered leaf dirtiness; ordinary capture must preserve it and observations remain counted');
 for (const metadata of ['view.matrix.getValues', 'view.scrollY', 'view.visibility',
@@ -119,6 +119,11 @@ assert.ok(activityDraw.includes('!WindowBackdrops.isCapturing && !menuSourceReco
 assert.ok(source.includes('"menuMetadataChanges" to menuBackgroundChanges.signatureChangeCount') &&
   source.includes('"menuLeafOnlyObservations" to menuBackgroundChanges.leafOnlyObservationCount'),
   'Cache proof must distinguish metadata changes from repeated dirty-only observations without per-frame logging');
+assert.ok(scene.includes('if (view.getChildAt(index)?.parent === view) physicalChildren++') &&
+  scene.includes('signature = mix(signature, physicalChildren)') &&
+  scene.includes('if (child.parent === view) signature = signature * 31L + visit(child, root)') &&
+  !scene.includes('signature = mix(signature, view.childCount)'),
+  'Activity fingerprints must count and traverse physical drawing children only; RN Modal logical accessors must not import a separate window scrim or its insertion/removal');
 const bounds = material.slice(material.indexOf('internal fun getMaterialBoundsOnScreen('), material.indexOf('internal fun reserveMenuMorph('));
 assert.ok(bounds.includes('if (menuMaterial.active)') && bounds.includes('menuMaterial.captureLeft') &&
   bounds.includes('menuMaterial.captureRight') && !bounds.includes('menuMaterial.width'),

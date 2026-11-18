@@ -20,6 +20,8 @@ open class View {
   var isDirty = false
   var reactBackgroundColor: Int? = null
   var isFixtureGlassContainer = false
+  var parent: ViewGroup? = null
+    internal set
 
   companion object {
     const val VISIBLE = 0
@@ -30,8 +32,14 @@ open class View {
 
 open class ViewGroup : View() {
   private val children = ArrayList<View>()
-  val childCount get() = children.size
-  fun getChildAt(index: Int): View = children[index]
-  fun addView(view: View) { children.add(view) }
-  fun removeView(view: View) { children.remove(view) }
+  open val childCount get() = children.size
+  open fun getChildAt(index: Int): View = children[index]
+  fun addView(view: View) {
+    check(view.parent == null) { "View already has a physical parent" }
+    children.add(view)
+    view.parent = this
+  }
+  fun removeView(view: View) {
+    if (children.remove(view) && view.parent === this) view.parent = null
+  }
 }
