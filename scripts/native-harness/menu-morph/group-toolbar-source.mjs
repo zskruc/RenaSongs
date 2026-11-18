@@ -93,8 +93,20 @@ assert.ok(portal.includes('val grouped = hasSource && drawSource != null') &&
   portal.includes('drawSource?.invoke(recording)') &&
   portal.includes('if (rowsVisible) recording.drawRenderNode(rowsNode)') &&
   portal.includes('recording.drawRenderNode(if (grouped) sourceCompositeNode else rowsNode)') &&
-  portal.includes('foregroundNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(portal, "content"))'),
+  portal.includes('rowsGaussian = if (blurX > 0f || blurY > 0f)') &&
+  portal.includes('portalEffect = RenderEffect.createRuntimeShaderEffect(portal, "content")') &&
+  portal.includes('} ?: portalEffect else rowsGaussian)') &&
+  portal.includes('if (!fused && (effectChanged || modeChanged)) foregroundNode.setRenderEffect(portalEffect)'),
   'Group source and rows must retain independent blur/reveal then compose before common portal blur/lens; ordinary fused-row behavior stays separate');
+assert.ok(portal.includes('val fused = !hasSource && !grouped && !legacyForeground && samplingFits(area, scale)') &&
+  portal.includes('val nextMode = if (grouped) 2 else if (fused) 1 else 0') &&
+  portal.includes('rowsNode.setPivotX(0f); rowsNode.setPivotY(0f)') &&
+  portal.includes('rowsNode.setScaleX(if (fused) 1f / scale else 1f)') &&
+  portal.includes('rowsNode.setScaleY(if (fused) 1f / scale else 1f)') &&
+  portal.includes('rowsNode.setTranslationX(if (fused) area.left else 0f)') &&
+  portal.includes('rowsNode.setTranslationY(if (fused) area.top else 0f)') &&
+  portal.includes('canvas.drawRenderNode(if (fused) rowsNode else foregroundNode)'),
+  'Only a bounded non-glass-source path may fuse; grouped/legacy rows must restore identity transforms and continue through the independent common foreground node');
 assert.ok(material.includes('menuFieldShape ?: menuMorphShape ?: restingGlassShape') &&
   material.includes('menuFieldOptics!!.applyLens(this, epoch.scale, menuCommittedOpticalOrigin(),') &&
   material.includes('highlight.copy(style = menuFieldOptics!!.highlightStyle(highlight.style, epoch.scale, ::menuCommittedOpticalOrigin))') &&
