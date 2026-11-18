@@ -30,15 +30,15 @@ fun main() {
   val limits = RectF(0f, 0f, 1600f, 2600f)
   val target = RectF(300f, 400f, 1000f, 1800f)
   val body = View()
-  Log.legacy = false; Log.legacyEarly = false
+  Log.legacy = false; Log.motionRows = true; Log.motionClip = true; Log.motionBudget = false
   val reads = Log.earlyReads
   val candidate = GlassForegroundPortal(1f).apply {
     diagnosticsEnabled = true
     reserve(target, 0f, 0f, limits)
   }
-  expect(Log.earlyReads == reads + 1, "Early-frame choice not read exactly at construction")
+  expect(Log.earlyReads == reads + 3, "Early-frame choice not read exactly at construction")
   // A live renderer may not switch its graph in response to a property change.
-  Log.legacyEarly = true
+  Log.motionRows = false; Log.motionClip = false; Log.motionBudget = false
   candidate.update(frame, 0f, 0f, false, null)
   candidate.setContentBlur(body, 0f, 1f, 1f)
   val canvas = Canvas()
@@ -63,7 +63,7 @@ fun main() {
   expect(rows.recordings == records && rows.effectUpdates == effects &&
     rows.recordingWidth == width && rows.recordingHeight == height,
     "Output clip changed a retained recording, filter, source dimensions or same-frame cache")
-  expect(Log.earlyReads == reads + 1, "Debug property read on animation hot path")
+  expect(Log.earlyReads == reads + 3, "Debug property read on animation hot path")
 
   // Reveal and reverse keep exactly the current scalar; invisible rows remain
   // skipped, not recorded to make a fake zero-opacity hardware layer.
@@ -115,10 +115,10 @@ fun main() {
   expect(diagnostics["portalShaderOpacityDraws"]!!.toLong() > 0 &&
     diagnostics["portalOutputClipDraws"]!!.toLong() > 0 &&
     diagnostics["portalOutputClipSavedPixels"]!!.toLong() > 0 &&
-    diagnostics["portalLegacyEarlyFrames"] == 0,
+    diagnostics["portalMotionRowsConfigured"] == 1 && diagnostics["portalMotionClipConfigured"] == 1,
     "Diagnostics do not identify actual candidate shader/clip use")
 
-  // A new DEBUG renderer exactly selects201's previous alpha/effect path.
+  // A new default renderer exactly selects201's previous alpha/effect path.
   val legacy = GlassForegroundPortal(1f).apply {
     diagnosticsEnabled = true
     reserve(target, 0f, 0f, limits)
@@ -129,9 +129,59 @@ fun main() {
   legacy.draw(legacyCanvas, limits, true, {})
   val oldRows = node("ResonusMenu.rows")
   expect(oldRows.alphaValue == .4f && shader(oldRows.effect)?.source == GlassForegroundPortalShader,
-    "DEBUG opt-out changed the previous nongroup alpha/shader graph")
-  expect(legacyCanvas.clips.isEmpty() && legacy.diagnostics()["portalLegacyEarlyFrames"] == 1,
-    "DEBUG opt-out still applied the candidate support clip")
+    "Default graph changed the previous nongroup alpha/shader graph")
+  expect(legacyCanvas.clips.isEmpty() && legacy.diagnostics()["portalMotionRowsConfigured"] == 0 && legacy.diagnostics()["portalMotionClipConfigured"] == 0,
+    "Default graph still applied the candidate support clip")
+
+  // Each opt-in must stand alone, with the other201 behaviours left intact.
+  fun isolated(rowsFlag: Boolean, clipFlag: Boolean, budgetFlag: Boolean, grouped: Boolean = false):
+    Triple<GlassForegroundPortal, RenderNode, Canvas> {
+    Log.motionRows = rowsFlag; Log.motionClip = clipFlag; Log.motionBudget = budgetFlag
+    val instance = GlassForegroundPortal(1f).apply {
+      diagnosticsEnabled = true
+      reserve(target, 0f, 0f, limits, grouped)
+    }
+    instance.update(frame, 0f, 0f, grouped, null)
+    instance.setContentBlur(body, 0f, 1f, 1f)
+    val output = Canvas()
+    if (grouped) instance.draw(output, limits, true, {}, {})
+    else instance.draw(output, limits, true, {})
+    return Triple(instance, node("ResonusMenu.rows"), output)
+  }
+  val rowsOnly = isolated(true, false, false)
+  expect(rowsOnly.second.alphaValue == 1f &&
+    shader(rowsOnly.second.effect)?.source == GlassForegroundPortalOpacityShader &&
+    rowsOnly.third.clips.isEmpty() && rowsOnly.first.diagnostics()["portalMotionBudgetConfigured"] == 0,
+    "Rows-only flag also enabled clip or budget")
+  val clipOnly = isolated(false, true, false)
+  expect(clipOnly.second.alphaValue == .4f &&
+    shader(clipOnly.second.effect)?.source == GlassForegroundPortalShader &&
+    clipOnly.third.clips.isNotEmpty() && clipOnly.first.diagnostics()["portalMotionBudgetConfigured"] == 0,
+    "Clip-only flag changed rows opacity/shader or budget")
+  val budgetOnly = isolated(false, false, true)
+  val baselinePixels = oldRows.recordingWidth.toLong() * oldRows.recordingHeight
+  val budgetPixels = budgetOnly.second.recordingWidth.toLong() * budgetOnly.second.recordingHeight
+  expect(budgetOnly.second.alphaValue == .4f &&
+    shader(budgetOnly.second.effect)?.source == GlassForegroundPortalShader && budgetOnly.third.clips.isEmpty(),
+    "Budget-only flag enabled alpha/clip candidates")
+  expect(budgetPixels < baselinePixels && budgetPixels in 480_000L..482_000L,
+    "Nongroup motion budget was not capped to480k plus original ceil-edge pixels")
+  val defaultGroup = isolated(false, false, false, true)
+  val candidateGroup = isolated(true, true, true, true)
+  expect(candidateGroup.second.recordingWidth == defaultGroup.second.recordingWidth &&
+    candidateGroup.second.recordingHeight == defaultGroup.second.recordingHeight &&
+    candidateGroup.second.alphaValue == .4f && candidateGroup.third.clips.isEmpty() &&
+    shader(node("ResonusMenu.foreground").effect)?.source == GlassForegroundPortalShader,
+    "Isolated flags changed the grouped source raster, shader, alpha or output clip")
+  val physical = RectF(0f, 0f, 1600f, 2600f)
+  val defaultRaster = GlassPortalRaster(1f).apply { reserve(700f, 1400f, physical.width(), physical.height()) }
+  for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, 0f, -1f)) {
+    val invalidRaster = GlassPortalRaster(1f, invalid).apply {
+      reserve(700f, 1400f, physical.width(), physical.height())
+    }
+    expect(invalidRaster.scale == defaultRaster.scale && invalidRaster.width == defaultRaster.width &&
+      invalidRaster.height == defaultRaster.height, "Invalid budget changed the default raster")
+  }
 
   // Validate that every tested discarded physical point is outside the actual
   // rounded field's nonzero coverage support. The existing Bernstein proof in
@@ -160,5 +210,5 @@ fun main() {
     val after = samples.indices.sumOf { samples[it] * weights[it] } * coverage * opacity
     expect(abs(before - after) < 1e-14, "Premultiplied linear opacity changed in real arithmetic")
   }
-  println("Portal early-frame fixture passed: $checks checks; production nongroup alpha elimination, output support, group bytes/alpha, reversal and opt-out. No Android pixel/quantization or FPS claim.")
+  println("Portal early-frame fixture passed: $checks checks; isolated opt-in rows/clip/budget, default201 graph, group bytes/alpha/budget, reversal and constructor flags. No Android pixel/quantization or FPS claim.")
 }

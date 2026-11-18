@@ -123,7 +123,7 @@ assert.ok(material.includes('if (menuMaterial.active && !menuRasterCompositionAt
   rasterLayout.includes('menuRasterCompositionAttached = true'),
   'The first menu draw must wait for its first coherent Compose placement');
 const portal = readFileSync(new URL('menumotion/GlassForegroundPortal.kt', native), 'utf8');
-assert.ok(portal.includes('opacityInShader = !hasSource && !legacyEarlyFrames') &&
+assert.ok(portal.includes('opacityInShader = !hasSource && motionRows') &&
   portal.includes('rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)') &&
   portal.includes('if (opacityInShader) shader.setFloatUniform("contentOpacity", rowsOpacity)'),
   'Ordinary rows use output opacity and grouped/legacy rows retain their original compact node alpha');

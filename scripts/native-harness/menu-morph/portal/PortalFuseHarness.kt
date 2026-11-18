@@ -17,7 +17,7 @@ private fun near(a: Float, b: Float) = abs(a - b) < .0001f
 fun main() {
   // This fixture isolates the existing201 fused graph; the new early-frame
   // opacity/clip mode has its own independent fixture below.
-  Log.legacyEarly = true
+  Log.motionRows = false; Log.motionClip = false; Log.motionBudget = false
   val canvas = Canvas()
   val viewport = RectF(0f, 0f, 1600f, 2600f)
   val frame = GlassMorphFrame().apply {

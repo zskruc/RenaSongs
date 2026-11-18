@@ -30,7 +30,11 @@ import kotlin.math.min
 internal class GlassForegroundPortal(density: Float) {
   // A/B opt-out is read once for this renderer, never on the motion hot path.
   private val legacyForeground = Log.isLoggable("ResonusGlassLegacyForeground", Log.DEBUG)
-  private val legacyEarlyFrames = Log.isLoggable("ResonusGlassLegacyEarlyFrames", Log.DEBUG)
+  // Isolated experiments default OFF. Constructor-only reads keep the201
+  // baseline graph/raster unless one specific candidate is explicitly chosen.
+  private val motionRows = Log.isLoggable("ResonusGlassMotionRows", Log.DEBUG)
+  private val motionClip = Log.isLoggable("ResonusGlassMotionClip", Log.DEBUG)
+  private val motionBudget = Log.isLoggable("ResonusGlassMotionBudget", Log.DEBUG)
   private val samplingExtent = RectF()
   private val outputClip = RectF()
   private var samplingExtentValid = false
@@ -52,7 +56,7 @@ internal class GlassForegroundPortal(density: Float) {
   private val foregroundNode = RenderNode("ResonusMenu.foreground")
   private val rowsNode = RenderNode("ResonusMenu.rows")
   private val sourceCompositeNode = RenderNode("RenaMenu.sourceAndRows")
-  private val raster = GlassPortalRaster(density)
+  private val raster = GlassPortalRaster(density, if (motionBudget) 480_000f else 720_000f)
   private val incoming = RectF()
   private val outgoing = RectF()
   private val contentBlur = WeakHashMap<View, Float>()
@@ -117,7 +121,7 @@ internal class GlassForegroundPortal(density: Float) {
     // apply the scalar in its final portal shader. This avoids HWUI's large
     // additional "alpha caused saveLayer". Group source/rows have independent
     // opacity and retain the original shader, node alpha and composition.
-    opacityInShader = !hasSource && !legacyEarlyFrames
+    opacityInShader = !hasSource && motionRows
     rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)
     activePortal = if (opacityInShader) opacityPortal else portal
     generation++
@@ -280,7 +284,7 @@ internal class GlassForegroundPortal(density: Float) {
     // node capacity. Retain additional lens/Gaussian reach inside the output
     // clip so HWUI's filter culling has the same needed input neighbourhood.
     // The source-and-rows path keeps its original drawing byte-for-byte.
-    if (!hasSource && !grouped && !legacyEarlyFrames && prepareOutputClip(area, scale)) {
+    if (!hasSource && !grouped && motionClip && prepareOutputClip(area, scale)) {
       val save = canvas.save()
       try {
         canvas.clipRect(outputClip)
@@ -335,7 +339,9 @@ internal class GlassForegroundPortal(density: Float) {
     "portalMaxScreenBlurPx" to maxScreenBlur, "portalOutputClipDraws" to outputClipDraws,
     "portalOutputClipSavedPixels" to outputClipSavedPixels,
     "portalShaderOpacityDraws" to shaderOpacityDraws,
-    "portalLegacyEarlyFrames" to if (legacyEarlyFrames) 1 else 0)
+    "portalMotionRowsConfigured" to if (motionRows) 1 else 0,
+    "portalMotionClipConfigured" to if (motionClip) 1 else 0,
+    "portalMotionBudgetConfigured" to if (motionBudget) 1 else 0)
 
   private fun clearTransientNodes() {
     if (!wasWarping) return

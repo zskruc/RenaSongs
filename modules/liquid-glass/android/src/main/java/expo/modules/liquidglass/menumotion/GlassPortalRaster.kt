@@ -7,7 +7,8 @@ import kotlin.math.min
 import kotlin.math.sqrt
 
 /** One fixed filtered capacity/scale per native menu presentation. */
-internal class GlassPortalRaster(private val density: Float) {
+internal class GlassPortalRaster(private val density: Float,
+  private val motionMaximumPixels: Float = MaximumPixels) {
   val bounds = RectF()
   var scale = 1f
     private set
@@ -33,7 +34,11 @@ internal class GlassPortalRaster(private val density: Float) {
     val nextPhysicalWidth = if (hasGlassSource) windowWidth else min(windowWidth, targetWidth * 1.2f + guard * 2f)
     val nextPhysicalHeight = if (hasGlassSource) windowHeight else
       min(windowHeight, max(targetWidth, targetHeight) * 1.2f + guard * 2f)
-    val nextScale = min(1f, sqrt(MaximumPixels / max(nextPhysicalWidth * nextPhysicalHeight, 1f)))
+    // The optional smaller motion raster never affects a whole-toolbar source.
+    // Settled content still uses the existing direct full-resolution draw.
+    val maximumPixels = if (hasGlassSource || !motionMaximumPixels.isFinite() || motionMaximumPixels <= 0f)
+      MaximumPixels else motionMaximumPixels
+    val nextScale = min(1f, sqrt(maximumPixels / max(nextPhysicalWidth * nextPhysicalHeight, 1f)))
     val nextWidth = max(1, ceil(nextPhysicalWidth * nextScale).toInt())
     val nextHeight = max(1, ceil(nextPhysicalHeight * nextScale).toInt())
     val changed = !reserved || physicalWidth != nextPhysicalWidth || physicalHeight != nextPhysicalHeight ||

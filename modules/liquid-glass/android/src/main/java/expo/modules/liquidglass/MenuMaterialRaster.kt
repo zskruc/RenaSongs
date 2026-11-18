@@ -19,7 +19,7 @@ internal class MenuMaterialRaster(
   private var viewportWidth = 1
   private var viewportHeight = 1
 
-  fun reserve(width: Int, height: Int): Boolean {
+  fun reserve(width: Int, height: Int, smallerMotionBudget: Boolean = false): Boolean {
     val w = width.coerceAtLeast(1)
     val h = height.coerceAtLeast(1)
     val previous = animationScale
@@ -27,7 +27,7 @@ internal class MenuMaterialRaster(
     viewportHeight = h
     // Include ceil() edge pixels in the budget, even for very thin/wide menus.
     // This is reservation work, never a per-frame search or scale adjustment.
-    val budget = maxPixels.coerceAtLeast(1).toLong()
+    val budget = (if (smallerMotionBudget) minOf(maxPixels, 480_000) else maxPixels).coerceAtLeast(1).toLong()
     fun area(s: Double) = ceil(w * s).toLong().coerceAtLeast(1) * ceil(h * s).toLong().coerceAtLeast(1)
     // Explicit experiment only: keep one full-resolution epoch throughout the
     // presentation, rather than changing the optical recipe or spring motion.

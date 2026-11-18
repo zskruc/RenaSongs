@@ -87,7 +87,7 @@ assert.ok(sourceRecording.includes('node.beginRecording(bitmap.width, bitmap.hei
 assert.doesNotMatch(sourceRecording, /(?:setAlpha|setScale|setTranslation|setRenderEffect|\.draw\(software|Bitmap\.createBitmap|recycle)\s*\(/,
   'Re-recording missing source pixels must not change physical pose/alpha/sourceBlur or capture live views again');
 assert.ok(portal.includes('val grouped = hasSource && drawSource != null') &&
-  portal.includes('opacityInShader = !hasSource && !legacyEarlyFrames') &&
+  portal.includes('opacityInShader = !hasSource && motionRows') &&
   portal.includes('rowsNode.setAlpha(if (opacityInShader) 1f else rowsOpacity)') &&
   portal.includes('activePortal = if (opacityInShader) opacityPortal else portal') &&
   portal.includes('GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)') &&

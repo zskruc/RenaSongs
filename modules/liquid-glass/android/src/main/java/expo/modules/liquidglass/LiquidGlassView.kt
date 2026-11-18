@@ -183,7 +183,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   // cannot split the committed density/source/layout cohort.
   private val menuRaster = MenuMaterialRaster(forceFullResolution =
     Log.isLoggable("ResonusGlassFullMaterial", Log.DEBUG))
-  private val optimizeMenuEarlyFrames = !Log.isLoggable("ResonusGlassLegacyEarlyFrames", Log.DEBUG)
+  private val optimizeMenuEarlyFrames = Log.isLoggable("ResonusGlassMotionMaterial", Log.DEBUG)
+  private val testSmallerMotionBudget = Log.isLoggable("ResonusGlassMotionBudget", Log.DEBUG)
   private var menuHasGroupedSource by mutableStateOf(false)
   private var menuBoundedAlphaDraws = 0L
   private var menuBoundedAlphaMaxPixels = 0L
@@ -355,7 +356,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     // entire screen here made small menus allocate full-window blur targets.
     val nextCapacity = IntSize(maxOf(menuMaterialCapacity.width, layerWidth.coerceAtLeast(1)),
       maxOf(menuMaterialCapacity.height, layerHeight.coerceAtLeast(1)))
-    menuRaster.reserve(menuMaterial.captureWidth, menuMaterial.captureHeight)
+    menuRaster.reserve(menuMaterial.captureWidth, menuMaterial.captureHeight,
+      testSmallerMotionBudget && !hasGroupedSource)
     val rasterChanged = menuRaster.setAnimating(true)
     if (!geometryChanged && nextCapacity == menuMaterialCapacity && !rasterChanged) return
     // A later async title/keyboard layout can grow a card. Never shrink the
@@ -1263,6 +1265,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           // This content is clipped by MenuMorphView to the live contour.
           // Reserve that contour with an outward guard and align to small
           // buckets so a growing shape need not allocate a new size each tick.
+          @Suppress("UNUSED_VARIABLE") val geometry = menuMaterialVersion
+          @Suppress("UNUSED_VARIABLE") val placement = menuPlacementVersion
           val edge = 2f
           val bucket = 64f
           val left = (floor((materialOffsetX * epoch.scale - edge) / bucket) * bucket).coerceIn(0f, size.width)
