@@ -95,12 +95,20 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private var handoffObserver: ViewTreeObserver? = null
   private var handoffCommitCallback: Runnable? = null
   private var handoffTimeout: Runnable? = null
+  private var atomicSourceHandoff: MenuAtomicSourceHandoff? = null
   private var handoffStartedAt = 0L
   private var sourceHandoffRegistered = 0
   private var sourceHandoffCommits = 0
   private var sourceHandoffFallbacks = 0
   private var sourceHandoffLastReason = "none"
   private var sourceHandoffLastMs = 0L
+  private var sourceAtomicAttempts = 0
+  private var sourceAtomicStaged = 0
+  private var sourceAtomicUncertain = 0
+  private var sourceAtomicCommits = 0
+  private var sourceAtomicTimeouts = 0
+  private var sourceAtomicState = "not-attempted"
+  private var sourceAtomicPatchSkipped = false
   private var preparedHandoffPatch: MenuHandoffPatch? = null
   private var prepareHandoffPatchCallback: Runnable? = null
   private var handoffPatchState = "not-prepared"
@@ -185,6 +193,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       jellyFrames = 0L; plateFrames = 0L
       sourceHandoffRegistered = 0; sourceHandoffCommits = 0; sourceHandoffFallbacks = 0
       sourceHandoffLastReason = "none"; sourceHandoffLastMs = 0L
+      sourceAtomicAttempts = 0; sourceAtomicStaged = 0; sourceAtomicUncertain = 0; sourceAtomicCommits = 0; sourceAtomicTimeouts = 0
+      sourceAtomicState = "not-attempted"; sourceAtomicPatchSkipped = false
       handoffPatchState = "not-prepared"; handoffPatchDrawDeclines = 0
       setInteractive(false)
       (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
@@ -706,6 +716,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       "menuSourceBounds=$source menuThroughBounds=$through menuSourceFillAlpha=${sourceFill?.ushr(24)} " +
       "sourceHandoffRegistered=$sourceHandoffRegistered sourceHandoffCommits=$sourceHandoffCommits " +
       "sourceHandoffFallbacks=$sourceHandoffFallbacks sourceHandoffReason=$sourceHandoffLastReason sourceHandoffMs=$sourceHandoffLastMs " +
+      "sourceAtomicAttempts=$sourceAtomicAttempts sourceAtomicStaged=$sourceAtomicStaged sourceAtomicUncertain=$sourceAtomicUncertain sourceAtomicCommits=$sourceAtomicCommits " +
+      "sourceAtomicTimeouts=$sourceAtomicTimeouts sourceAtomicState=$sourceAtomicState sourceAtomicPatchSkipped=$sourceAtomicPatchSkipped " +
       "sourceHandoffPatchState=$handoffPatchState sourceHandoffPatchDeclines=$handoffPatchDrawDeclines sourceHandoffPatch=$patchDiagnostics " +
       "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${completedSource != null} " +
       "sourceClone=${completedSource?.diagnostics()} sourceCapture=${MenuTriggerSnapshots.captureDiagnostics()}")
@@ -716,10 +728,20 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private fun queueHandoffPatchPreparation() {
     cancelHandoffPatchPreparation()
     if (!sourceHasGlass) return
+    if (atomicSourceHandoffAvailable()) {
+      sourceAtomicPatchSkipped = true
+      handoffPatchState = "atomic-eligible-no-copy"
+      return
+    }
     val session = activeSession
     val preparation = Runnable {
       prepareHandoffPatchCallback = null
       if (activeSession != session || !requestedOpen || !settled || !sourceHasGlass || !isAttachedToWindow) return@Runnable
+      if (atomicSourceHandoffAvailable()) {
+        sourceAtomicPatchSkipped = true
+        handoffPatchState = "atomic-eligible-no-copy"
+        return@Runnable
+      }
       val snapshot = triggerSnapshot ?: return@Runnable
       val sourceView = snapshot.sourceForHandoff() ?: run { handoffPatchState = "source-unavailable"; return@Runnable }
       preparedHandoffPatch = (getChildAt(0) as? LiquidGlassView)?.prepareMenuHandoffPatch(
@@ -742,6 +764,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val ticket = sourceHandoff.begin(activeSession) ?: return false
     handoffTicket = ticket
     handoffStartedAt = SystemClock.uptimeMillis()
+    if (tryBeginAtomicSourceHandoff(snapshot, ticket)) return true
     preparedHandoffPatch?.let { patch ->
       if ((getChildAt(0) as? LiquidGlassView)?.isMenuHandoffPatchCurrent(patch, this) == true) {
         patch.beginHandoff()
@@ -777,6 +800,72 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     return true
   }
 
+  private fun atomicSourceHandoffAvailable(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    val sourceRoot = triggerSnapshot?.sourceForHandoff()?.rootView ?: return false
+    val dialogRoot = windowDrawing?.atomicHandoffRoot() ?: return false
+    return try { MenuAtomicSourceHandoff.eligible(sourceRoot, dialogRoot) }
+    catch (_: RuntimeException) { false }
+    catch (_: LinkageError) { false }
+  }
+
+  private fun tryBeginAtomicSourceHandoff(snapshot: MenuTriggerSnapshot, ticket: MenuSourceHandoff.Ticket): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return false
+    val sourceRoot = snapshot.sourceForHandoff()?.rootView ?: return false
+    val drawing = windowDrawing ?: return false
+    val dialogRoot = drawing.atomicHandoffRoot() ?: return false
+    val eligible = try { MenuAtomicSourceHandoff.eligible(sourceRoot, dialogRoot) }
+      catch (_: RuntimeException) { false } catch (_: LinkageError) { false }
+    if (!eligible) return false
+    sourceAtomicAttempts++
+    val atomic = MenuAtomicSourceHandoff(mainHandler) {
+      if (handoffTicket == ticket && isAttachedToWindow) {
+        sourceAtomicCommits++
+        finishSourceHandoff(ticket, true, "surface-transaction-committed")
+      }
+    }
+    atomicSourceHandoff = atomic
+    val result = atomic.begin(sourceRoot, dialogRoot) {
+      // No ViewRoot mutation occurs in either add(null). Return the lease only
+      // after both memberships and the transaction-committed listener exist.
+      val restored = snapshot.restoreSourceForHandoff { currentSourceRoot ->
+        currentSourceRoot === sourceRoot && windowDrawing === drawing &&
+          drawing.atomicHandoffRoot() === dialogRoot && handoffTicket == ticket &&
+          activeSession == ticket.session && !requestedOpen && isAttachedToWindow
+      }
+      if (restored) {
+        drawing.hideForAtomicHandoff()
+        sourceRoot.invalidate()
+        dialogRoot.invalidate()
+      }
+      restored
+    }
+    sourceAtomicState = "source=${result.sourceJoined},target=${result.targetJoined},staged=${result.staged},uncertain=${result.stageUncertain},ready=${result.markedReady},${result.failure}"
+    if (!result.staged && !result.stageUncertain) {
+      // The finite failed group was released in finally. No source lease has
+      // changed, so the existing lower-API/qualification fallback is still safe.
+      atomic.cancel()
+      atomicSourceHandoff = null
+      return false
+    }
+    if (result.staged) sourceAtomicStaged++
+    if (result.stageUncertain) sourceAtomicUncertain++
+    sourceHandoffRegistered++
+    preparedHandoffPatch = null
+    handoffPatchState = "atomic-no-patch"
+    // There is no public SSG cancel. Never launch the old 200ms fallback over
+    // a staged sync; leave both roots alive for the compositor transaction.
+    val timeout = Runnable {
+      if (handoffTicket == ticket) {
+        sourceAtomicTimeouts++
+        finishSourceHandoff(ticket, false, "surface-transaction-timeout")
+      }
+    }
+    handoffTimeout = timeout
+    mainHandler.postDelayed(timeout, 2_000L)
+    return true
+  }
+
   private fun finishSourceHandoff(ticket: MenuSourceHandoff.Ticket, committed: Boolean, reason: String) {
     if (!sourceHandoff.finish(ticket, activeSession, requestedOpen)) return
     clearHandoffCallbacks()
@@ -787,6 +876,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   private fun clearHandoffCallbacks() {
+    atomicSourceHandoff?.cancel()
+    atomicSourceHandoff = null
     handoffTimeout?.let { mainHandler.removeCallbacks(it) }
     handoffTimeout = null
     val callback = handoffCommitCallback

@@ -24,6 +24,7 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
   private var suppressions = 0L
   private var restorations = 0L
   private var suppressed = false
+  private var atomicHandoffHidden = false
 
   init {
     setWillNotDraw(false)
@@ -48,7 +49,7 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
     }
     envelope.set(screenEnvelope)
     updateBounds()
-    if (!suppressed) visibility = VISIBLE
+    if (!suppressed && !atomicHandoffHidden) visibility = VISIBLE
     invalidate()
     return parent != null
   }
@@ -100,7 +101,21 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
     if (!capture.finish(true, parent != null)) return
     restorations++
     suppressed = false
-    visibility = VISIBLE
+    visibility = if (atomicHandoffHidden) INVISIBLE else VISIBLE
+    invalidate()
+    root.get()?.invalidate()
+  }
+
+  /** Only this independently owned Dialog drawing disappears in the same
+   * buffer transaction that restores the original Activity source. */
+  fun atomicHandoffRoot(): View? = root.get()?.takeIf {
+    parent != null && !suppressed && !atomicHandoffHidden && visibility == VISIBLE &&
+      it.isAttachedToWindow && it.isShown && it.windowVisibility == VISIBLE
+  }
+
+  fun hideForAtomicHandoff() {
+    atomicHandoffHidden = true
+    visibility = INVISIBLE
     invalidate()
     root.get()?.invalidate()
   }
@@ -108,6 +123,7 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
   fun detach() {
     capture.release()
     suppressed = false
+    atomicHandoffHidden = false
     visibility = INVISIBLE
     try { root.get()?.overlay?.remove(this) } catch (_: RuntimeException) { }
     finally { root.clear(); MenuMorphWindowOwners.remove(this) }
@@ -117,6 +133,7 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
     "groupWindowAlpha" to alpha, "groupWindowVisibility" to visibility,
     "groupWindowRecordings" to recordings, "groupWindowCaptureSuppressions" to suppressions,
     "groupWindowCaptureRestorations" to restorations,
+    "groupWindowAtomicHidden" to atomicHandoffHidden,
     "groupWindowViewportPixels" to width.toLong() * height,
     "groupWindowOrigin" to listOf(left, top))
 }
