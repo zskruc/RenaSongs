@@ -85,6 +85,12 @@ assert.ok(optics.includes('texture.update(field)') && optics.includes('texture.b
   'Physical shared-field coordinates must map once through a captured epoch, including effect padding and new-session field identity');
 assert.doesNotMatch(optics, /(?:GlassGaussianField\(|postFrameCallback|sendApplyNotifications|createChainEffect\(.*createBlur)/,
   'Field geometry reuse must not add a second CPU field, independent clock or material blur pass');
+const lens = optics.slice(optics.indexOf('fun applyLens('), optics.indexOf('/** Keep the original width/blur/opacity'));
+assert.ok(lens.includes('!menuFieldLensInputsReady(scope.size.width, scope.size.height,') &&
+  lens.includes('refractionHeight, refractionAmount, scope.padding)') &&
+  lens.indexOf('!menuFieldLensInputsReady(') < lens.indexOf('padding = max(') &&
+  lens.indexOf('!menuFieldLensInputsReady(') < lens.indexOf('MenuMorphFieldCoordinates('),
+  'Attach-before-measure Backdrop evaluation must defer unspecified/nonfinite lens inputs before padding mutation or coordinate construction');
 assert.ok(optics.includes('override val color get() = base.color') &&
   optics.includes('override val blendMode get() = base.blendMode') &&
   optics.includes('refractionAmount", -refractionAmount') &&

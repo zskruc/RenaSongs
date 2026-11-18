@@ -80,7 +80,8 @@ internal class MenuMorphFieldOptics {
   fun applyLens(scope: BackdropEffectScope, rasterScale: Float, materialOrigin: Offset,
     refractionHeight: Float, refractionAmount: Float, depthEffect: Boolean,
     chromaticAberration: Boolean) {
-    if (!ready || refractionHeight <= 0f || refractionAmount <= 0f) return
+    if (!ready || !menuFieldLensInputsReady(scope.size.width, scope.size.height,
+        refractionHeight, refractionAmount, scope.padding)) return
     with(scope) {
       if (padding > 0f) padding = max(padding - refractionHeight, 0f)
       val shader = obtainRuntimeShader("MenuMorphFieldRefraction", MenuMorphFieldRefractionShader)

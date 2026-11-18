@@ -22,6 +22,34 @@ private fun displacement(distance: Float, height: Float, amount: Float): Float {
 }
 
 fun main() {
+  // Real Backdrop startup order: onAttach -> observeEffects -> apply runs
+  // before effectScope.update(DrawScope), so Size.Unspecified is NaN/NaN.
+  // The bounded edgeLens min() expression then supplies NaN lens values too.
+  // Reject that evaluation before padding mutation/shader construction; the
+  // subsequent finite DrawScope must become usable without changing values.
+  checkField(!menuFieldLensInputsReady(Float.NaN, Float.NaN, Float.NaN, Float.NaN, 0f),
+    "Unspecified startup effect must not reach coordinate construction")
+  for ((width, height) in listOf(0f to 0f, 0f to 120f, 240f to 0f,
+    Float.NaN to 120f, 240f to Float.NaN, Float.POSITIVE_INFINITY to 120f)) {
+    checkField(!menuFieldLensInputsReady(width, height, 12f, 20f, 0f),
+      "Unmeasured/nonfinite effect dimensions cannot build a lens")
+  }
+  for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY, -1f, 0f)) {
+    checkField(!menuFieldLensInputsReady(240f, 120f, invalid, 20f, 0f),
+      "Nonfinite/disabled lens height must not modify effect padding")
+    checkField(!menuFieldLensInputsReady(240f, 120f, 12f, invalid, 0f),
+      "Nonfinite/disabled lens amount must not build a shader")
+  }
+  for (padding in listOf(-18f, -0f, 0f, 17.25f)) {
+    checkField(menuFieldLensInputsReady(240f, 120f, 12f, 20f, padding),
+      "A valid subsequent draw must accept unchanged finite signed padding")
+    val coordinates = MenuMorphFieldCoordinates(.432624f, 210f, 400f, 30f, 0f, padding)
+    nearField(coordinates.fieldX(padding), 180f, "Signed padding preserves physical origin")
+  }
+  for (invalid in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+    checkField(!menuFieldLensInputsReady(240f, 120f, 12f, 20f, invalid),
+      "Nonfinite effect padding cannot reach coordinate construction")
+  }
   for (scale in listOf(1f, .432624f, .25f, .65f)) {
     for (padding in listOf(0f, 1.5f, 17.25f)) {
       for ((mx, my) in listOf(210f to 400f, -30f to 0f, 465f to 965f)) {

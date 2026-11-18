@@ -21,3 +21,13 @@ internal data class MenuMorphFieldCoordinates(
   fun fieldY(rasterY: Float): Float = (rasterY - padding) / rasterScale + localOriginY
   fun rasterDistance(physicalDistance: Float): Float = physicalDistance * rasterScale
 }
+
+/** Backdrop observes effects on node attach, before its first DrawScope update.
+ * Size.Unspecified supplies NaN dimensions and a bounded lens may consequently
+ * supply NaN refraction values. Defer only this incomplete effect evaluation;
+ * preserve all finite values, including a legitimate negative effect padding. */
+internal fun menuFieldLensInputsReady(width: Float, height: Float,
+  refractionHeight: Float, refractionAmount: Float, padding: Float): Boolean =
+  width.isFinite() && width > 0f && height.isFinite() && height > 0f &&
+    refractionHeight.isFinite() && refractionHeight > 0f &&
+    refractionAmount.isFinite() && refractionAmount > 0f && padding.isFinite()
