@@ -65,7 +65,8 @@ internal data class BackdropFrame(
   val mainPixelWidth: Int = bitmap.width,
   val mainPixelHeight: Int = bitmap.height,
   val unblurredPatch: UnblurredBackdropPatch? = null,
-  val pageEpoch: Long
+  val pageEpoch: Long,
+  val menuUnderlay: MenuUnderlayKey? = null
 )
 
 /** A borrowed producer node, never an independently retained screen snapshot. */
@@ -224,6 +225,20 @@ internal class WindowBackdrop(
   private var contentSourceReference: WeakReference<View>? = null
   private var menuScrimReference: WeakReference<View>? = null
   private val backgroundChanges = BackdropSceneChanges()
+  // A cached texture must observe real dock labels/artwork/status too. Omit
+  // only the native material, never the entire surrounding control wrapper.
+  private val menuBackgroundChanges = BackdropSceneChanges(includeGlassContent = true)
+  private val menuUnderlayPolicy = MenuUnderlayCachePolicy()
+  private data class MenuProgram(val key: MenuUnderlayKey, val node: RenderNode,
+    val source: WeakReference<View>, val owner: WeakReference<View>, val scrim: WeakReference<View>)
+  private var menuProgram: MenuProgram? = null
+  private var menuRootSignature: Long? = null
+  private var menuRasterSubmitted = 0L
+  private var menuRasterPublished = 0L
+  private var menuRasterStale = 0L
+  private var menuRasterFailed = 0L
+  private var menuSourceRecording = false
+  private var menuUnderlayDraws = 0L
   private val nativePage = NativeBackdropPage()
   private val recordedBridge = RecordedBackdropBridge<RecordedBackdropContent>()
   private var tracedDirectSession = -1
@@ -369,6 +384,18 @@ internal class WindowBackdrop(
     }
     true
   }
+  // Conservatively include real Activity rendering (Canvas/native images and
+  // dock controls included), without treating our manual source record as a
+  // new scene. View.draw(recording) does not dispatch this window callback.
+  private val menuUnderlayDrawListener = ViewTreeObserver.OnDrawListener {
+    if (!closed && !captureFailed && !WindowBackdrops.isCapturing && !menuSourceRecording &&
+      menuProgram != null && nativeMenuScrim() != null) {
+      menuUnderlayDraws++
+      sceneVersion++
+      requestFrameClock()
+      root.invalidate()
+    }
+  }
   private var failureClass: String? = null
 
   private class CapturePhaseStats {
@@ -411,7 +438,8 @@ internal class WindowBackdrop(
     if (!closed && oldest != null &&
       SystemClock.uptimeMillis() - oldest.submittedAt >= IMAGE_DELIVERY_TIMEOUT_MS) {
       droppedFrameCount++
-      failCapture(IllegalStateException("GPU image delivery timeout"))
+      if (oldest.menuTicket != null) abortMenuRaster()
+      else failCapture(IllegalStateException("GPU image delivery timeout"))
     } else updateCaptureWatchdog()
   }
 
@@ -429,7 +457,8 @@ internal class WindowBackdrop(
     val pageEpoch: Long,
     val recordSerial: Long,
     val submittedAt: Long,
-    val submittedAtNanos: Long
+    val submittedAtNanos: Long,
+    val menuTicket: MenuUnderlayCachePolicy.Ticket? = null
   )
 
   private data class AsyncImageResult(
@@ -454,6 +483,7 @@ internal class WindowBackdrop(
       if (activityDecor !== root && activityDecor?.isAttachedToWindow == true) {
         activityDecor.viewTreeObserver.addOnScrollChangedListener(backgroundScrollListener)
         activityDecor.viewTreeObserver.addOnPreDrawListener(backgroundPreDrawListener)
+        activityDecor.viewTreeObserver.addOnDrawListener(menuUnderlayDrawListener)
       }
       root.postDelayed(diagnosticLog, 2_000L)
       root.postDelayed(diagnosticLog, 8_000L)
@@ -571,7 +601,8 @@ internal class WindowBackdrop(
     if (closed || captureFailed || WindowBackdrops.isCapturing || activityDecor !== source ||
       !isolatesModalForeground()) return
     // Omitted wrapper dirty flags cannot become a two-window feedback loop.
-    if (backgroundChanges.hasChanged(source)) {
+    val changes = if (nativeMenuScrim() != null) menuBackgroundChanges else backgroundChanges
+    if (changes.hasChanged(source)) {
       backgroundSceneChangeCount++
       sceneVersion++
       requestFrameClock()
@@ -610,6 +641,7 @@ internal class WindowBackdrop(
       return null // Unknown overlay: retain ordinary capture scheduling.
     }
     var signature = menuGeometry.properties(root)
+    if (menuRootSignature != signature) { menuRootSignature = signature; sceneVersion++ }
     signature = signature * 31L + menuGeometry.properties(scrim)
     if (signature != menuGeometrySignature) {
       menuGeometrySignature = signature
@@ -641,9 +673,18 @@ internal class WindowBackdrop(
       menuGeometrySignature = null
       null
     }
-    if (geometryChanged || menuSceneChanged == true) {
+    if (geometryChanged) {
       sceneVersion++
       requestFrameClock()
+    }
+    val literalScrim = nativeMenuScrim()
+    val liveMenuPaint = literalScrim != null && menuProgram?.scrim?.get() === literalScrim &&
+      (recordedBridge.value?.content?.menuProgram == true || frame?.menuUnderlay != null)
+    // Only this explicit source program paints its scrim at consumption.
+    // Legacy/unknown overlays still bake it into their ordinary source image.
+    if (menuSceneChanged == true) {
+      if (liveMenuPaint) notifyBackdropDrawingChanged(visible)
+      else { sceneVersion++; requestFrameClock() }
     }
     val isolatedSceneKnown = menuSceneChanged != null
     val scrollDirty = scrollVersion != capturedScrollVersion
@@ -658,6 +699,8 @@ internal class WindowBackdrop(
       }
     }
     val hasNativeMenuSource = recordedBridge.value?.content?.menuProgram == true
+    if (isolatedSceneKnown && hasNativeMenuSource && !scrollDirty && !materialDirty && !sceneDirty)
+      trySubmitMenuRaster(visible, currentFrameTimeNanos)
     if (isolatedSceneKnown && (frame != null || hasNativeMenuSource) && !scrollDirty && !materialDirty && !sceneDirty) {
       // Foreground scrolling does not change the omitted card's background.
       // Do not leave the old 42ms idle request waking this otherwise static scene.
@@ -1071,21 +1114,25 @@ internal class WindowBackdrop(
     submittedScrollVersion: Long, submittedMaterialVersion: Long, submittedSceneVersion: Long,
     vsyncNanos: Long, isScrollCapture: Boolean): Boolean {
     val underlay = activityDecor ?: return false
-    val scrimColor = (scrim.background as? ColorDrawable)?.color
-      ?: BackgroundStyleApplicator.getBackgroundColor(scrim) ?: return false
+    val owner = visible.firstOrNull()?.let { nativeMenuOwner(it) } ?: return false
     if (captureRect.isEmpty || underlay.rootView === root || !nativePage.policy.captureAllowed) return false
-    var opacity = 1f
-    var ancestor: View? = scrim
-    while (ancestor != null) {
-      opacity *= ancestor.alpha.coerceIn(0f, 1f)
-      if (ancestor === root) break
-      ancestor = ancestor.parent as? View
-    }
-    if (ancestor !== root) return false
     val scale = minOf(0.5f, MAX_SAMPLE_WIDTH / root.width.toFloat())
     val width = quantize(ceil(captureRect.width() * scale).toInt(), SAMPLE_SIZE_STEP)
     val height = quantize(ceil(captureRect.height() * scale).toInt(), SAMPLE_SIZE_STEP)
     if (width <= 0 || height <= 0) return false
+    // Resize before publishing the immediate bridge: producer release advances
+    // generation and must never silently invalidate that newly published source.
+    if (reader != null && (width > pixelWidth || height > pixelHeight) && inFlightTickets.isEmpty())
+      releaseCapture(keepDisplayedFrames = true)
+    underlay.getLocationOnScreen(activityLocation)
+    val geometry = RecordedBackdropGeometry(scale, location[0] + captureRect.left,
+      location[1] + captureRect.top, width, height)
+    val key = MenuUnderlayKey(epoch, generation, System.identityHashCode(root),
+      System.identityHashCode(underlay), System.identityHashCode(owner), System.identityHashCode(scrim),
+      root.width, root.height, location[0], location[1], underlay.width, underlay.height,
+      activityLocation[0], activityLocation[1], geometry,
+      submittedSceneVersion, submittedMaterialVersion, submittedScrollVersion)
+    menuUnderlayPolicy.observe(key)
     clearRecordedBackdrop("record")
     val serial = recordedBridge.beginRecord()
     val node = directSourceNode ?: RenderNode("RenaSongs menu underlay source").also { directSourceNode = it }
@@ -1099,39 +1146,159 @@ internal class WindowBackdrop(
         recording.scale(scale, scale)
         recording.translate(-captureRect.left.toFloat(), -captureRect.top.toFloat())
         recording.clipRect(captureRect)
-        underlay.getLocationOnScreen(activityLocation)
         val checkpoint = recording.save()
         recording.translate((activityLocation[0] - location[0]).toFloat(),
           (activityLocation[1] - location[1]).toFloat())
+        menuSourceRecording = true
         try {
           MenuTriggerSnapshots.beginCapture(root, underlay, null)
           underlay.draw(recording)
         } finally {
           try { recording.restoreToCount(checkpoint) }
-          finally { MenuTriggerSnapshots.endCapture() }
+          finally { try { MenuTriggerSnapshots.endCapture() } finally { menuSourceRecording = false } }
         }
-        menuScrimPaint.color = scrimColor
-        menuScrimPaint.alpha = (Color.alpha(scrimColor) * opacity).toInt().coerceIn(0, 255)
-        recording.drawRect(captureRect, menuScrimPaint)
+        // Scrim is deliberately not baked into this source. Both the direct
+        // bridge and immutable GPU image receive its current paint at sampling.
       } finally { node.endRecording() }
     }
     val mask = RecordedBackdropEligibility.MODAL_DIRECT_SAFETY or RecordedBackdropEligibility.RECORDED
     if (!recordedBridge.publish(RecordedBackdropContent(node, WeakReference(underlay),
         root.width, root.height, location[0], location[1], direct = true, menuProgram = true),
-        RecordedBackdropGeometry(scale, location[0] + captureRect.left, location[1] + captureRect.top, width, height),
-        epoch, generation, serial, nativePage.policy.epoch, generation, nativePage.policy.captureAllowed,
-        mask, direct = true)) return false
+        geometry, epoch, generation, serial, nativePage.policy.epoch, generation,
+        nativePage.policy.captureAllowed, mask, direct = true)) return false
+    menuProgram = MenuProgram(key, node, WeakReference(underlay), WeakReference(owner), WeakReference(scrim))
     frame = null
-    inFlightTickets.removeAll { !recordedBridge.acceptsImage(it.recordSerial) }
+    inFlightTickets.removeAll { it.menuTicket == null && !recordedBridge.acceptsImage(it.recordSerial) }
     updateCaptureWatchdog()
-    captureCount++
-    directCaptureCount++
-    menuDirectCaptureCount++
+    captureCount++; directCaptureCount++; menuDirectCaptureCount++
     lastCapture = SystemClock.uptimeMillis()
     recordSubmission(submittedScrollVersion, submittedMaterialVersion, submittedSceneVersion, vsyncNanos, isScrollCapture)
     ownRedrawsToSkip = OWN_REDRAW_TRAVERSALS
     notifyBackdropDrawingChanged(visible)
     return true
+  }
+
+  /** Paint the live literal scrim inside the optical source, before blur/lens. */
+  internal fun drawMenuScrim(canvas: android.graphics.Canvas, geometry: RecordedBackdropGeometry,
+    originX: Int, originY: Int) {
+    // If a nested/legacy surface just withdrew cache eligibility, the previous
+    // underlay image may be retained until its ordinary replacement arrives.
+    // Retain that source's literal paint too, rather than exposing an undimmed
+    // image for the delivery gap. This does not authorize another cache submit.
+    val scrim = nativeMenuScrim() ?: menuScrimReference?.get()?.takeIf {
+      it.isAttachedToWindow && it.rootView === root
+    } ?: return
+    val color = (scrim.background as? ColorDrawable)?.color
+      ?: BackgroundStyleApplicator.getBackgroundColor(scrim) ?: return
+    var opacity = 1f
+    var ancestor: View? = scrim
+    while (ancestor != null) {
+      opacity *= ancestor.alpha.coerceIn(0f, 1f)
+      if (ancestor === root) break
+      ancestor = ancestor.parent as? View
+    }
+    if (ancestor !== root) return
+    menuScrimPaint.color = color
+    menuScrimPaint.alpha = (Color.alpha(color) * opacity).toInt().coerceIn(0, 255)
+    val left = geometry.localX(0f, originX)
+    val top = geometry.localY(0f, originY)
+    canvas.drawRect(left, top, left + geometry.pixelWidth * geometry.inverseScale,
+      top + geometry.pixelHeight * geometry.inverseScale, menuScrimPaint)
+  }
+
+  private fun currentMenuKey(): MenuUnderlayKey? {
+    val program = menuProgram ?: return null
+    val source = program.source.get() ?: return null
+    val owner = program.owner.get() ?: return null
+    val scrim = nativeMenuScrim() ?: return null
+    if (program.scrim.get() !== scrim || !root.isAttachedToWindow || !root.isShown ||
+      !source.isAttachedToWindow || !source.isShown || !owner.isAttachedToWindow ||
+      surfaces.any { nativeMenuOwner(it) !== owner }) return null
+    root.getLocationOnScreen(location)
+    source.getLocationOnScreen(activityLocation)
+    return program.key.copy(pageEpoch = nativePage.policy.epoch, generation = generation,
+      rootWidth = root.width, rootHeight = root.height, rootX = location[0], rootY = location[1],
+      sourceWidth = source.width, sourceHeight = source.height,
+      sourceX = activityLocation[0], sourceY = activityLocation[1],
+      sceneVersion = sceneVersion, materialVersion = materialVersion, scrollVersion = scrollVersion)
+  }
+
+  /** One optional GPU raster, never a second root traversal or per-frame readback. */
+  private fun trySubmitMenuRaster(targets: List<LiquidGlassView>, vsyncNanos: Long) {
+    if (!asynchronous || closed || inFlightTickets.isNotEmpty() ||
+      retiredImages.size >= MAX_RETIRED_IMAGES - MAX_IN_FLIGHT - 2) return
+    if (synchronized(ticketLock) { queuedTickets.isNotEmpty() }) return
+    val program = menuProgram ?: return
+    val key = currentMenuKey()?.takeIf { it == program.key } ?: return
+    val ticket = menuUnderlayPolicy.begin(key) ?: return
+    val width = key.geometry.pixelWidth
+    val height = key.geometry.pixelHeight
+    try {
+      if (reader != null && (width > pixelWidth || height > pixelHeight)) {
+        menuUnderlayPolicy.complete(ticket, key, false)
+        return // A real ROI change is re-recorded/resized by captureNativeMenu.
+      }
+      if (reader == null) {
+        pixelWidth = width; pixelHeight = height
+        reader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 6,
+          HardwareBuffer.USAGE_GPU_SAMPLED_IMAGE or HardwareBuffer.USAGE_GPU_COLOR_OUTPUT)
+        renderNode = RenderNode("RenaSongs menu GPU underlay").apply { setPosition(0, 0, width, height) }
+        // Publish ownership before setup calls so partial construction is also
+        // destroyed by the finite optional-cache failure path.
+        renderer = HardwareRenderer()
+        renderer!!.setSurface(reader!!.surface)
+        renderer!!.setContentRoot(renderNode!!)
+        renderer!!.setOpaque(false)
+        val readerGeneration = generation
+        reader!!.setOnImageAvailableListener({ source -> consumeAsyncImage(source, readerGeneration) }, imageHandler)
+        captureRecreateCount++
+      }
+      val node = renderNode ?: throw IllegalStateException("Menu GPU producer node unavailable")
+      val source = reader ?: throw IllegalStateException("Menu GPU producer reader unavailable")
+      node.setRenderEffect(null)
+      val recording = node.beginRecording(pixelWidth, pixelHeight)
+      try {
+        recording.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+        recording.clipRect(0, 0, width, height)
+        recording.drawRenderNode(program.node)
+      } finally { node.endRecording() }
+      val pending = PendingCapture(generation, source, key.geometry.scale, key.geometry.screenX,
+        key.geometry.screenY, null, width, height, null, targets.toList(), key.pageEpoch,
+        recordedBridge.recordSerial, SystemClock.uptimeMillis(), SystemClock.elapsedRealtimeNanos(), ticket)
+      inFlightTickets.add(pending)
+      synchronized(ticketLock) { queuedTickets.addLast(pending) }
+      inFlightPeak = maxOf(inFlightPeak, inFlightTickets.size)
+      updateCaptureWatchdog()
+      val result = timeCapturePhase(renderSyncAndDrawStats) {
+        val request = renderer!!.createRenderRequest().setWaitForPresent(false)
+        if (vsyncNanos > 0L) request.setVsyncTime(vsyncNanos)
+        request.syncAndDraw()
+      }
+      if ((result and (HardwareRenderer.SYNC_LOST_SURFACE_REWARD_IF_FOUND or
+          HardwareRenderer.SYNC_CONTEXT_IS_STOPPED or HardwareRenderer.SYNC_FRAME_DROPPED)) != 0) {
+        abortMenuRaster(); return
+      }
+      menuRasterSubmitted++
+    } catch (_: RuntimeException) { abortMenuRaster() }
+  }
+
+  /** Optional-cache failure cannot destroy the already usable direct bridge. */
+  private fun abortMenuRaster() {
+    val fallback = recordedBridge.value?.takeIf { it.content.menuProgram }
+    val program = menuProgram
+    menuRasterFailed++
+    releaseCapture(keepDisplayedFrames = true)
+    if (fallback != null && program != null && nativeMenuScrim() === program.scrim.get() &&
+      nativePage.policy.accepts(fallback.pageEpoch)) {
+      val key = program.key.copy(generation = generation)
+      menuProgram = program.copy(key = key)
+      menuUnderlayPolicy.fail(key)
+      recordedBridge.publish(fallback.content, fallback.geometry, fallback.pageEpoch, generation,
+        fallback.serial, nativePage.policy.epoch, generation, nativePage.policy.captureAllowed,
+        RecordedBackdropEligibility.MODAL_DIRECT_SAFETY or RecordedBackdropEligibility.RECORDED, direct = true)
+      frame = null
+      notifyBackdropDrawingChanged(surfaces)
+    }
   }
 
   /** Shared source recording; exactly one source draw in either producer. */
@@ -1369,7 +1536,7 @@ internal class WindowBackdrop(
     val bitmap = wrapImage(image) ?: return AsyncImageResult()
     return AsyncImageResult(BackdropFrame(bitmap, image, ticket.scale, ticket.screenX, ticket.screenY,
       ticket.source, ticket.progressiveBlur, ticket.mainPixelWidth, ticket.mainPixelHeight,
-      ticket.unblurredPatch, ticket.pageEpoch))
+      ticket.unblurredPatch, ticket.pageEpoch, ticket.menuTicket?.key))
   }
 
   private fun completeAsyncImage(ticket: PendingCapture, result: AsyncImageResult) {
@@ -1381,6 +1548,32 @@ internal class WindowBackdrop(
     // A Fragment swap can finish after the capture was queued but before the
     // next pre-draw. Observe native identity here too, before accepting pixels.
     observeNativePage()
+    if (ticket.menuTicket != null) {
+      activityDecor?.let { observeBackgroundScene(it) }
+      val current = currentMenuKey()
+      val decision = menuUnderlayPolicy.complete(ticket.menuTicket, current,
+        result.frame != null && nativePage.policy.accepts(ticket.pageEpoch))
+      if (decision == MenuUnderlayCachePolicy.Completion.ACCEPT && result.frame != null) {
+        menuRasterPublished++
+        asyncPublishedCount++
+        ownRedrawsToSkip = OWN_REDRAW_TRAVERSALS
+        publishFrame(result.frame, ticket.targets.filter { it.isAttachedToWindow })
+      } else {
+        result.frame?.image?.let { retireImage(it) }
+        if (decision == MenuUnderlayCachePolicy.Completion.FAILED) {
+          if (result.fenceTimedOut) fenceTimeoutCount++
+          abortMenuRaster()
+        } else menuRasterStale++
+      }
+      if (current != null && (current != ticket.menuTicket.key ||
+          current.geometry.pixelWidth > pixelWidth || current.geometry.pixelHeight > pixelHeight)) {
+        if (current.geometry.pixelWidth > pixelWidth || current.geometry.pixelHeight > pixelHeight)
+          capturedMaterialVersion = Long.MIN_VALUE
+        requestFrameClock()
+        root.invalidate()
+      }
+      return
+    }
     if (!nativePage.policy.accepts(ticket.pageEpoch) || !recordedBridge.acceptsImage(ticket.recordSerial)) {
       stalePageFrameCount++
       result.frame?.image?.let { retireImage(it) }
@@ -1527,6 +1720,8 @@ internal class WindowBackdrop(
   }
 
   private fun releaseCapture(keepDisplayedFrames: Boolean = false) {
+    menuProgram = null
+    menuUnderlayPolicy.clear()
     clearRecordedBackdrop("release", notify = true)
     synchronized(ticketLock) {
       generation++
@@ -1575,6 +1770,15 @@ internal class WindowBackdrop(
       "captureCount" to captureCount,
       "directCaptureCount" to directCaptureCount,
       "menuDirectCaptureCount" to menuDirectCaptureCount,
+      "menuRasterSubmitted" to menuRasterSubmitted,
+      "menuRasterPublished" to menuRasterPublished,
+      "menuRasterStale" to menuRasterStale,
+      "menuRasterFailed" to menuRasterFailed,
+      "menuUnderlayDraws" to menuUnderlayDraws,
+      "menuRasterPending" to menuUnderlayPolicy.hasPending,
+      "menuRasterCached" to menuUnderlayPolicy.hasCached,
+      "menuRasterImageActive" to (frame?.menuUnderlay != null),
+      "menuRasterFailureLatched" to menuUnderlayPolicy.hasFailed,
       "nativeMenuSourceActive" to (recordedBridge.value?.content?.menuProgram == true),
       "directPrepareTotalNs" to directPrepareStats.totalNanos,
       "directRecordTotalNs" to directRecordStats.totalNanos,
@@ -1667,7 +1871,12 @@ internal class WindowBackdrop(
       "preDrawCount=$preDrawCount ownSkip=$ownRedrawSkipCount " +
       "throttled=$throttledDrawCount delayed=$delayedCaptureCount " +
       "hostRestore=$hostRestoreCount failed=$captureFailed " +
-      "async=$asyncCaptureCount menuDirect=$menuDirectCaptureCount direct=$directCaptureCount dropped=$droppedFrameCount busy=$inFlightSkipCount " +
+      "async=$asyncCaptureCount menuDirect=$menuDirectCaptureCount menuRasterSubmitted=$menuRasterSubmitted " +
+      "menuRasterPublished=$menuRasterPublished menuRasterStale=$menuRasterStale menuRasterFailed=$menuRasterFailed " +
+      "menuRasterPending=${menuUnderlayPolicy.hasPending} menuRasterCached=${menuUnderlayPolicy.hasCached} " +
+      "menuRasterImageActive=${frame?.menuUnderlay != null} " +
+      "menuRasterFailureLatched=${menuUnderlayPolicy.hasFailed} menuUnderlayDraws=$menuUnderlayDraws " +
+      "direct=$directCaptureCount dropped=$droppedFrameCount busy=$inFlightSkipCount " +
       "inFlightPeak=$inFlightPeak recreate=$captureRecreateCount shrink=$captureShrinkCount discarded=$discardedGenerationCount " +
       "retiredImages=${retiredImages.size} retiredPeak=$retirementPeak retirementBusy=$retirementBackpressureCount " +
       "retirementFallback=${retirementFallbackCount.get()} retirementFailures=${retirementCloseFailureCount.get()} " +
@@ -1722,6 +1931,7 @@ internal class WindowBackdrop(
     if (activityDecor !== root && activityDecor?.viewTreeObserver?.isAlive == true) {
       activityDecor.viewTreeObserver.removeOnScrollChangedListener(backgroundScrollListener)
       activityDecor.viewTreeObserver.removeOnPreDrawListener(backgroundPreDrawListener)
+      activityDecor.viewTreeObserver.removeOnDrawListener(menuUnderlayDrawListener)
     }
     releaseCapture()
     directSourceNode?.discardDisplayList()

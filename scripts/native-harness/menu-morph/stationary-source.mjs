@@ -17,9 +17,13 @@ for (const renderer of ['drawCapturedBackdrop', 'drawRecordedBackdrop']) {
 assert.ok(host.includes('reserveMaterialEnvelope()') && host.includes('updateMenuMorph('),
   'Reserve once and move only the native material child inside that capacity');
 const menuProgram = windowBackdrop.slice(windowBackdrop.indexOf('private fun captureNativeMenu('),
-  windowBackdrop.indexOf('private fun recordSource('));
-assert.ok(menuProgram.includes('underlay.draw(recording)') && menuProgram.includes('recording.drawRect(captureRect, menuScrimPaint)'),
-  'Native menu source must explicitly record only its Activity and literal scrim');
+  windowBackdrop.indexOf('internal fun drawMenuScrim('));
+assert.ok(menuProgram.includes('underlay.draw(recording)') && !menuProgram.includes('recording.drawRect(captureRect, menuScrimPaint)'),
+  'Native menu producer must record only Activity pixels; its current scrim belongs at consumption, not in the cached underlay');
+assert.ok(material.includes('captured.menuUnderlay?.let {') &&
+  material.includes('snapshot?.drawMenuScrim(canvas, it.geometry, originX, originY)') &&
+  material.includes('snapshot?.drawMenuScrim(canvas, recorded.geometry, originX, originY)'),
+  'Both immutable-image and direct-node source paths must apply the same live literal scrim before material optics');
 assert.doesNotMatch(menuProgram, /(?:root|scrim)\.draw\s*\(|withoutGlass\s*\(|syncAndDraw\s*\(/,
   'A menu must not replay its own Modal tree or wait for an offscreen GPU capture');
 assert.match(windowBackdrop, /surfaces\.any\s*\{\s*nativeMenuOwner\(it\) == null \|\| it\.progressiveBlur\s*\}/,

@@ -537,6 +537,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       samplePaint.alpha = previousAlpha
       samplePaint.shader = previousShader
     }
+    captured.menuUnderlay?.let {
+      snapshot?.drawMenuScrim(canvas, it.geometry, originX, originY)
+    }
   }
 
   private fun drawCapturedRegion(canvas: Canvas, captured: BackdropFrame) {
@@ -563,6 +566,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     } finally {
       canvas.restoreToCount(checkpoint)
     }
+    if (recorded.content.menuProgram)
+      snapshot?.drawMenuScrim(canvas, recorded.geometry, originX, originY)
   }
 
   private fun hasBackdropSource(): Boolean = snapshot?.let {

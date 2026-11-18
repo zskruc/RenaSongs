@@ -15,7 +15,7 @@ import com.facebook.react.uimanager.BackgroundStyleApplicator
  * Dirty ancestors alone are insufficient: restoring an excluded glass card
  * invalidates its ancestors even though the captured scene has not changed.
  */
-internal class BackdropSceneChanges {
+internal class BackdropSceneChanges(private val includeGlassContent: Boolean = false) {
   private val matrixValues = FloatArray(9)
   private var initialized = false
   private var lastSignature = 0L
@@ -78,7 +78,7 @@ internal class BackdropSceneChanges {
   }
 
   private fun visit(view: View, root: View): Long {
-    if (view is LiquidGlassView || WindowBackdrops.isGlassContainer(view, root)) return 0L
+    if (view is LiquidGlassView || (!includeGlassContent && WindowBackdrops.isGlassContainer(view, root))) return 0L
     var signature = properties(view)
     if (view.visibility != View.VISIBLE || view.alpha <= 0f) return signature
     if (view is ViewGroup && view.childCount > 0) {
