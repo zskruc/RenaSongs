@@ -18,7 +18,7 @@ Download the **RenaSongs APK** from [this repository's latest release](https://g
 
 Previously published APKs may still display the former Resonus Glass name. The RenaSongs name and icon take effect in new builds; historical asset filenames remain unchanged.
 
-To try the new features, download **[0.8.7.1-preview.24](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24)**, Android version code `170`. It adds background power optimizations, progressive podcast loading, categorized podcast storage and daily cleanup, alongside the earlier 17 optional tools and era-rendering improvements. Samsung checks covered background cadence, local playback locks, paused timers and screen-off playback. Existing layouts and glass profiles remain available. This prerelease requires manual installation and is excluded from the stable update check. See the [changes and validation scope](./docs/RELEASE-0.8.7.1-preview.24.md).
+To try the latest preview, manually download **[0.8.8.1-preview.24](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.8.1-preview.24)**, Android version code `203`. It adds app-local batch metadata tools, redesigned settings and listening statistics, and a fix for the playlist toolbar rebound. The beginning of the player-menu opening can still stutter. Stable update checks exclude this prerelease.
 
 Android 13 and later support native refraction and directional highlights. Android 12 uses GPU blur; earlier versions use a UI fallback. Appearance and smoothness depend on the device and system state.
 
@@ -65,7 +65,8 @@ Choose Primuse, Artist page layout, Volta or Minidisc under **Settings → Appea
 
 | Channel | Version | Android version code | Availability |
 | --- | --- | --- | --- |
-| Current source / prerelease | `0.8.7.1-preview.24` | `170` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.24.md) |
+| Current prerelease | `0.8.8.1-preview.24` | `203` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.8.1-preview.24) · [Changes and validation](./CHANGELOG.md#0881-preview24---2026-11-19) |
+| Previous prerelease | `0.8.7.1-preview.24` | `170` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.24) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.24.md) |
 | Earlier prerelease | `0.8.7.1-preview.6` | `152` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.6) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.6.md) |
 | Previous prerelease | `0.8.7.1-preview.2` | `148` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.7.1-preview.2) · [Changes and validation](./docs/RELEASE-0.8.7.1-preview.2.md) |
 | Previous prerelease | `0.8.5.2-preview.14` | `146` | [Prerelease APK](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.5.2-preview.14) · [Changes and validation](./docs/RELEASE-0.8.5.2-preview.14.md) |
@@ -106,7 +107,7 @@ The current preview updates artist navigation transitions and name artwork, Volt
 
 `.27` adds an optional [Volta](https://github.com/countervolts/Volta)-inspired **Apple Music style** under **Settings → Appearance → UI style**, alongside **Spotify style**. Home, Library, artist and album/playlist pages use alternate layouts while retaining the existing player, glass profiles and user data. See the [dual UI preview scope and validation](./docs/VOLTA-UI-PREVIEW.md). Earlier preview notes below remain development history.
 
-The current stable release is `v0.8.5.1`, with each tag preserving its release snapshot. The `glass` branch includes `0.8.7.1-preview.24` and the earlier prerelease changes listed above. The previous `.preview.6` test package remains available. Its native player combines [AMLL](https://github.com/amll-dev/applemusic-like-lyrics)-derived controls and SVGs with independently implemented cover/lyric views and a moving artwork-field background. Settings → Player → Player layout restores the previous Resonus layout; the Player background option below applies only to that layout. See the [third-party notices](./THIRD_PARTY_NOTICES.md#amll-player-controls-and-artwork-background-reference) and [preview guide](./docs/AMLL-PLAYER-PREVIEW.md) for the controls/assets’ **AGPL-3.0-only** provenance, retained original licenses and implementation boundaries.
+The current stable release is `v0.8.5.1`, with each tag preserving its release snapshot. The `glass` branch includes `0.8.8.1-preview.24` and the earlier prerelease changes listed above. The previous `.preview.6` test package remains available. Its native player combines [AMLL](https://github.com/amll-dev/applemusic-like-lyrics)-derived controls and SVGs with independently implemented cover/lyric views and a moving artwork-field background. Settings → Player → Player layout restores the previous Resonus layout; the Player background option below applies only to that layout. See the [third-party notices](./THIRD_PARTY_NOTICES.md#amll-player-controls-and-artwork-background-reference) and [preview guide](./docs/AMLL-PLAYER-PREVIEW.md) for the controls/assets’ **AGPL-3.0-only** provenance, retained original licenses and implementation boundaries.
 
 `.15` retains five changes from `.14`: remove the player/lyric top handle while retaining header space, pull-down dismissal and accessible closing on the artwork; remove shuffle/repeat buttons while leaving previous/play-pause/next in their original positions, with modes still in More; retain painted dock progress until its origin scope is restored and preserve the origin's selected-lens opacity; prepare word masks only for the current and next lyric rows, delaying next-row preparation by 720ms without changing blur, optics or lyric timing; show a complete saved playlist mirror while refreshing HTTP in the background, reuse offline metadata without duplicate SQL and limit local queries to the current playlist IDs. A first opening without saved data can still wait; instant loading is not guaranteed.
 
@@ -181,7 +182,7 @@ This project provides a complete [Chinese README](./README.md) and [English READ
 
 | Topic | Link |
 | --- | --- |
-| This prerelease | [preview.14: Primuse, caching and validation scope (Chinese/English)](./docs/RELEASE-0.8.5.2-preview.14.md) |
+| This prerelease | [Build 203 changes and Samsung validation](https://github.com/zskruc/RenaSongs/releases/tag/v0.8.8.1-preview.24) |
 | Changes and APKs | [Changelog](./CHANGELOG.md) · [Releases](https://github.com/zskruc/RenaSongs/releases) |
 | Features and validation scope | [Glass guide](./docs/LIQUID-GLASS-PREVIEW.md) |
 | Playlist layouts and seven music tools | [Entry points, use, limits and future candidates (Chinese/English)](./docs/PLAYLIST-MUSIC-TOOLS-PREVIEW-3.md) |

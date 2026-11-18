@@ -13,6 +13,33 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.24] - 2026-11-19
+
+Android 预发布 / Android prerelease · versionCode `203` · ARM64
+
+### Added
+
+- 加入仅保存在 App 内的批量元数据刮削、曲库选择，以及更多聆听工具。
+- Add app-local batch metadata scraping, library selection and listening tools.
+
+### Changed
+
+- 更名为 RenaSongs，重组设置和播放统计页面，适配部分上游 0.8.8 改动。
+- Rename the app to RenaSongs, reorganize settings and listening statistics, and selectively adapt upstream 0.8.8 changes.
+- 菜单形变和拖选适配自 [expo-glass-custom-menu](https://github.com/rit3zh/expo-glass-custom-menu)，沿用 RenaSongs 的玻璃材质。
+- Adapt native menu morphing and drag selection from [expo-glass-custom-menu](https://github.com/rit3zh/expo-glass-custom-menu) with RenaSongs glass materials.
+
+### Fixed
+
+- 歌单工具栏的整排图标在菜单收回时同步恢复并回弹。三星的排序、下载和更多菜单回归录像中未复现图标消失或收尾闪亮。
+- Restore and rebound the playlist toolbar as a group on menu dismissal. Samsung recordings of Sort, Download and More showed no missing icons or bright flash at handoff.
+
+### Validation
+
+- 在同一台三星的 120Hz 模式下，预跑后的播放器菜单展开和收回中，接近 8.33ms 的呈现间隔分别占 80.1% 和 97.8%；原 Demo 分别为 96.4% 和 96.9%。播放器展开头 400ms 仍有掉帧。复测没有确认收益的实验路径默认关闭。
+- On the same Samsung in 120 Hz mode, 80.1% of warm player-menu opening intervals and 97.8% of closing intervals were near 8.33 ms. The original demo measured 96.4% and 96.9% in its own menu workload. The first 400 ms of opening can still stutter. Experimental paths that did not show repeatable gains are disabled by default.
+- 使用既有 RenaSongs 包名和签名，已在三星覆盖安装。请从本页手动下载 APK。/ Signed for in-place updates to an existing RenaSongs installation and installed on Samsung. Download the APK manually from this page.
+
 ## [0.8.8.1-preview.8] - 2026-11-18
 
 ### Fixed
