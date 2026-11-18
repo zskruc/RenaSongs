@@ -42,6 +42,7 @@ assert.ok(policy.includes('pending !== ticket') && policy.includes('latest != cu
 assert.doesNotMatch(policy, /directSerial|recordSerial/,
   'The menu async cache serial must be independent from ordinary direct-publication/image fencing');
 assert.ok(submit.includes('!asynchronous || closed || inFlightTickets.isNotEmpty()') &&
+  submit.includes('synchronized(ticketLock) { queuedTickets.isNotEmpty() }') &&
   submit.includes('retiredImages.size >= MAX_RETIRED_IMAGES - MAX_IN_FLIGHT - 2') &&
   submit.includes('currentMenuKey()?.takeIf { it == program.key }') &&
   submit.includes('menuUnderlayPolicy.begin(key) ?: return'),
