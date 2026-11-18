@@ -46,10 +46,8 @@ internal class MenuMaterialRaster(private val maxPixels: Int = 720_000) {
     return true
   }
 
-  fun pixels(physical: Int): Int = ceil(physical.coerceAtLeast(1) * scale.toDouble()).toInt().coerceAtLeast(1)
-  /** Preserve physical Gaussian variance, including Android's half-pixel term. */
-  fun blurRadius(physicalRadius: Float): Float = if (scale == 1f) physicalRadius else
-    GlassPortalBlur.radius(GlassPortalBlur.sigma(physicalRadius) * scale)
+  fun pixels(physical: Int): Int = MenuMaterialRasterEpoch(scale).pixels(physical)
+  fun blurRadius(physicalRadius: Float): Float = MenuMaterialRasterEpoch(scale).blurRadius(physicalRadius)
   val width get() = pixels(viewportWidth)
   val height get() = pixels(viewportHeight)
   val inverseScale get() = 1f / scale
@@ -60,4 +58,17 @@ internal class MenuMaterialRaster(private val maxPixels: Int = 720_000) {
     viewportWidth = 1
     viewportHeight = 1
   }
+}
+
+/**
+ * A composition captures this immutable cohort. An owner may request another
+ * density while the previous display list is still drawing; every operation
+ * in that old list must keep its old source conversion, dimensions and inverse
+ * transform until the replacement composition is applied as one unit.
+ */
+internal data class MenuMaterialRasterEpoch(val scale: Float) {
+  fun pixels(physical: Int): Int = ceil(physical.coerceAtLeast(1) * scale.toDouble()).toInt().coerceAtLeast(1)
+  fun blurRadius(physicalRadius: Float): Float = if (scale == 1f) physicalRadius else
+    GlassPortalBlur.radius(GlassPortalBlur.sigma(physicalRadius) * scale)
+  val inverseScale get() = 1f / scale
 }

@@ -13,6 +13,19 @@ preserved upstream history.
 Releases before 0.2.1 are only listed on the
 [GitHub releases page](https://github.com/juananzzz/resonus/releases).
 
+## [0.8.8.1-preview.8] - 2026-11-18
+
+### Fixed
+
+- 修复菜单恢复原分辨率时，取样、布局与逆缩放分开生效导致的背景短暂放大，以及原生布局缓存可能造成的持续玻璃偏移。
+- 原生视图保持物理尺寸与恒定缩放；分辨率、密度、取样、模糊与合成缩放使用同一份 Compose epoch。
+- 初次进入菜单及真实视口变化时直接建立绘制视口，避免相同父布局规格跳过必要的子视图布局。
+
+### English
+
+- Keep native menu view geometry at identity and commit raster density, sampling, layout and composition scale as one immutable Compose epoch.
+- Establish the physical drawing viewport directly when its geometry changes, avoiding cached parent layouts that could retain stale native bounds.
+
 ## [0.8.8.1-preview.7] - 2026-11-18
 
 ### Fixed

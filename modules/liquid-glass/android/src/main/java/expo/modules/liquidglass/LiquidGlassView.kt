@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
@@ -171,6 +172,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private val menuMaterial = MenuMaterialGeometry()
   private val menuRaster = MenuMaterialRaster()
   private var menuRasterScale by mutableFloatStateOf(1f)
+  private var menuGroupOpacity by mutableFloatStateOf(1f)
+  private var menuRasterCompositionAttached = false
   private var menuRasterSizeChanges = 0
   private var menuRasterLastWidth = 0
   private var menuRasterLastHeight = 0
@@ -178,6 +181,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuRasterMaxViewportPixels = 0L
   private var menuRasterMaxWidth = 0
   private var menuRasterMaxHeight = 0
+  private var menuRasterActualWidth = 0
+  private var menuRasterActualHeight = 0
+  private var menuRasterCommittedScale = 1f
   private var menuMaterialCapacity by mutableStateOf(IntSize.Zero)
   private var menuMaterialVersion by mutableIntStateOf(0)
   private var menuPlacementVersion by mutableIntStateOf(0)
@@ -185,8 +191,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuCornerRadiusPx = Float.NaN
   private val composeOffsetX get() = if (menuMaterial.active) menuMaterial.captureLeft else 0
   private val composeOffsetY get() = if (menuMaterial.active) menuMaterial.captureTop else 0
-  internal val opticalMaterialOffsetX get() = if (menuMaterial.active) menuMaterial.left else composeOffsetX + materialOffsetX
-  internal val opticalMaterialOffsetY get() = if (menuMaterial.active) menuMaterial.top else composeOffsetY + materialOffsetY
+  internal val opticalMaterialOffsetX get() = if (menuMaterial.active) composeView.left + materialOffsetX else composeOffsetX + materialOffsetX
+  internal val opticalMaterialOffsetY get() = if (menuMaterial.active) composeView.top + materialOffsetY else composeOffsetY + materialOffsetY
   internal val progressiveMaterialId = System.identityHashCode(this)
 
   internal fun configureDockScrollInput(enabled: Boolean? = null, scope: String? = null, collapsed: Boolean? = null) {
@@ -308,6 +314,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       menuRasterMaxViewportPixels = 0
       menuRasterMaxWidth = 0
       menuRasterMaxHeight = 0
+      menuRasterCompositionAttached = false
     }
     val geometryChanged = menuMaterial.reserve(screenBounds.left - sampleLocation[0], screenBounds.top - sampleLocation[1],
       screenBounds.right - sampleLocation[0], screenBounds.bottom - sampleLocation[1])
@@ -327,8 +334,28 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
-    if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
+    if (geometryChanged) commitDrawingViewport(menuMaterial.captureLeft, menuMaterial.captureTop,
+      menuMaterial.captureWidth, menuMaterial.captureHeight)
     snapshot?.onMaterialChanged()
+  }
+
+  /**
+   * The native Yoga host keeps the same specs when a menu first reserves its
+   * larger capture viewport. ExpoView.measureAndLayout() can therefore hit
+   * Android's parent measurement/layout cache and never reach our child.
+   * Commit only an actual viewport boundary directly; resolution handoffs
+   * remain entirely inside Compose and never call this platform method.
+   */
+  private fun commitDrawingViewport(left: Int, top: Int, width: Int, height: Int) {
+    if (!isAttachedToWindow || !composeView.isAttachedToWindow) return
+    composeView.pivotX = 0f
+    composeView.pivotY = 0f
+    composeView.scaleX = 1f
+    composeView.scaleY = 1f
+    composeView.alpha = 1f
+    composeView.measure(MeasureSpec.makeMeasureSpec(width.coerceAtLeast(1), MeasureSpec.EXACTLY),
+      MeasureSpec.makeMeasureSpec(height.coerceAtLeast(1), MeasureSpec.EXACTLY))
+    composeView.layout(left, top, left + width.coerceAtLeast(1), top + height.coerceAtLeast(1))
   }
 
   internal fun menuRasterDiagnostics(): Map<String, Any> = mapOf(
@@ -338,10 +365,15 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     "materialRasterMaxHeight" to menuRasterMaxHeight,
     "materialRasterLogicalSizeChanges" to menuRasterSizeChanges,
     "materialRasterMaxViewportPixels" to menuRasterMaxViewportPixels,
-    "materialRasterViewportWidth" to menuRaster.width,
-    "materialRasterViewportHeight" to menuRaster.height,
+    "materialRasterEpochMaxViewportPixels" to menuRasterMaxViewportPixels,
+    "materialRasterViewportWidth" to menuRasterActualWidth,
+    "materialRasterViewportHeight" to menuRasterActualHeight,
+    "materialRasterPhysicalViewportWidth" to composeView.measuredWidth,
+    "materialRasterPhysicalViewportHeight" to composeView.measuredHeight,
+    "materialRasterRequestedScale" to menuRasterScale,
+    "materialRasterCommittedScale" to menuRasterCommittedScale,
     "materialRasterNativeAlpha" to alpha,
-    "materialRasterGroupAlpha" to composeView.alpha
+    "materialRasterGroupAlpha" to menuGroupOpacity
   )
 
   internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float,
@@ -351,11 +383,13 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       screenRight - sampleLocation[0], screenBottom - sampleLocation[1])
     val rasterChanged = menuRaster.setAnimating(animated)
     if (rasterChanged) menuRasterScale = menuRaster.scale
-    // Alpha on the physical RN host would create another full-size HWUI
-    // layer before downsampling. Composite the same group exactly once in
-    // this fixed raster viewport, then upscale that completed material.
+    // Both native hosts stay opaque/full-size. The one Compose cohort owns
+    // alpha on its bounded raster child, alongside that child's inverse scale.
     alpha = 1f
-    composeView.alpha = opacity.coerceIn(0f, 1f)
+    composeView.alpha = 1f
+    val nextOpacity = opacity.coerceIn(0f, 1f)
+    val opacityChanged = menuGroupOpacity != nextOpacity
+    menuGroupOpacity = nextOpacity
     // Motion publishes physical pixels. The default engine's x/y radii are
     // equal; preserve its current radius rather than using the resting 28dp.
     // Use a new immutable CornerBasedShape so both the cached clipping outline
@@ -367,13 +401,12 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       menuCornerRadiusPx = radius
       menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)
     }
-    if (!geometryChanged && !radiusChanged && !rasterChanged) return
+    if (!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged) return
     // Measurement owns only this Compose drawing child, as with the native dock.
     if (menuMaterial.sizeChanged || rasterChanged) menuMaterialVersion++
     if (menuMaterial.placementChanged || rasterChanged) menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
-    if (rasterChanged && isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
     // The measurement snapshot observer requests the one required remeasure.
     // An extra requestLayout here would enqueue a second Android layout per tick.
     composeView.invalidate()
@@ -385,6 +418,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     menuMaterialCapacity = IntSize.Zero
     menuRaster.clear()
     menuRasterScale = 1f
+    menuGroupOpacity = 1f
+    menuRasterCompositionAttached = false
     composeView.alpha = 1f
     composeView.scaleX = 1f
     composeView.scaleY = 1f
@@ -394,7 +429,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     menuPlacementVersion++
     geometryVersion++
     Snapshot.sendApplyNotifications()
-    if (isAttachedToWindow && composeView.isAttachedToWindow) measureAndLayout()
+    commitDrawingViewport(0, 0, width, height)
     snapshot?.onMaterialChanged()
   }
 
@@ -527,11 +562,16 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindowOrReleasedFromPool)
     setContent {
       val physicalDensity = LocalDensity.current
-      // DP recipe values become raster pixels once. The native inverse scale
-      // below restores their physical optical units. Subpixel edge coverage
-      // has the expected temporary raster quantization; resting pixels use 1x.
-      val density = Density(physicalDensity.density * menuRasterScale, physicalDensity.fontScale)
-      CompositionLocalProvider(LocalDensity provides density) { GlassMaterial() }
+      val epoch = remember(menuRasterScale) { MenuMaterialRasterEpoch(menuRasterScale) }
+      if (menuMaterialCapacity != IntSize.Zero) {
+        // Density, child dimensions, source conversion and inverse transform
+        // belong to this one composition. Native view properties never switch
+        // to a requested density while an older display list is still drawing.
+        MenuRasterLayout(epoch) {
+          val density = Density(physicalDensity.density * epoch.scale, physicalDensity.fontScale)
+          CompositionLocalProvider(LocalDensity provides density) { GlassMaterial(epoch) }
+        }
+      } else GlassMaterial(epoch)
     }
   }
 
@@ -648,10 +688,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     }
     if (menuMaterial.active) {
       setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec))
-      composeView.measure(MeasureSpec.makeMeasureSpec(menuRaster.width, MeasureSpec.EXACTLY),
-        MeasureSpec.makeMeasureSpec(menuRaster.height, MeasureSpec.EXACTLY))
-      if (menuRasterScale < 1f) menuRasterMaxViewportPixels = maxOf(menuRasterMaxViewportPixels,
-        composeView.measuredWidth.toLong() * composeView.measuredHeight)
+      composeView.measure(MeasureSpec.makeMeasureSpec(menuMaterial.captureWidth, MeasureSpec.EXACTLY),
+        MeasureSpec.makeMeasureSpec(menuMaterial.captureHeight, MeasureSpec.EXACTLY))
       return
     }
     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
@@ -662,10 +700,11 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     if (menuMaterial.active) {
       composeView.pivotX = 0f
       composeView.pivotY = 0f
-      composeView.scaleX = menuRaster.inverseScale
-      composeView.scaleY = menuRaster.inverseScale
+      composeView.scaleX = 1f
+      composeView.scaleY = 1f
+      composeView.alpha = 1f
       composeView.layout(menuMaterial.captureLeft, menuMaterial.captureTop,
-        menuMaterial.captureLeft + menuRaster.width, menuMaterial.captureTop + menuRaster.height)
+        menuMaterial.captureRight, menuMaterial.captureBottom)
       return
     }
     super.onLayout(changed, left, top, right, bottom)
@@ -676,6 +715,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   override open fun dispatchTouchEvent(event: MotionEvent): Boolean = false
 
   override fun dispatchDraw(canvas: Canvas) {
+    // The first menu frame may precede its first Compose placement. Keep the
+    // nonglass source visible rather than replaying the old ordinary surface.
+    if (menuMaterial.active && !menuRasterCompositionAttached) return
     // Also prevents nested capture if a wrapper was flattened by React Native.
     if (WindowBackdrops.isCapturing && suppressDuringBackdropCapture) {
       needsDisplayListRestore = true
@@ -735,7 +777,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   }
 
   @Composable
-  private fun GlassMaterial() {
+  private fun GlassMaterial(epoch: MenuMaterialRasterEpoch) {
     val cornerRadius = radius
     val topLeft = radiusTopLeft ?: cornerRadius
     val topRight = radiusTopRight ?: cornerRadius
@@ -791,7 +833,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           val canvas = composeCanvas.nativeCanvas
           val checkpoint = canvas.save()
           try {
-            canvas.scale(menuRasterScale, menuRasterScale)
+            canvas.scale(epoch.scale, epoch.scale)
             drawCapturedBackdrop(canvas, captured,
               sampleLocation[0] + opticalMaterialOffsetX, sampleLocation[1] + opticalMaterialOffsetY)
           } finally { canvas.restoreToCount(checkpoint) }
@@ -802,7 +844,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           val canvas = composeCanvas.nativeCanvas
           val checkpoint = canvas.save()
           try {
-            canvas.scale(menuRasterScale, menuRasterScale)
+            canvas.scale(epoch.scale, epoch.scale)
             drawRecordedBackdrop(canvas, recorded,
               sampleLocation[0] + opticalMaterialOffsetX, sampleLocation[1] + opticalMaterialOffsetY)
           } finally { canvas.restoreToCount(checkpoint) }
@@ -819,8 +861,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       }
     } else null
     if (RenderInteractiveControl(backdrop)) return
-    DockMaterialCapacity { expandedCapacity ->
-    DockMaterialLayout {
+    DockMaterialCapacity(epoch) { expandedCapacity ->
+    DockMaterialLayout(epoch) {
       if (isProgressiveBlur) {
         // The producer's edge region is fully blurred; only this final alpha
         // fades it over the live page. There is no copied sharp page overlay.
@@ -925,7 +967,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
                 }
                 if (!uniformButtonOptics) {
                   val rasterBlur = glassBlur.dp.toPx()
-                  blur(if (menuMaterial.active) menuRaster.blurRadius(rasterBlur / menuRasterScale) else rasterBlur)
+                  blur(if (menuMaterial.active) epoch.blurRadius(rasterBlur / epoch.scale) else rasterBlur)
                   val boundedLens = amPlusMaterial || mediaBottomPopup
                   val edge = if (boundedLens && glassRefraction > 0f && glassRefractionHeight > 0f)
                     AmPlusDockGeometry.edgeLens(size.height, size.width, 24f.dp.toPx()) else 0f
@@ -1008,10 +1050,35 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
 
   /** Fixed outer constraints supply capacity; the child still measures its live outline. */
   @Composable
-  private fun DockMaterialCapacity(content: @Composable (IntSize) -> Unit) {
+  private fun MenuRasterLayout(epoch: MenuMaterialRasterEpoch, content: @Composable () -> Unit) {
+    Layout(content = content, modifier = Modifier.fillMaxSize()) { measurables, constraints ->
+      val physicalWidth = constraints.maxWidth
+      val physicalHeight = constraints.maxHeight
+      val child = measurables.single().measure(Constraints.fixed(
+        epoch.pixels(physicalWidth), epoch.pixels(physicalHeight)))
+      layout(physicalWidth, physicalHeight) {
+        child.placeWithLayer(0, 0) {
+          transformOrigin = TransformOrigin(0f, 0f)
+          scaleX = epoch.inverseScale
+          scaleY = epoch.inverseScale
+          alpha = menuGroupOpacity
+        }
+        menuRasterCommittedScale = epoch.scale
+        menuRasterActualWidth = child.width
+        menuRasterActualHeight = child.height
+        if (epoch.scale < 1f) menuRasterMaxViewportPixels = maxOf(menuRasterMaxViewportPixels,
+          child.width.toLong() * child.height)
+        menuRasterCompositionAttached = true
+      }
+    }
+  }
+
+  /** Fixed outer constraints supply capacity; the child still measures its live outline. */
+  @Composable
+  private fun DockMaterialCapacity(epoch: MenuMaterialRasterEpoch, content: @Composable (IntSize) -> Unit) {
     val menuCapacity = menuMaterialCapacity
     if (menuCapacity != IntSize.Zero) {
-      content(IntSize(menuRaster.pixels(menuCapacity.width), menuRaster.pixels(menuCapacity.height)))
+      content(IntSize(epoch.pixels(menuCapacity.width), epoch.pixels(menuCapacity.height)))
       return
     }
     if (materialPreset != "amPlus" || dockCompactWidth <= 0f || progressiveBlur) {
@@ -1035,7 +1102,7 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   protected open fun RenderInteractiveControl(backdrop: Backdrop): Boolean = false
 
   @Composable
-  private fun DockMaterialLayout(content: @Composable () -> Unit) {
+  private fun DockMaterialLayout(epoch: MenuMaterialRasterEpoch, content: @Composable () -> Unit) {
     // Only this one Compose drawing child is measured during a morph. The RN
     // host and its labels, buttons and accessibility bounds keep fixed layout.
     // Read progress in measurement, never the root composition/drawing setup.
@@ -1046,9 +1113,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       if (menuMaterial.active) {
         materialWidth = menuMaterial.width
         materialHeight = menuMaterial.height
-        val rasterWidth = menuRaster.pixels(materialWidth)
-        val rasterHeight = menuRaster.pixels(materialHeight)
-        if (menuRasterScale < 1f) {
+        val rasterWidth = epoch.pixels(materialWidth)
+        val rasterHeight = epoch.pixels(materialHeight)
+        if (epoch.scale < 1f) {
           menuRasterMaxMaterialPixels = maxOf(menuRasterMaxMaterialPixels, rasterWidth.toLong() * rasterHeight)
           menuRasterMaxWidth = maxOf(menuRasterMaxWidth, rasterWidth)
           menuRasterMaxHeight = maxOf(menuRasterMaxHeight, rasterHeight)
@@ -1063,8 +1130,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
           @Suppress("UNUSED_VARIABLE") val placementVersion = menuPlacementVersion
           materialOffsetX = menuMaterial.placementX
           materialOffsetY = menuMaterial.placementY
-          val rasterX = materialOffsetX * menuRasterScale
-          val rasterY = materialOffsetY * menuRasterScale
+          val rasterX = materialOffsetX * epoch.scale
+          val rasterY = materialOffsetY * epoch.scale
           val x = rasterX.roundToInt()
           val y = rasterY.roundToInt()
           // Keep the subpixel raster remainder. Rounding placement then

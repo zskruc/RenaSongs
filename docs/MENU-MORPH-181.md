@@ -159,4 +159,28 @@ until its native close acknowledgement. Changing that safely requires a
 separate input/session handoff review; the current candidate does not silently
 enable cross-window touch-through or shorten the original spring.
 
+### 187: commit material resolution changes atomically
+
+The 186 physical recording exposed an integration regression missed by the
+static coordinate checks: native inverse scaling, Compose density/layout and
+the source recording could update in different frames. The album-menu incident
+also demonstrated persistent displacement when unchanged Yoga specifications
+allowed Android to skip the native child layout. The old inverse scale could
+remain while Compose had already returned to full-resolution drawing.
+
+Native ComposeView bounds now remain in physical coordinates with identity
+scale and opacity. A captured immutable epoch owns the inner raster constraints,
+density, capacity, blur, source conversion and inverse composition scale.
+Source placement uses committed physical offsets. A still-displayed old epoch
+retains all of its transforms until the next complete composition is applied;
+there is no screenshot freeze or new capture pipeline. Initial/changed native
+viewports are established directly rather than relying on an identical parent
+measure/layout pass to run again.
+
+Additional temporal tests delay composition, skip native layouts, reverse
+requests and reuse scale values. Negative controls reproduce the old mixed
+scale and the incident's approximately (465,965) glass position. Source wiring
+checks complement the mathematical cases; they do not replace physical visual
+confirmation. The 186 frame-time recording is not evidence of 187 performance.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。
