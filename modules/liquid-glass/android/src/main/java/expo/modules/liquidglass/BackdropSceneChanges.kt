@@ -95,12 +95,23 @@ internal class BackdropSceneChanges(
     if (view is LiquidGlassView || (!includeGlassContent && WindowBackdrops.isGlassContainer(view, root))) return 0L
     var signature = properties(view)
     if (view.visibility != View.VISIBLE || view.alpha <= 0f) return signature
-    if (view is ViewGroup && view.childCount > 0) {
-      signature = mix(signature, view.childCount)
+    var physicalChildren = 0
+    if (view is ViewGroup) {
+      // ReactModalHostView forwards these getters to a separate Dialog root.
+      // Metadata must follow the same physical parents as Activity drawing,
+      // never those virtual children (including their animated scrim).
       for (index in 0 until view.childCount) {
-        signature = signature * 31L + visit(view.getChildAt(index), root)
+        if (view.getChildAt(index)?.parent === view) physicalChildren++
       }
-    } else if (view.isDirty) {
+      if (physicalChildren > 0) {
+        signature = mix(signature, physicalChildren)
+        for (index in 0 until view.childCount) {
+          val child = view.getChildAt(index) ?: continue
+          if (child.parent === view) signature = signature * 31L + visit(child, root)
+        }
+      }
+    }
+    if (physicalChildren == 0 && view.isDirty) {
       // Image/text/Canvas leaf invalidations still refresh an animated scene.
       // Skip parent dirty flags propagated from omitted foreground material.
       dirtyLeaf = true
