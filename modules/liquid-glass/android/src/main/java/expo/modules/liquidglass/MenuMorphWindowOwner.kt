@@ -34,7 +34,8 @@ internal class MenuMorphWindowOwner(host: MenuMorphView) : View(host.context) {
   }
 
   fun attach(window: View, screenEnvelope: RectF): Boolean {
-    if (window !is ViewGroup || !window.isAttachedToWindow || !window.isHardwareAccelerated) return false
+    if (window !is ViewGroup || !window.isAttachedToWindow || !window.isHardwareAccelerated ||
+      window.width <= 0 || window.height <= 0 || screenEnvelope.isEmpty) return false
     if (root.get() !== window) {
       detach()
       try { window.overlay.add(this) } catch (_: RuntimeException) {
