@@ -1,6 +1,7 @@
 package expo.modules.liquidglass.menumotion
 
 import expo.modules.liquidglass.MenuMaterialRaster
+import expo.modules.liquidglass.MenuMaterialRasterEpoch
 import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -96,6 +97,99 @@ fun main() {
   }
   verify(negativeRoundingDetected, "Oracle failed to detect missing subpixel placement compensation")
   verify(negativeFitDetected, "Oracle failed to detect fitting ceil-rounded raster dimensions")
+
+  // 197's full-resolution branch is an explicitly enabled experiment. It may
+  // exceed the ordinary pixel budget, but must not add a resize/scale epoch on
+  // open, reverse, close, retarget, clear or reuse. This is not a performance
+  // assertion: real GPU cost and appearance still require the device A/B run.
+  for (budget in listOf(1, 10_000, 720_000)) {
+    val full = MenuMaterialRaster(budget, forceFullResolution = true)
+    verify(full.forceFullResolution, "The explicit full-resolution flag was lost")
+    val fullSizes = listOf(0 to -1, 1 to 1, 8 to 3120, 512 to 512, 1170 to 2400,
+      1440 to 3120, 2048 to 4096, 8192 to 8192, Int.MAX_VALUE to 1,
+      1 to Int.MAX_VALUE, Int.MAX_VALUE to Int.MAX_VALUE, 320 to 640)
+    val retainedEpochs = ArrayList<MenuMaterialRasterEpoch>()
+    for ((requestedWidth, requestedHeight) in fullSizes) {
+      val width = requestedWidth.coerceAtLeast(1)
+      val height = requestedHeight.coerceAtLeast(1)
+      verify(!full.reserve(requestedWidth, requestedHeight), "A full-resolution reserve changed its animation scale")
+      verify(full.animationScale == 1f && full.scale == 1f && full.inverseScale == 1f,
+        "Full-resolution retarget introduced a lower-resolution epoch")
+      verify(full.width == width && full.height == height,
+        "Full-resolution reservation fitted, cropped or overflowed physical dimensions")
+      if (width.toLong() * height > budget)
+        verify(full.width.toLong() * full.height > budget, "The opt-in experiment silently applied the ordinary bounded budget")
+      for (animating in listOf(true, true, false, true, false, false, true)) {
+        verify(!full.setAnimating(animating), "Full-resolution enter/rest/close created an unnecessary scale handoff")
+        verify(full.animationScale == 1f && full.scale == 1f && full.inverseScale == 1f,
+          "Full-resolution motion did not remain in one physical-pixel epoch")
+        verify(full.width == width && full.height == height, "Opening or closing changed full-resolution capacity")
+        val epoch = MenuMaterialRasterEpoch(full.scale).also { retainedEpochs.add(it) }
+        verify(epoch.pixels(width) == width && epoch.pixels(height) == height && epoch.inverseScale == 1f,
+          "The material's committed cohort disagreed with its physical resolution")
+        for (physical in listOf(-3, 0, 1, 47, 173, 1170, Int.MAX_VALUE))
+          verify(full.pixels(physical) == physical.coerceAtLeast(1), "Full-resolution capacity conversion introduced ceil fitting")
+        for (radius in listOf(0f, .02f, 1f, 6f, 22.5f, 45f, 120f))
+          verify(full.blurRadius(radius) == radius && epoch.blurRadius(radius) == radius,
+            "Full-resolution experiment changed the original physical blur recipe")
+      }
+      // Verify ordinary source coordinates, including a nonzero/negative
+      // capture origin, quarter-pixel local position and fractional source DPI.
+      for (origin in listOf(-307f, 53f, 1849f)) for (placement in listOf(1, 173, 769)) {
+        for (local in listOf(.3125f, 17.3125f, 251.3125f)) {
+          val physical = origin + placement + local
+          val rasterPlacement = placement * full.scale
+          val integerPlacement = rasterPlacement.roundToInt()
+          val residual = rasterPlacement - integerPlacement
+          val restored = origin + (integerPlacement + residual + local * full.scale) * full.inverseScale
+          verify(abs(restored - physical) < .0001f, "Full-resolution geometry moved the existing physical menu")
+          for (sourceScale in listOf(1f, .5f, 1f / 3f)) {
+            val expected = (physical + 83f) * sourceScale
+            val sampled = (local * full.scale / full.scale + origin + placement + 83f) * sourceScale
+            verify(abs(sampled - expected) < .002f && checker(sampled, sampled + 1.3125f) == checker(expected, expected + 1.3125f),
+              "Full-resolution source mapping changed physical backdrop/color samples")
+            checkerSamples++
+          }
+        }
+      }
+      for (density in listOf(1f, 2f, 3.75f)) for (dp in listOf(.6f, 12f, 28f, 80f))
+        verify(density * full.scale * dp * full.inverseScale == density * dp,
+          "Full-resolution experiment changed physical lens/radius/highlight density")
+      retainedEpochs.forEach { epoch ->
+        verify(epoch.scale == 1f && epoch.inverseScale == 1f, "A later retarget mutated an already recorded full-resolution cohort")
+      }
+    }
+    full.clear()
+    verify(full.forceFullResolution && full.animationScale == 1f && full.scale == 1f && full.width == 1 && full.height == 1,
+      "Clear changed the experimental policy or retained old physical dimensions")
+    verify(!full.setAnimating(true), "A cleared full-resolution instance introduced a motion epoch")
+    full.reserve(1440, 3120)
+    verify(!full.setAnimating(true) && full.width == 1440 && full.height == 3120 && full.scale == 1f,
+      "Reusing a full-resolution instance silently returned to bounded mode")
+  }
+
+  // Omitting the flag and explicitly disabling it must remain identical. The
+  // existing 196 budget/origin/ceil/alpha tests above remain unmodified.
+  for (budget in listOf(1, 10_000, 720_000)) {
+    val implicit = MenuMaterialRaster(budget)
+    val explicit = MenuMaterialRaster(budget, forceFullResolution = false)
+    verify(!implicit.forceFullResolution && !explicit.forceFullResolution, "Default raster mode is no longer bounded")
+    for ((width, height) in sizes + listOf(320 to 640)) {
+      verify(implicit.reserve(width, height) == explicit.reserve(width, height), "Explicit false changed the default reserve transaction")
+      for (animating in listOf(true, false, true, true, false)) {
+        verify(implicit.setAnimating(animating) == explicit.setAnimating(animating), "Explicit false changed the default epoch transition")
+        verify(implicit.animationScale == explicit.animationScale && implicit.scale == explicit.scale &&
+          implicit.inverseScale == explicit.inverseScale && implicit.width == explicit.width && implicit.height == explicit.height,
+          "Default and explicitly bounded material state diverged")
+        if (animating) verify(implicit.width.toLong() * implicit.height <= budget,
+          "The experiment changed the ordinary bounded-mode budget")
+      }
+    }
+    implicit.clear(); explicit.clear()
+    verify(implicit.scale == explicit.scale && implicit.width == explicit.width && implicit.height == explicit.height,
+      "Explicit false changed default clear semantics")
+  }
+
   // Foreground portal only samples/linearly masks its input. Moving reveal
   // from a full-size native View to its compact rowsNode preserves RGBA.
   for (alpha in listOf(0f, .001f, .2f, .78f, 1f)) {

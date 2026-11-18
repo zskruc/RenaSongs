@@ -91,7 +91,11 @@ assert.doesNotMatch(update, /commitDrawingViewport\s*\(|measureAndLayout\s*\(/,
 assert.ok(clear.includes('commitDrawingViewport(0, 0, width, height)'),
   'Clearing a menu must restore the ordinary physical card viewport without depending on a parent relayout');
 const epochRendering = material.slice(material.indexOf('private fun GlassMaterial(epoch:'), material.lastIndexOf('\n}'));
-assert.doesNotMatch(epochRendering, /\bmenuRaster\.|\bmenuRasterScale\b/,
+const immutableExperimentFlagReads = epochRendering.match(/\bmenuRaster\.forceFullResolution\b/g) ?? [];
+assert.equal(immutableExperimentFlagReads.length, 2,
+  'The immutable experiment flag may only extend the two existing diagnostic pixel counters');
+const epochRenderingWithoutDiagnosticFlag = epochRendering.replace(/\bmenuRaster\.forceFullResolution\b/g, 'false');
+assert.doesNotMatch(epochRenderingWithoutDiagnosticFlag, /\bmenuRaster\.|\bmenuRasterScale\b/,
   'A retained draw/layout callback must never late-read the owner\'s requested scale');
 const rasterLayout = material.slice(material.indexOf('private fun MenuRasterLayout('), material.indexOf('private fun DockMaterialCapacity('));
 assert.ok(rasterLayout.includes('epoch.pixels(physicalWidth), epoch.pixels(physicalHeight)') &&
@@ -123,3 +127,19 @@ assert.match(host, /child\.alpha = if \(foregroundPortal != null && isHardwareAc
   'Only the hardware portal may take ownership of native foreground reveal');
 assert.ok(host.includes('!settled || !requestedOpen'),
   'A closed invisible menu must not allocate a hidden full-resolution material before teardown');
+
+const rasterPolicy = readFileSync(new URL('MenuMaterialRaster.kt', native), 'utf8');
+assert.ok(rasterPolicy.includes('val forceFullResolution: Boolean = false') &&
+  rasterPolicy.includes('if (forceFullResolution || w.toLong() * h <= budget) animationScale = 1f') &&
+  rasterPolicy.includes('val next = if (forceFullResolution || !animated) 1f else animationScale'),
+  'Full-resolution A/B must be an explicit default-off menu policy; the ordinary budgeted reservation and immutable epoch path remain available');
+assert.match(material, /private val menuRaster = MenuMaterialRaster\(forceFullResolution =\s*Log\.isLoggable\("ResonusGlassFullMaterial", Log\.DEBUG\)\)/,
+  'The menu-only full-resolution experiment must resolve its dedicated DEBUG gate once per native instance');
+assert.equal((material.match(/ResonusGlassFullMaterial/g) ?? []).length, 1,
+  'No per-frame log-property reads or second rendering branch may be introduced for this experiment');
+assert.equal((epochRendering.match(/if \(epoch\.scale < 1f \|\| menuRaster\.forceFullResolution\)/g) ?? []).length, 2,
+  'Both late immutable flag reads must only measure the existing raster diagnostic counters');
+assert.ok(material.includes('if (menuMaterialCapacity != IntSize.Zero) {') &&
+  material.includes('} else GlassMaterial(epoch)') &&
+  material.includes('"materialRasterForceFullResolution" to menuRaster.forceFullResolution'),
+  'The opt-in must stay isolated to the menu raster subtree and be observable; ordinary material composition must remain direct');
