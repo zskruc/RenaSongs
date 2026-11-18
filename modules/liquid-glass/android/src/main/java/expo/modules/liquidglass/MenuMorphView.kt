@@ -671,6 +671,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val completedSource = triggerSnapshot
     val wasGroupedSource = sourceHasGlass
     val hadGroupForeground = groupForeground != null
+    val foregroundDiagnostics = if (motionTrace) groupForeground?.diagnostics() else null
     val sourceFill = groupFillColor
     val completedWindow = windowDrawing
     // Log the actual return, not a promise to restore the source after logging.
@@ -682,6 +683,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       "menuJellyFrames=$jellyFrames menuPlateFrames=$plateFrames menuSelectionDispatches=${interaction.selectionDispatches} " +
       "menuGroupRequested=$groupRequested menuGroupEligible=$groupEligible menuGroupedSource=$wasGroupedSource " +
       "menuGroupForeground=$hadGroupForeground menuWindowOwner=${completedWindow?.diagnostics()} " +
+      "sourceForeground=$foregroundDiagnostics " +
       "menuSourceBounds=$source menuThroughBounds=$through menuSourceFillAlpha=${sourceFill?.ushr(24)} " +
       "sourceHandoffRegistered=$sourceHandoffRegistered sourceHandoffCommits=$sourceHandoffCommits " +
       "sourceHandoffFallbacks=$sourceHandoffFallbacks sourceHandoffReason=$sourceHandoffLastReason sourceHandoffMs=$sourceHandoffLastMs " +

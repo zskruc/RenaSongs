@@ -11,6 +11,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import expo.modules.liquidglass.menumotion.GlassMorphFrame
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 /** Independent immutable toolbar pixels, with the original trigger tracks. */
 @RequiresApi(Build.VERSION_CODES.S)
@@ -18,6 +19,10 @@ internal class MenuGroupForeground(private val bitmap: Bitmap, private val sourc
   private val sourceHeight: Float) {
   private val node = RenderNode("RenaMenu.toolbarForeground")
   private var lastBlur = Float.NaN
+  private val directPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+  private val directRect = RectF(-bitmap.width / 2f, -bitmap.height / 2f, bitmap.width / 2f, bitmap.height / 2f)
+  private var directDraws = 0L
+  private var nodeDraws = 0L
 
   init {
     node.setPosition(0, 0, bitmap.width, bitmap.height)
@@ -44,6 +49,29 @@ internal class MenuGroupForeground(private val bitmap: Bitmap, private val sourc
     }
   }
 
-  fun draw(canvas: Canvas) { if (node.alpha > .001f) canvas.drawRenderNode(node) }
+  fun draw(canvas: Canvas) {
+    if (node.alpha <= .001f) return
+    if (lastBlur <= .01f) {
+      // This phase already has no Gaussian effect in the original path. Replay
+      // actual immutable pixels into the current portal recording, rather than
+      // depending on a separately alpha/transform-staged custom RenderNode.
+      val save = canvas.save()
+      canvas.translate(node.translationX + bitmap.width / 2f, node.translationY + bitmap.height / 2f)
+      canvas.scale(node.scaleX, node.scaleY)
+      directPaint.alpha = (node.alpha * 255f).roundToInt().coerceIn(0, 255)
+      canvas.drawBitmap(bitmap, null, directRect, directPaint)
+      canvas.restoreToCount(save)
+      directDraws++
+    } else {
+      // Keep the original independent sourceBlur track while it is active.
+      canvas.drawRenderNode(node)
+      nodeDraws++
+    }
+  }
+  fun diagnostics(): Map<String, Any> = mapOf("sourceDirectBitmapDraws" to directDraws,
+    "sourceCustomNodeDraws" to nodeDraws, "sourceCustomNodeHasDisplayList" to node.hasDisplayList(),
+    "sourceForegroundAlpha" to node.alpha, "sourceForegroundBlur" to lastBlur,
+    "sourceForegroundTranslation" to listOf(node.translationX, node.translationY),
+    "sourceForegroundScale" to listOf(node.scaleX, node.scaleY))
   fun release() { node.discardDisplayList(); node.setRenderEffect(null) }
 }
