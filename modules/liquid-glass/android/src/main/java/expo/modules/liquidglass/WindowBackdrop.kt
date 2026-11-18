@@ -227,7 +227,7 @@ internal class WindowBackdrop(
   private val backgroundChanges = BackdropSceneChanges()
   // A cached texture must observe real dock labels/artwork/status too. Omit
   // only the native material, never the entire surrounding control wrapper.
-  private val menuBackgroundChanges = BackdropSceneChanges(includeGlassContent = true)
+  private val menuBackgroundChanges = BackdropSceneChanges(includeGlassContent = true, observeLeafDirty = false)
   private val menuUnderlayPolicy = MenuUnderlayCachePolicy()
   private data class MenuProgram(val key: MenuUnderlayKey, val node: RenderNode,
     val source: WeakReference<View>, val owner: WeakReference<View>, val scrim: WeakReference<View>)
@@ -1775,6 +1775,8 @@ internal class WindowBackdrop(
       "menuRasterStale" to menuRasterStale,
       "menuRasterFailed" to menuRasterFailed,
       "menuUnderlayDraws" to menuUnderlayDraws,
+      "menuMetadataChanges" to menuBackgroundChanges.signatureChangeCount,
+      "menuLeafOnlyObservations" to menuBackgroundChanges.leafOnlyObservationCount,
       "menuRasterPending" to menuUnderlayPolicy.hasPending,
       "menuRasterCached" to menuUnderlayPolicy.hasCached,
       "menuRasterImageActive" to (frame?.menuUnderlay != null),
@@ -1876,6 +1878,8 @@ internal class WindowBackdrop(
       "menuRasterPending=${menuUnderlayPolicy.hasPending} menuRasterCached=${menuUnderlayPolicy.hasCached} " +
       "menuRasterImageActive=${frame?.menuUnderlay != null} " +
       "menuRasterFailureLatched=${menuUnderlayPolicy.hasFailed} menuUnderlayDraws=$menuUnderlayDraws " +
+      "menuMetadataChanges=${menuBackgroundChanges.signatureChangeCount} " +
+      "menuLeafOnlyObservations=${menuBackgroundChanges.leafOnlyObservationCount} " +
       "direct=$directCaptureCount dropped=$droppedFrameCount busy=$inFlightSkipCount " +
       "inFlightPeak=$inFlightPeak recreate=$captureRecreateCount shrink=$captureShrinkCount discarded=$discardedGenerationCount " +
       "retiredImages=${retiredImages.size} retiredPeak=$retirementPeak retirementBusy=$retirementBackpressureCount " +

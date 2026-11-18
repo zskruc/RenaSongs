@@ -15,16 +15,30 @@ import com.facebook.react.uimanager.BackgroundStyleApplicator
  * Dirty ancestors alone are insufficient: restoring an excluded glass card
  * invalidates its ancestors even though the captured scene has not changed.
  */
-internal class BackdropSceneChanges(private val includeGlassContent: Boolean = false) {
+internal class BackdropSceneChanges(
+  private val includeGlassContent: Boolean = false,
+  private val observeLeafDirty: Boolean = true
+) {
   private val matrixValues = FloatArray(9)
   private var initialized = false
   private var lastSignature = 0L
   private var dirtyLeaf = false
+  var signatureChangeCount = 0L
+    private set
+  var leafOnlyObservationCount = 0L
+    private set
 
   fun hasChanged(root: View): Boolean {
     dirtyLeaf = false
     val signature = visit(root, root)
-    val changed = !initialized || signature != lastSignature || dirtyLeaf
+    val signatureChanged = !initialized || signature != lastSignature
+    if (signatureChanged) signatureChangeCount++
+    else if (dirtyLeaf) leafOnlyObservationCount++
+    // isDirty is level-triggered and a manual GPU-source traversal or async
+    // completion may observe the same leaf repeatedly without a ViewRoot draw.
+    // Trusted menu snapshots use metadata plus the actual Activity OnDraw
+    // observer; ordinary live capture retains its original dirty-leaf rule.
+    val changed = signatureChanged || (observeLeafDirty && dirtyLeaf)
     initialized = true
     lastSignature = signature
     return changed
