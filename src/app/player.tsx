@@ -55,6 +55,7 @@ import { useForegroundEffect } from '@/hooks/useForegroundEffect';
 import { useImageAnimation } from '@/hooks/useImageAnimation';
 import { useLocalProfile } from '@/hooks/useLocalProfile';
 import { useLyrics } from '@/hooks/useLyrics';
+import { useMenuPresentationActive } from '@/hooks/useMenuPresentationActive';
 import { useDisplaySong } from '@/hooks/useLocalMetadata';
 import { useScreenSize } from '@/hooks/useScreenSize';
 import { useT } from '@/i18n';
@@ -271,6 +272,8 @@ function ResonusPlayerScreen() {
   useSettings((s) => s.appFont); // re-render when font changes
   const router = useRouter();
   const isFocused = useIsFocused();
+  const menuActive = useMenuPresentationActive();
+  const decorativeActive = isFocused && !menuActive;
   const song = usePlayerStore(currentSong);
   const displayed = useDisplaySong(song);
   const live = useLiveInfo(song);
@@ -425,7 +428,7 @@ function ResonusPlayerScreen() {
   const animatedBg = useRedrawOnReturn(animatedBgRef, isAnimatedCover ? cover : undefined);
   const animatedBgAnimation = useImageAnimation(
     animatedBgRef,
-    isFocused && isAnimatedCover,
+    decorativeActive && isAnimatedCover,
     isAnimatedCover ? cover : undefined,
     animatedBg.nonce,
     BACKDROP_FADE,
@@ -1247,7 +1250,7 @@ function ResonusPlayerScreen() {
                           size={coverSize}
                           contentFit={fitCoverArt ? 'contain' : 'cover'}
                           transition={0}
-                          autoplay={rel === 0 && isFocused}
+                          autoplay={rel === 0 && decorativeActive}
                           onAnimatedDetected={rel === 0 ? onCoverLoad : undefined}
                           placeholderIcon={paneSong.url ? 'radio' : 'musical-notes'}
                         />
@@ -1322,10 +1325,10 @@ function ResonusPlayerScreen() {
                   hitSlop={6}
                   onPress={() => router.push(`/album/${song.albumId}` as never)}
                 >
-                  <MarqueeText text={title} style={[styles.title, paletteTextStyle]} enabled={marqueeTitles} />
+                  <MarqueeText text={title} active={decorativeActive} style={[styles.title, paletteTextStyle]} enabled={marqueeTitles} />
                 </GlassPressable>
               ) : (
-                <MarqueeText text={title} style={[styles.title, paletteTextStyle]} enabled={marqueeTitles} />
+                <MarqueeText text={title} active={decorativeActive} style={[styles.title, paletteTextStyle]} enabled={marqueeTitles} />
               )}
               {(() => {
                 const targets = artistTargets(song);
@@ -1367,6 +1370,7 @@ function ResonusPlayerScreen() {
                         <GlassPressable enabled={false} style={styles.albumLine} hitSlop={6} onPress={goAlbum}>
                           <MarqueeText
                             text={albumInfo}
+                            active={decorativeActive}
                             style={[styles.album, paletteSecondaryStyle]}
                             enabled={marqueeTitles}
                           />
@@ -1375,6 +1379,7 @@ function ResonusPlayerScreen() {
                         <View style={styles.albumLine}>
                           <MarqueeText
                             text={albumInfo}
+                            active={decorativeActive}
                             style={[styles.album, paletteSecondaryStyle]}
                             enabled={marqueeTitles}
                           />

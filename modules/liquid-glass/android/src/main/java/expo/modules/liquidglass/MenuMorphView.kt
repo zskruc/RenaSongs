@@ -101,6 +101,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private var sourceHandoffFallbacks = 0
   private var sourceHandoffLastReason = "none"
   private var sourceHandoffLastMs = 0L
+  private var preparedHandoffPatch: MenuHandoffPatch? = null
+  private var prepareHandoffPatchCallback: Runnable? = null
+  private var handoffPatchState = "not-prepared"
+  private var handoffPatchDrawDeclines = 0
   internal val menuTargetLeft get() = target.left
   internal val menuTargetTop get() = target.top
   // Only the explicitly registered whole toolbar has a glass source. Generic
@@ -181,6 +185,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       jellyFrames = 0L; plateFrames = 0L
       sourceHandoffRegistered = 0; sourceHandoffCommits = 0; sourceHandoffFallbacks = 0
       sourceHandoffLastReason = "none"; sourceHandoffLastMs = 0L
+      handoffPatchState = "not-prepared"; handoffPatchDrawDeclines = 0
       setInteractive(false)
       (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
       releaseTrigger()
@@ -201,6 +206,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     }
     if (initialized && motion.expanded != requestedOpen) {
       if (!requestedOpen) {
+        cancelHandoffPatchPreparation()
         interaction.close()
         triggerSnapshot?.beginClosing()
         val refreshed = RectF()
@@ -604,6 +610,18 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     liveFrame.copyFrom(motion.frame)
     updateSourcePose(liveFrame)
     groupForeground?.update(liveFrame, target.left, target.top)
+    sourceFillBounds.set(liveFrame.sourceLobe)
+    sourceFillBounds.offset(-target.left, -target.top)
+    preparedHandoffPatch?.let { patch ->
+      if ((getChildAt(0) as? LiquidGlassView)?.isMenuHandoffPatchCurrent(patch, this) == true &&
+        patch.draw(canvas, target.left, target.top, sourceFillBounds)) {
+        handoffPatchState = "opaque-terminal"
+      } else {
+        handoffPatchState = "terminal-key-invalidated"
+        handoffPatchDrawDeclines++
+        preparedHandoffPatch = null
+      }
+    }
     drawSourceFill(canvas, 0f, false)
     val jelly = sourceJelly
     if (jelly != null && jelly.glowValue > .001f && canvas.isHardwareAccelerated) {
@@ -674,6 +692,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val foregroundDiagnostics = if (motionTrace) groupForeground?.diagnostics() else null
     val sourceFill = groupFillColor
     val completedWindow = windowDrawing
+    val patchDiagnostics = if (motionTrace) preparedHandoffPatch?.diagnostics() else null
     // Log the actual return, not a promise to restore the source after logging.
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     if (motionTrace) Log.d("ResonusGlass", "menuMotion session=$activeSession open=$open " +
@@ -687,9 +706,34 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       "menuSourceBounds=$source menuThroughBounds=$through menuSourceFillAlpha=${sourceFill?.ushr(24)} " +
       "sourceHandoffRegistered=$sourceHandoffRegistered sourceHandoffCommits=$sourceHandoffCommits " +
       "sourceHandoffFallbacks=$sourceHandoffFallbacks sourceHandoffReason=$sourceHandoffLastReason sourceHandoffMs=$sourceHandoffLastMs " +
+      "sourceHandoffPatchState=$handoffPatchState sourceHandoffPatchDeclines=$handoffPatchDrawDeclines sourceHandoffPatch=$patchDiagnostics " +
       "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${completedSource != null} " +
       "sourceClone=${completedSource?.diagnostics()} sourceCapture=${MenuTriggerSnapshots.captureDiagnostics()}")
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
+    if (open) queueHandoffPatchPreparation()
+  }
+
+  private fun queueHandoffPatchPreparation() {
+    cancelHandoffPatchPreparation()
+    if (!sourceHasGlass) return
+    val session = activeSession
+    val preparation = Runnable {
+      prepareHandoffPatchCallback = null
+      if (activeSession != session || !requestedOpen || !settled || !sourceHasGlass || !isAttachedToWindow) return@Runnable
+      val snapshot = triggerSnapshot ?: return@Runnable
+      val sourceView = snapshot.sourceForHandoff() ?: run { handoffPatchState = "source-unavailable"; return@Runnable }
+      preparedHandoffPatch = (getChildAt(0) as? LiquidGlassView)?.prepareMenuHandoffPatch(
+        this, sourceView, RectF(source), snapshot.sourceHiddenAtUptime)
+      handoffPatchState = if (preparedHandoffPatch != null) "prepared" else "qualification-or-copy-rejected"
+    }
+    prepareHandoffPatchCallback = preparation
+    // Only once after open/rest, away from both animation and close frames.
+    mainHandler.postDelayed(preparation, 48L)
+  }
+
+  private fun cancelHandoffPatchPreparation() {
+    prepareHandoffPatchCallback?.let { mainHandler.removeCallbacks(it) }
+    prepareHandoffPatchCallback = null
   }
 
   private fun beginSourceHandoff(): Boolean {
@@ -698,6 +742,15 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     val ticket = sourceHandoff.begin(activeSession) ?: return false
     handoffTicket = ticket
     handoffStartedAt = SystemClock.uptimeMillis()
+    preparedHandoffPatch?.let { patch ->
+      if ((getChildAt(0) as? LiquidGlassView)?.isMenuHandoffPatchCurrent(patch, this) == true) {
+        patch.beginHandoff()
+      } else {
+        preparedHandoffPatch = null
+        handoffPatchState = "changed-before-handoff"
+      }
+    }
+    if (preparedHandoffPatch == null && handoffPatchState == "not-prepared") handoffPatchState = "quick-close-no-patch"
     val registered = snapshot.restoreSourceForHandoff { sourceRoot ->
       val observer = sourceRoot.viewTreeObserver
       if (!observer.isAlive || !sourceRoot.isAttachedToWindow || !sourceRoot.isHardwareAccelerated) false
@@ -758,6 +811,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     getChildAt(0)?.alpha = 1f
   }
   private fun releaseTrigger() {
+    cancelHandoffPatchPreparation()
+    preparedHandoffPatch = null
     triggerSnapshot?.release(); triggerSnapshot = null
     windowDrawing?.detach(); windowDrawing = null
     groupForeground?.release(); groupForeground = null

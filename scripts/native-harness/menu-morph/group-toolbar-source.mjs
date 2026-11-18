@@ -8,6 +8,8 @@ const foreground = read('MenuGroupForeground.kt'), portal = read('menumotion/Gla
 const material = read('LiquidGlassView.kt'), optics = read('MenuMorphFieldOptics.kt');
 const shaders = read('MenuMorphFieldShaders.kt'), backdrop = read('WindowBackdrop.kt');
 const sourceOwnership = read('menumotion/MenuSourceOwnership.kt');
+const handoffPatch = read('MenuHandoffPatch.kt');
+const handoffGeometry = read('MenuHandoffPatchGeometry.kt');
 const kyantShaders = readFileSync(new URL('../../../modules/liquid-glass/android/vendor/backdrop-1.0.0/src/main/java/com/kyant/backdrop/Shaders.kt', import.meta.url), 'utf8');
 const start = host.slice(host.indexOf('private fun requestStart('), host.indexOf('private fun updateTarget('));
 assert.ok(start.includes('menuSourceTag(rect?.getOrNull(6))') &&
@@ -183,4 +185,56 @@ const complete = host.slice(host.indexOf('private fun emitComplete('), host.inde
 assert.ok(complete.includes('if (!open && allowHandoff && sourceHasGlass && beginSourceHandoff()) return') &&
   complete.indexOf('releaseTrigger()') < complete.indexOf('onMotionComplete('),
   'Group close waits for source handoff before the JS completion; final source cleanup precedes modal lifetime completion');
-console.log('Whole-toolbar source contract passed (explicit group/through, window ownership, independent tracks, shared optics, press presets and bounded source-buffer handoff; complete device phases still required).');
+const patchPrepare = backdrop.slice(backdrop.indexOf('internal fun prepareMenuHandoffPatch('), backdrop.indexOf('internal fun isMenuHandoffPatchCurrent('));
+assert.ok(patchPrepare.includes('sourceView.transitionAlpha != 0f') &&
+  patchPrepare.includes('val key = captured.menuUnderlay ?: return null') &&
+  patchPrepare.includes('!menuUnderlayPolicy.hasCached || currentMenuKey() != key || program.key != key') &&
+  patchPrepare.includes('program.owner.get() !== owner || program.source.get() !== sourceRoot') &&
+  patchPrepare.includes('captured.sourceRecordedAtUptime <= hiddenAtUptime') &&
+  patchPrepare.includes('captured.submittedAtUptime <= hiddenAtUptime') &&
+  patchPrepare.includes('!nativePage.policy.accepts(key.pageEpoch)') &&
+  patchPrepare.includes('hasDynamicHandoffSource(sourceRoot)') &&
+  patchPrepare.includes('menuHandoffPatchRegion('),
+  'A handoff patch must come from the same accepted raw Activity image/owner/page recorded after the real source was hidden, with covered bounded ROI and dynamic-source rejection');
+assert.ok(backdrop.includes('val sourceRecordedAtUptime: Long = 0L') &&
+  backdrop.includes('val menuSourceRecordedAtUptime: Long = 0L') &&
+  backdrop.includes('program.recordedAtUptime)') && backdrop.includes('ticket.menuSourceRecordedAtUptime)') &&
+  snapshot.indexOf('view.transitionAlpha = 0f') < snapshot.indexOf('sourceHiddenAtUptime = SystemClock.uptimeMillis()'),
+  'The actual producer-record time must survive the immutable GPU ticket/frame; a late submission/publish timestamp cannot authorize a pre-hide source image');
+const activityRecord = backdrop.slice(backdrop.indexOf('private fun captureNativeMenu('), backdrop.indexOf('internal fun drawMenuScrim('));
+assert.ok(activityRecord.indexOf('underlay.draw(recording)') < activityRecord.indexOf('MenuProgram(key, node,') &&
+  activityRecord.includes('WeakReference(scrim),\n      SystemClock.uptimeMillis())'),
+  'Producer timestamp must be generated after the actual Activity drawing, not when an older node is rebound or its image submitted');
+assert.ok(handoffPatch.includes('picture.beginRecording(region.width, region.height)') &&
+  handoffPatch.includes('recording.drawBitmap(frame.bitmap,') &&
+  handoffPatch.includes('Bitmap.createBitmap(picture, region.width, region.height, Bitmap.Config.ARGB_8888)') &&
+  handoffPatch.includes('pixels === frame.bitmap || pixels.config != Bitmap.Config.ARGB_8888 || pixels.isMutable') &&
+  handoffPatch.includes('pixels.density = Bitmap.DENSITY_NONE') &&
+  handoffPatch.includes('pixels.getPixels(') && handoffPatch.includes('(it ushr 24) != 255'),
+  'Only an independent immutable software ARGB ROI with every pixel opaque may cover the original source; no full producer screenshot readback or assumed opacity');
+assert.doesNotMatch(handoffPatch, /(?:createBitmap\(frame\.bitmap|\.copy\(|retireImage\(|releaseCapture\(|syncAndDraw\(|acquireNextImage\(|\.recycle\()/,
+  'Patch preparation must not copy the full producer, hold/change Image retirement, enqueue another capture or recycle pixels still used by HWUI');
+assert.ok(patchPrepare.includes('catch (failure: RuntimeException)') && patchPrepare.includes('catch (_: OutOfMemoryError)') &&
+  patchPrepare.includes('return null'),
+  'Unavailable hardware-to-small-software copy must fall back without crashing or blocking source return');
+const patchCurrent = backdrop.slice(backdrop.indexOf('internal fun isMenuHandoffPatchCurrent('), backdrop.indexOf('internal fun menuHandoffPatchDiagnostics('));
+assert.ok(patchCurrent.includes('observeBackgroundScene(source)') && patchCurrent.includes('menuHandoffPatchKeyMatches(') &&
+  patchCurrent.includes('menuBackgroundChanges.signatureChangeCount') &&
+  handoffGeometry.includes('if (!handoff) return expected == current') &&
+  handoffGeometry.includes('elapsedHandoffMs in 0L..200L') &&
+  handoffGeometry.includes('current.copy(sceneVersion = expected.sceneVersion) == expected'),
+  'Open/rest reuse must match the exact source identity; only a locked <=200ms terminal transaction may freeze across its known restore draw while metadata and every other key remain strict');
+const queuePatch = host.slice(host.indexOf('private fun queueHandoffPatchPreparation('), host.indexOf('private fun beginSourceHandoff('));
+assert.ok(complete.includes('if (open) queueHandoffPatchPreparation()') &&
+  queuePatch.includes('activeSession != session || !requestedOpen || !settled || !sourceHasGlass || !isAttachedToWindow') &&
+  queuePatch.includes('snapshot.sourceForHandoff()') && queuePatch.includes('snapshot.sourceHiddenAtUptime') &&
+  queuePatch.includes('mainHandler.postDelayed(preparation, 48L)') &&
+  queuePatch.includes('mainHandler.removeCallbacks(it)') &&
+  host.includes('cancelHandoffPatchPreparation()\n    preparedHandoffPatch = null'),
+  'Small raw-patch preparation is once after settled open; stale delayed work, quick close, detach and reopen must not install a patch into another presentation');
+assert.ok(beginHandoff.indexOf('isMenuHandoffPatchCurrent(patch, this)') < beginHandoff.indexOf('patch.beginHandoff()') &&
+  beginHandoff.indexOf('patch.beginHandoff()') < beginHandoff.indexOf('snapshot.restoreSourceForHandoff') &&
+  terminal.indexOf('patch.draw(canvas, target.left, target.top, sourceFillBounds, liveFrame.sourceRadius)') < terminal.indexOf('drawSourceFill(canvas, 0f, false)') &&
+  terminal.includes('preparedHandoffPatch = null'),
+  'Only an exact pre-return patch may lock for handoff; terminal draws raw background before unchanged source fill/glyphs and rejects invalidated patches');
+console.log('Whole-toolbar source contract passed (explicit group/through, window ownership, independent tracks, shared optics, press presets and bounded opaque source-buffer handoff; complete device phases still required).');

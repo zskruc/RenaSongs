@@ -159,13 +159,15 @@ internal class GlassForegroundPortal(density: Float) {
     // With a real glass trigger, rows and source retain independent opacity
     // and Gaussian tracks before they meet the portal. A shared rows alpha or
     // fused rows blur would erase/blur the toolbar along the wrong timeline.
-    val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)
-    val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, if (grouped) 0f else portalSigma, scale)
-    if (blurX != rowsEffectX || blurY != rowsEffectY) {
-      rowsEffectX = blurX; rowsEffectY = blurY
-      rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
-        RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null)
-      if (diagnosticsEnabled) rowsEffectRebuilds++
+    if (rowsVisible) {
+      val blurX = GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)
+      val blurY = GlassPortalBlur.combinedRadius(rowsSigmaY, if (grouped) 0f else portalSigma, scale)
+      if (blurX != rowsEffectX || blurY != rowsEffectY) {
+        rowsEffectX = blurX; rowsEffectY = blurY
+        rowsNode.setRenderEffect(if (blurX > 0f || blurY > 0f)
+          RenderEffect.createBlurEffect(blurX, blurY, Shader.TileMode.DECAL) else null)
+        if (diagnosticsEnabled) rowsEffectRebuilds++
+      }
     }
     // Geometry uniforms are snapshotted by RenderEffect. Reuse an effect and
     // recording only for repeated draws of the same unchanged native frame.
@@ -178,8 +180,12 @@ internal class GlassForegroundPortal(density: Float) {
       foregroundNode.setRenderEffect(RenderEffect.createRuntimeShaderEffect(portal, "content"))
       if (diagnosticsEnabled) effectRebuilds++
     }
-    if (effectChanged || dimensionsChanged || renderedGeneration != generation ||
-      contentBlur.keys.any { it.isDirty || it.isLayoutRequested }) {
+    // A grouped source can stay visible after its rows have disappeared. Do
+    // not record/filter a body that the composite will not draw. Keep the last
+    // recorded generation: a reverse/reveal update advances generation, so its
+    // first visible draw must record current geometry and reconcile blur above.
+    if (rowsVisible && (effectChanged || dimensionsChanged || renderedGeneration != generation ||
+      contentBlur.keys.any { it.isDirty || it.isLayoutRequested })) {
       val recording = rowsNode.beginRecording(width, height)
       try {
         recording.scale(scale, scale)

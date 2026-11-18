@@ -244,6 +244,8 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
   private var hasFrame = false
   private var groupedRendering = false
   private var sourceLeaseReturned = false
+  internal var sourceHiddenAtUptime = 0L
+    private set
   private var sourceLeaseReturnCount = 0L
   private var sourceAlphaRestoreCount = 0L
   private var idChangedBeforeReturn = false
@@ -294,6 +296,19 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
   }
 
   internal fun referencesSource(view: View): Boolean = source.get() === view
+
+  /** Instantaneous qualification only; callers must not retain this View. */
+  internal fun sourceForHandoff(): View? {
+    val view = source.get() ?: return null
+    val root = sourceRoot.get() ?: return null
+    return view.takeIf {
+      isGroupedSource && !ownership.released && !sourceLeaseReturned && ownership.hidden &&
+        ownership.attached && MenuTriggerSnapshots.owns(this) && view.id == sourceId &&
+        view.transitionAlpha == 0f && view.isAttachedToWindow && view.isShown && sameSourcePlacement(view) &&
+        view.rootView === root && root.isAttachedToWindow && root.isHardwareAccelerated && root.isShown &&
+        root.windowVisibility == View.VISIBLE
+    }
+  }
 
   /** Returning an original View is separate from retiring its drawing owner.
    * Immutable foreground pixels may finish a close after the source detaches. */
@@ -372,6 +387,7 @@ internal class MenuTriggerSnapshot internal constructor(view: View,
     sourceOwner.visibility = if (groupedRendering) View.INVISIBLE else View.VISIBLE
     applyOwnerFrame()
     view.transitionAlpha = 0f
+    sourceHiddenAtUptime = SystemClock.uptimeMillis()
     view.addOnAttachStateChangeListener(sourceAttachListener)
     sourceListenerAttached = true
     if (isGroupedSource) (view as? MenuTriggerGroupView)?.setMenuSourceActive(true)

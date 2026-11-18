@@ -53,9 +53,11 @@ assert.ok(submit.includes('recording.drawRenderNode(program.node)') &&
 assert.ok(submit.includes('setWaitForPresent(false)') && submit.includes('SYNC_FRAME_DROPPED') &&
   submit.includes('abortMenuRaster()') && !submit.includes('failCapture('),
   'Optional GPU failure must not block on present or disable the existing direct fallback');
-assert.ok(submit.includes('PendingCapture(') && submit.includes('SystemClock.elapsedRealtimeNanos(), ticket)') &&
-  submit.includes('queuedTickets.addLast(pending)'),
-  'FIFO image ownership must carry the dedicated menu ticket through worker delivery');
+assert.ok(submit.includes('PendingCapture(') &&
+  submit.includes('SystemClock.elapsedRealtimeNanos(), ticket,\n        program.recordedAtUptime)') &&
+  submit.includes('queuedTickets.addLast(pending)') &&
+  source.includes('ticket.unblurredPatch, ticket.pageEpoch, ticket.menuTicket?.key, ticket.submittedAt,\n      ticket.menuSourceRecordedAtUptime)'),
+  'FIFO image ownership must carry the dedicated menu ticket, actual producer-record time and submission time unchanged through worker delivery');
 assert.doesNotMatch(submit, /(?:getPixels|copyPixelsToBuffer|PixelCopy|compress|toSoftware)\s*\(/,
   'Menu caching must remain GPU-backed, not add CPU readback/export to the animation path');
 const menuComplete = complete.slice(complete.indexOf('if (ticket.menuTicket != null)'),

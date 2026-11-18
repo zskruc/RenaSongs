@@ -395,8 +395,15 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     "materialRasterCommittedScale" to menuRasterCommittedScale,
     "materialRasterNativeAlpha" to alpha,
     "materialRasterGroupAlpha" to menuGroupOpacity,
-    "materialFieldOptics" to (menuFieldOptics?.diagnostics() ?: emptyMap<String, Any>())
+    "materialFieldOptics" to (menuFieldOptics?.diagnostics() ?: emptyMap<String, Any>()),
+    "handoffPatchPreparation" to (snapshot?.menuHandoffPatchDiagnostics() ?: emptyMap<String, Any>())
   )
+
+  internal fun prepareMenuHandoffPatch(owner: View, sourceView: View, sourceRect: RectF,
+    hiddenAtUptime: Long): MenuHandoffPatch? = snapshot?.prepareMenuHandoffPatch(owner, sourceView, sourceRect, hiddenAtUptime)
+
+  internal fun isMenuHandoffPatchCurrent(patch: MenuHandoffPatch, owner: View): Boolean =
+    snapshot?.isMenuHandoffPatchCurrent(patch, owner) == true
 
   internal fun updateMenuMorph(screenLeft: Float, screenTop: Float, screenRight: Float, screenBottom: Float,
     radiusX: Float, radiusY: Float, animated: Boolean, opacity: Float) {

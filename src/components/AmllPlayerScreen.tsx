@@ -32,6 +32,7 @@ import { SpeedSheet } from '@/components/SpeedSheet';
 import { useAmllPlayerTransition } from '@/hooks/useAmllPlayerTransition';
 import { useCoverTint } from '@/hooks/useDominantColor';
 import { useLyrics } from '@/hooks/useLyrics';
+import { useMenuPresentationActive } from '@/hooks/useMenuPresentationActive';
 import { useDisplaySong } from '@/hooks/useLocalMetadata';
 import { PlainLyrics } from '@/components/PlainLyrics';
 import { useT } from '@/i18n';
@@ -58,6 +59,7 @@ const COVER_SPRING = { stiffness: 200, damping: 30, overshootClamping: true };
 
 export function AmllPlayerScreen() {
   const focused = useIsFocused();
+  const menuActive = useMenuPresentationActive();
   const insets = useSafeAreaInsets();
   const window = useWindowDimensions();
   const t = useT();
@@ -134,6 +136,7 @@ export function AmllPlayerScreen() {
     headerArea, headerScrollOffset: columnOffset, readArtwork, controlsHeight: layout.fullControlsHeight,
     artworkIdentity: song?.id });
   const interactive = active && !transition.closing && transition.entryReady;
+  const decorativeActive = interactive && !menuActive;
   const cover = song ? songCoverUrl(song, COVER.card) : undefined;
   const coverTint = useCoverTint(cover);
   // Read the current artwork directly: a background crossfade must never hold
@@ -258,10 +261,10 @@ export function AmllPlayerScreen() {
         {!liveStream && song?.albumId ? (
           <Pressable accessibilityRole="link" accessibilityLabel={title} disabled={!interactive}
             onPress={goAlbum} style={styles.metadataLink}>
-            <MarqueeText text={title} enabled={marquee && active && (compact ? showLyrics : !showLyrics || horizontal)}
+            <MarqueeText text={title} active={decorativeActive} enabled={marquee && active && (compact ? showLyrics : !showLyrics || horizontal)}
               style={compact ? styles.compactTitle : styles.title} />
           </Pressable>
-        ) : <MarqueeText text={title} enabled={marquee && active && (compact ? showLyrics : !showLyrics || horizontal)}
+        ) : <MarqueeText text={title} active={decorativeActive} enabled={marquee && active && (compact ? showLyrics : !showLyrics || horizontal)}
           style={compact ? styles.compactTitle : styles.title} />}
         {artists.length ? (
           <Pressable accessibilityRole="link" accessibilityLabel={artist} disabled={!interactive}
@@ -328,7 +331,7 @@ export function AmllPlayerScreen() {
                     onAccessibilityEscape={closeAccessiblePlayer}
                     onPress={switchLyrics} onLongPress={showMenu} style={styles.coverPressable}>
                     <Cover uri={cover} size={layout.largeCover.size} transition={0}
-                      contentFit={fitCover ? 'contain' : 'cover'} autoplay={interactive && playing} preferStatic={false}
+                      contentFit={fitCover ? 'contain' : 'cover'} autoplay={decorativeActive && playing} preferStatic={false}
                       style={{ width: '100%', height: '100%', borderRadius: 0 }} />
                   </Pressable>
                 </Animated.View>

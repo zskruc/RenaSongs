@@ -11,6 +11,7 @@ import android.graphics.PorterDuff
 import android.graphics.Rect
 import android.graphics.RenderNode
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Animatable
 import android.hardware.HardwareBuffer
 import android.media.Image
 import android.media.ImageReader
@@ -22,6 +23,11 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.Choreographer
 import android.view.View
+import android.view.ViewGroup
+import android.view.SurfaceView
+import android.view.TextureView
+import android.widget.ImageView
+import android.widget.ProgressBar
 import android.view.ViewTreeObserver
 import androidx.annotation.RequiresApi
 import androidx.compose.runtime.snapshots.Snapshot
@@ -66,7 +72,9 @@ internal data class BackdropFrame(
   val mainPixelHeight: Int = bitmap.height,
   val unblurredPatch: UnblurredBackdropPatch? = null,
   val pageEpoch: Long,
-  val menuUnderlay: MenuUnderlayKey? = null
+  val menuUnderlay: MenuUnderlayKey? = null,
+  val submittedAtUptime: Long = 0L,
+  val sourceRecordedAtUptime: Long = 0L
 )
 
 /** A borrowed producer node, never an independently retained screen snapshot. */
@@ -233,8 +241,12 @@ internal class WindowBackdrop(
   private val menuBackgroundChanges = BackdropSceneChanges(includeGlassContent = true, observeLeafDirty = false)
   private val menuUnderlayPolicy = MenuUnderlayCachePolicy()
   private data class MenuProgram(val key: MenuUnderlayKey, val node: RenderNode,
-    val source: WeakReference<View>, val owner: WeakReference<View>, val scrim: WeakReference<View>)
+    val source: WeakReference<View>, val owner: WeakReference<View>, val scrim: WeakReference<View>,
+    val recordedAtUptime: Long)
   private var menuProgram: MenuProgram? = null
+  private var handoffPatchStatus = "not-requested"
+  private var handoffPatchPreparationMs = 0L
+  private var handoffPatchPixels = 0L
   private var menuRootSignature: Long? = null
   private var menuRasterSubmitted = 0L
   private var menuRasterPublished = 0L
@@ -461,7 +473,8 @@ internal class WindowBackdrop(
     val recordSerial: Long,
     val submittedAt: Long,
     val submittedAtNanos: Long,
-    val menuTicket: MenuUnderlayCachePolicy.Ticket? = null
+    val menuTicket: MenuUnderlayCachePolicy.Ticket? = null,
+    val menuSourceRecordedAtUptime: Long = 0L
   )
 
   private data class AsyncImageResult(
@@ -1173,7 +1186,8 @@ internal class WindowBackdrop(
         root.width, root.height, location[0], location[1], direct = true, menuProgram = true),
         geometry, epoch, generation, serial, nativePage.policy.epoch, generation,
         nativePage.policy.captureAllowed, mask, direct = true)) return false
-    menuProgram = MenuProgram(key, node, WeakReference(underlay), WeakReference(owner), WeakReference(scrim))
+    menuProgram = MenuProgram(key, node, WeakReference(underlay), WeakReference(owner), WeakReference(scrim),
+      SystemClock.uptimeMillis())
     frame = null
     inFlightTickets.removeAll { it.menuTicket == null && !recordedBridge.acceptsImage(it.recordSerial) }
     updateCaptureWatchdog()
@@ -1230,6 +1244,85 @@ internal class WindowBackdrop(
       sceneVersion = sceneVersion, materialVersion = materialVersion, scrollVersion = scrollVersion)
   }
 
+  /** A one-shot bounded blit from an already accepted Activity-only image.
+   * MAIN publication/retirement cannot interleave while Picture→ARGB returns;
+   * the returned immutable CPU pixels retain no Image/Reader/producer node. */
+  internal fun prepareMenuHandoffPatch(owner: View, sourceView: View, sourceRect: android.graphics.RectF,
+    hiddenAtUptime: Long): MenuHandoffPatch? {
+    handoffPatchStatus = "unqualified"
+    val started = SystemClock.uptimeMillis()
+    try {
+      if (closed || hiddenAtUptime <= 0L || !sourceView.isAttachedToWindow || sourceView.transitionAlpha != 0f) return null
+      val captured = frame ?: run { handoffPatchStatus = "no-cached-image"; return null }
+      val key = captured.menuUnderlay ?: return null
+      val program = menuProgram ?: return null
+      val sourceRoot = sourceView.rootView
+      if (!menuUnderlayPolicy.hasCached || currentMenuKey() != key || program.key != key ||
+        program.owner.get() !== owner || program.source.get() !== sourceRoot ||
+        key.ownerIdentity != System.identityHashCode(owner) ||
+        key.sourceIdentity != System.identityHashCode(sourceRoot)) return null
+      if (captured.sourceRecordedAtUptime <= hiddenAtUptime || captured.submittedAtUptime <= hiddenAtUptime || captured.progressiveBlur != null ||
+        captured.unblurredPatch != null || !nativePage.policy.accepts(key.pageEpoch)) {
+        handoffPatchStatus = "image-not-recorded-after-source-hide"; return null
+      }
+      if (hasDynamicHandoffSource(sourceRoot)) { handoffPatchStatus = "dynamic-source"; return null }
+      val region = menuHandoffPatchRegion(sourceRect.left, sourceRect.top, sourceRect.right, sourceRect.bottom,
+        captured.screenX, captured.screenY, captured.scale, captured.mainPixelWidth, captured.mainPixelHeight)
+        ?: run { handoffPatchStatus = "roi-uncovered-or-over-budget"; return null }
+      val metadata = menuBackgroundChanges.signatureChangeCount
+      val patch = MenuHandoffPatch.prepare(captured, metadata, region)
+      handoffPatchStatus = if (patch != null) "ready-opaque-cpu" else "nonopaque-or-copy-rejected"
+      handoffPatchPixels = if (patch != null) region.width.toLong() * region.height else 0L
+      return patch
+    } catch (failure: RuntimeException) {
+      handoffPatchStatus = "copy-unavailable-${failure.javaClass.simpleName}"
+      return null
+    } catch (_: OutOfMemoryError) {
+      handoffPatchStatus = "copy-memory-unavailable"
+      return null
+    } finally { handoffPatchPreparationMs = SystemClock.uptimeMillis() - started }
+  }
+
+  internal fun isMenuHandoffPatchCurrent(patch: MenuHandoffPatch, owner: View): Boolean {
+    val program = menuProgram ?: return false
+    val source = program.source.get() ?: return false
+    if (closed || program.owner.get() !== owner || !nativePage.policy.accepts(patch.key.pageEpoch)) return false
+    // Observe real text/artwork/theme/structure changes even if they arrived
+    // between the last underlay pre-draw and this terminal overlay draw.
+    observeBackgroundScene(source)
+    val current = currentMenuKey() ?: return false
+    // Source restoration itself submits a real Activity draw. Only this finite
+    // transaction may retain its already-validated source ROI across OnDraw;
+    // all metadata and every other key dimension remain strict.
+    return menuHandoffPatchKeyMatches(patch.key, current, patch.metadataVersion,
+      menuBackgroundChanges.signatureChangeCount, patch.handoff,
+      SystemClock.uptimeMillis() - patch.handoffAtUptime)
+  }
+
+  internal fun menuHandoffPatchDiagnostics(): Map<String, Any> = mapOf("handoffPatchStatus" to handoffPatchStatus,
+    "handoffPatchPreparationMs" to handoffPatchPreparationMs, "handoffPatchPixels" to handoffPatchPixels)
+
+  private fun hasDynamicHandoffSource(source: View): Boolean {
+    val pending = ArrayDeque<View>()
+    pending.add(source)
+    var visited = 0
+    while (pending.isNotEmpty()) {
+      val view = pending.removeFirst()
+      if (++visited > 2048) return true
+      if (view.visibility != View.VISIBLE) continue
+      if (view is SurfaceView || view is TextureView ||
+        (view.background as? Animatable)?.isRunning == true ||
+        (view is ImageView && (view.drawable as? Animatable)?.isRunning == true) ||
+        (view is ProgressBar && view.isIndeterminate) ||
+        view.animation?.let { it.hasStarted() && !it.hasEnded() } == true) return true
+      if (view is ViewGroup) for (index in 0 until view.childCount) {
+        val child = view.getChildAt(index) ?: continue
+        if (child.parent === view) pending.addLast(child)
+      }
+    }
+    return false
+  }
+
   /** One optional GPU raster, never a second root traversal or per-frame readback. */
   private fun trySubmitMenuRaster(targets: List<LiquidGlassView>, vsyncNanos: Long) {
     if (!asynchronous || closed || inFlightTickets.isNotEmpty() ||
@@ -1271,7 +1364,8 @@ internal class WindowBackdrop(
       } finally { node.endRecording() }
       val pending = PendingCapture(generation, source, key.geometry.scale, key.geometry.screenX,
         key.geometry.screenY, null, width, height, null, targets.toList(), key.pageEpoch,
-        recordedBridge.recordSerial, SystemClock.uptimeMillis(), SystemClock.elapsedRealtimeNanos(), ticket)
+        recordedBridge.recordSerial, SystemClock.uptimeMillis(), SystemClock.elapsedRealtimeNanos(), ticket,
+        program.recordedAtUptime)
       inFlightTickets.add(pending)
       synchronized(ticketLock) { queuedTickets.addLast(pending) }
       inFlightPeak = maxOf(inFlightPeak, inFlightTickets.size)
@@ -1543,7 +1637,8 @@ internal class WindowBackdrop(
     val bitmap = wrapImage(image) ?: return AsyncImageResult()
     return AsyncImageResult(BackdropFrame(bitmap, image, ticket.scale, ticket.screenX, ticket.screenY,
       ticket.source, ticket.progressiveBlur, ticket.mainPixelWidth, ticket.mainPixelHeight,
-      ticket.unblurredPatch, ticket.pageEpoch, ticket.menuTicket?.key))
+      ticket.unblurredPatch, ticket.pageEpoch, ticket.menuTicket?.key, ticket.submittedAt,
+      ticket.menuSourceRecordedAtUptime))
   }
 
   private fun completeAsyncImage(ticket: PendingCapture, result: AsyncImageResult) {

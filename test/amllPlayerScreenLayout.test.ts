@@ -56,6 +56,7 @@ function harness() {
   const navigations: string[] = [];
   const artistPickers: ArtistTarget[][] = [];
   let focused = true;
+  let menuActive = false;
   let live: { title: string; artist?: string } | null = null;
   const transition = { closing: false, entryReady: true, rootStyle: {}, contentStyle: {}, artworkStyle: {},
     controlsMotionStyle: {}, handleGesture: {}, close() { closeCalls++; }, onArtworkLayout() {}, onClipHostReady() {} };
@@ -90,6 +91,7 @@ function harness() {
     } },
     '@/hooks/useDominantColor': { useCoverTint: () => ({ known: false }) },
     '@/hooks/useLyrics': { useLyrics: () => ({}) },
+    '@/hooks/useMenuPresentationActive': { useMenuPresentationActive: () => menuActive },
     '@/components/PlainLyrics': { PlainLyrics: 'PlainLyrics' },
     '@/i18n': { useT: () => (text: string) => text },
     '@/lib/amllPlayerLayout': layoutRules,
@@ -127,6 +129,7 @@ function harness() {
   } });
   return { player, settings, dimensions, values, transition, menuCalls, navigations, artistPickers, closeCalls: () => closeCalls,
     focused(value: boolean) { focused = value; },
+    menuActive(value: boolean) { menuActive = value; },
     live(value: typeof live) { live = value; },
     unmount() { for (const cleanup of cleanups) cleanup(); cleanups.clear(); },
     shadowNode(value: object | null) { shadowNode = value; },
@@ -195,6 +198,41 @@ test('the screen forwards the existing volume preference and safe-area geometry 
   assert.equal(backgroundClip.props.children.type, 'AmllPlayerBackground');
   h.transition.entryReady = false;
   assert.equal(find(h.render(), 'Controls')[0].props.active, false, 'entry preparation cannot expose interactive controls');
+});
+
+test('the actual player pauses only decorative title and cover clocks for menus, including long paused-song titles', () => {
+  const h = harness();
+  h.settings.marqueeTitles = true;
+  h.player.song!.title = 'Above the Chinese Restaurant — a title longer than the available player row';
+  h.player.isPlaying = false;
+  let tree = h.render();
+  const title = () => find(tree, 'MarqueeText').find((node) => node.props.style?.fontSize === 20)!;
+  assert.equal(title().props.active, true, 'paused audio must not prevent the normal long-title marquee');
+  assert.equal(find(tree, 'Cover')[0].props.autoplay, false);
+  h.menuActive(true);
+  tree = h.render();
+  assert.equal(title().props.active, false);
+  assert.equal(title().props.enabled, true, 'coverage cannot replace overflow layout with an ellipsis');
+  assert.equal(find(tree, 'Controls')[0].props.active, true, 'decorative pause must not disable player controls');
+  assert.equal(find(tree, 'Controls')[0].props.progress.props.active, true, 'playback position keeps updating');
+  assert.equal(h.player.isPlaying, false);
+  h.menuActive(false);
+  tree = h.render();
+  assert.equal(title().props.active, true, 'closing resumes long-title reading even while audio remains paused');
+  h.player.isPlaying = true;
+  tree = h.render();
+  assert.equal(find(tree, 'Cover')[0].props.autoplay, true);
+  h.menuActive(true);
+  tree = h.render();
+  assert.equal(find(tree, 'Cover')[0].props.autoplay, false);
+  assert.equal(find(tree, 'Controls')[0].props.playing, true, 'cover animation pause cannot pause actual audio');
+  h.menuActive(false);
+  tree = h.render();
+  assert.equal(find(tree, 'Cover')[0].props.autoplay, true);
+  h.focused(false);
+  tree = h.render();
+  assert.equal(title().props.active, false);
+  assert.equal(find(tree, 'Cover')[0].props.autoplay, false);
 });
 
 test('the source artwork reader follows the small lyric cover without returning the full-size measurement frame', () => {
