@@ -23,16 +23,22 @@ internal class MenuGroupForeground(private val bitmap: Bitmap, private val sourc
   private val directRect = RectF(-bitmap.width / 2f, -bitmap.height / 2f, bitmap.width / 2f, bitmap.height / 2f)
   private var directDraws = 0L
   private var nodeDraws = 0L
+  private var rerecords = 0L
+  private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+  private val bitmapRect = RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())
 
   init {
     node.setPosition(0, 0, bitmap.width, bitmap.height)
     node.setClipToBounds(false)
     node.setPivotX(bitmap.width / 2f)
     node.setPivotY(bitmap.height / 2f)
+    recordBitmap()
+  }
+
+  private fun recordBitmap() {
     val recording = node.beginRecording(bitmap.width, bitmap.height)
     try {
-      recording.drawBitmap(bitmap, null, RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()),
-        Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+      recording.drawBitmap(bitmap, null, bitmapRect, bitmapPaint)
     } finally { node.endRecording() }
   }
 
@@ -64,12 +70,17 @@ internal class MenuGroupForeground(private val bitmap: Bitmap, private val sourc
       directDraws++
     } else {
       // Keep the original independent sourceBlur track while it is active.
+      // A node removed from a long-lived foreground tree may lose its display
+      // list. Upstream records trigger content each draw; restore the same
+      // immutable pixels when needed rather than submitting an empty node.
+      if (!node.hasDisplayList()) { recordBitmap(); rerecords++ }
       canvas.drawRenderNode(node)
       nodeDraws++
     }
   }
   fun diagnostics(): Map<String, Any> = mapOf("sourceDirectBitmapDraws" to directDraws,
     "sourceCustomNodeDraws" to nodeDraws, "sourceCustomNodeHasDisplayList" to node.hasDisplayList(),
+    "sourceCustomNodeRerecords" to rerecords,
     "sourceForegroundAlpha" to node.alpha, "sourceForegroundBlur" to lastBlur,
     "sourceForegroundTranslation" to listOf(node.translationX, node.translationY),
     "sourceForegroundScale" to listOf(node.scaleX, node.scaleY))

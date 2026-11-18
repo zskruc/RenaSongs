@@ -56,7 +56,8 @@ assert.ok(owner.includes('if (ancestor === captureSource)') && owner.includes('c
   backdrop.includes('MenuMorphWindowOwners.beginCapture(captureSource)') &&
   backdrop.includes('MenuMorphWindowOwners.beginCapture(underlay)'),
   'Actual drawing owners must be excluded only from relevant manual captures and restored once after nested captures');
-assert.ok(foreground.includes('recording.drawBitmap(bitmap, null, RectF(') &&
+assert.ok(foreground.includes('recording.drawBitmap(bitmap, null, bitmapRect, bitmapPaint)') &&
+  foreground.includes('private val bitmapRect = RectF(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat())') &&
   foreground.includes('node.setAlpha(frame.sourceOpacity.coerceIn(0f, 1f))') &&
   foreground.includes('frame.sourceZoom') && foreground.includes('frame.sourceBlur'),
   'All captured group glyphs need independent source opacity/zoom/blur tracks, not the rows fade');
@@ -72,6 +73,15 @@ assert.ok(groupReplay.includes('if (node.alpha <= .001f) return') &&
   groupReplay.includes('canvas.drawRenderNode(node)') &&
   foreground.includes('RenderEffect.createBlurEffect(lastBlur, lastBlur, Shader.TileMode.DECAL)'),
   'Only the already-unblurred source phase may draw immutable pixels directly with the same center/pivot/alpha; active sourceBlur must retain its independent Gaussian track');
+const sourceRecording = foreground.slice(foreground.indexOf('private fun recordBitmap('), foreground.indexOf('fun update('));
+assert.ok(sourceRecording.includes('node.beginRecording(bitmap.width, bitmap.height)') &&
+  sourceRecording.includes('recording.drawBitmap(bitmap, null, bitmapRect, bitmapPaint)') &&
+  sourceRecording.includes('finally { node.endRecording() }') &&
+  groupReplay.includes('if (!node.hasDisplayList()) { recordBitmap(); rerecords++ }') &&
+  groupReplay.indexOf('if (!node.hasDisplayList())') < groupReplay.indexOf('canvas.drawRenderNode(node)'),
+  'A source RenderNode evicted while absorbed must re-record the same immutable pixels before its active-blur replay');
+assert.doesNotMatch(sourceRecording, /(?:setAlpha|setScale|setTranslation|setRenderEffect|\.draw\(software|Bitmap\.createBitmap|recycle)\s*\(/,
+  'Re-recording missing source pixels must not change physical pose/alpha/sourceBlur or capture live views again');
 assert.ok(portal.includes('val grouped = hasSource && drawSource != null') &&
   portal.includes('rowsNode.setAlpha(rowsOpacity)') &&
   portal.includes('GlassPortalBlur.combinedRadius(rowsSigmaX, if (grouped) 0f else portalSigma, scale)') &&
