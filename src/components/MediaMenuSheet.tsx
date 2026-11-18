@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * Bottom sheet with quick actions for an album or playlist (opened via
@@ -43,19 +44,21 @@ function Action({
   icon,
   label,
   onPress,
+  keepOpen = false,
 }: {
   icon: keyof typeof Icon.glyphMap;
   label: string;
   onPress: () => void;
+  keepOpen?: boolean;
 }) {
   return (
-    <Pressable
+    <MenuMorphItem menuItemId={`media:${icon}:${label}`} keepOpen={keepOpen}
       style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
       onPress={onPress}
     >
       <Icon name={icon} size={24} color={colors.text} />
       <Text style={styles.actionText}>{label}</Text>
-    </Pressable>
+    </MenuMorphItem>
   );
 }
 
@@ -264,15 +267,17 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
     if (!playlist || !local || !isOpenSession() || !metadataOwner()) return;
     const playlistId = playlist.id, ticket = beginRequest();
     actionClosing.current = true;
-    closeNow();
-    try {
-      const folder = await pickFolder();
-      if (!folder || !requests.owns(ticket) || !metadataOwner()) return;
-      await exportPlaylistFile(playlistId, folder);
-      if (requests.owns(ticket) && metadataOwner()) toast(t('Playlist exported'));
-    } catch {
-      if (requests.owns(ticket)) toast(t("Couldn't complete the action"));
-    }
+    dismiss(async () => {
+      if (!requests.owns(ticket) || !closeNow()) return;
+      try {
+        const folder = await pickFolder();
+        if (!folder || !requests.owns(ticket) || !metadataOwner()) return;
+        await exportPlaylistFile(playlistId, folder);
+        if (requests.owns(ticket) && metadataOwner()) toast(t('Playlist exported'));
+      } catch {
+        if (requests.owns(ticket)) toast(t("Couldn't complete the action"));
+      }
+    });
   }
 
   /** Closes, fetches the songs, and runs the action (with toast on failure). */
@@ -416,14 +421,14 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                 label={t('Download')}
                 // Asks with the size, like the button on the album's own screen:
                 // the same action shouldn't warn down one path and not the other.
-                onPress={() => void askDownload()}
+                keepOpen onPress={() => void askDownload()}
               />
             ) : null}
             {/* What is downloaded is what can be exported, and whether these
                 songs are among this profile's downloads takes fetching them,
                 which is what the press does. */}
             {hasDownloads ? (
-              <Action icon="save-outline" label={t('Export')} onPress={() => void askExport()} />
+              <Action keepOpen icon="save-outline" label={t('Export')} onPress={() => void askExport()} />
             ) : null}
             {playlist && local ? (
               <Action icon="document-text-outline" label={t('Export as M3U')} onPress={() => void exportM3u()} />
@@ -491,7 +496,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                 appear in the Library: playlists always do, but albums only if
                 favorited (the list comes from getStarred). */}
             {playlist || album?.starred ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   const ok = togglePin(pinKey);
@@ -505,7 +510,7 @@ function MediaMenuContent({ item, session }: { item: MediaMenuItem; session: num
                   color={colors.text}
                 />
                 <Text style={styles.actionText}>{pinned ? t('Unpin') : t('Pin to top')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
             {/* Last, because it is the only thing here that takes something
                 away, but not in red: the files come back with one tap and red

@@ -11,6 +11,15 @@ package expo.modules.liquidglass.menumotion
 import android.graphics.RectF
 
 internal class GlassMorphFrame {
+  /** Presentation-only copy: Jelly must never modify the underlying springs. */
+  fun copyFrom(other: GlassMorphFrame) {
+    bounds.set(other.bounds); radiusX = other.radiusX; radiusY = other.radiusY
+    contentProgress = other.contentProgress; rowsOpacity = other.rowsOpacity
+    sourceLobe.set(other.sourceLobe); sourceRadius = other.sourceRadius; smoothing = other.smoothing
+    sourceOpacity = other.sourceOpacity; sourceBlur = other.sourceBlur; sourceZoom = other.sourceZoom
+    contentBlur = other.contentBlur; contentZoom = other.contentZoom; portalBlur = other.portalBlur
+    lensHeight = other.lensHeight; lensAmount = other.lensAmount
+  }
   val bounds = RectF()
   var radiusX = 0f
   var radiusY = 0f

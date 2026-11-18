@@ -158,6 +158,9 @@ export type MenuMorphViewProps = ViewProps & {
   sessionId: number;
   sourceRect?: readonly number[] | null;
   radius?: number;
+  menuRows?: readonly { id: string; tag: number; enabled: boolean; selected: boolean; keepOpen: boolean; fullWidth?: boolean }[];
+  menuDragEnabled?: boolean;
+  onMenuSelect?: (event: NativeSyntheticEvent<{ sessionId: number; rowId: string; gestureId: number }>) => void;
   onMotionStart?: (event: NativeSyntheticEvent<{ sessionId: number; open: boolean }>) => void;
   onMotionComplete?: (event: NativeSyntheticEvent<{ sessionId: number; open: boolean }>) => void;
 };
@@ -167,11 +170,12 @@ const NativeMenuMorph = isMenuMorphAvailable
 
 /** First child: glass backdrop. Second child: fixed-layout, non-collapsed RN body. */
 export const MenuMorphView = React.forwardRef<View, MenuMorphViewProps>(function MenuMorphView(
-  { open, ready, sessionId, sourceRect = null, radius = 28, onMotionStart, onMotionComplete, ...props }, ref,
+  { open, ready, sessionId, sourceRect = null, radius = 28, menuRows, menuDragEnabled = true, onMenuSelect, onMotionStart, onMotionComplete, ...props }, ref,
 ) {
   if (!NativeMenuMorph) return <View {...props} ref={ref} collapsable={false} />;
   return <NativeMenuMorph {...props} ref={ref} collapsable={false} open={open} ready={ready}
     sessionId={sessionId} sourceRect={sourceRect} radius={radius}
+    menuRows={menuRows} menuDragEnabled={menuDragEnabled} onMenuSelect={onMenuSelect}
     onMotionStart={onMotionStart} onMotionComplete={onMotionComplete} />;
 });
 

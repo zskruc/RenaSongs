@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /**
  * Bottom sheet for choosing which artist to go to when a song or album has
  * multiple artists (collaborations). Opened from the `artistPicker` store.
@@ -5,7 +6,7 @@
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Modal, Pressable, ScrollView, Text } from 'react-native';
+import { Modal, ScrollView, Text } from 'react-native';
 
 import { COVER, coverArtUrl } from '@/api/data';
 import { useBottomSheetAnim } from '@/hooks/useBottomSheetAnim';
@@ -64,8 +65,9 @@ function ArtistPickerContent({ artists, session }: { artists: ArtistTarget[]; se
           showsVerticalScrollIndicator={false}
         >
           {artists.map((a) => (
-            <Pressable
+            <MenuMorphItem
               key={a.id}
+              menuItemId={`artist:${a.id}`}
               style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
               onPress={() => go(a.id)}
             >
@@ -73,7 +75,7 @@ function ArtistPickerContent({ artists, session }: { artists: ArtistTarget[]; se
               <Text style={styles.name} numberOfLines={1}>
                 {a.name}
               </Text>
-            </Pressable>
+            </MenuMorphItem>
           ))}
         </ScrollView>
       </MenuGlassCardFrame>

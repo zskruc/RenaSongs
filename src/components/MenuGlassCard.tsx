@@ -1,4 +1,4 @@
-import { createContext, forwardRef, type ComponentProps, type ReactNode, useContext, useState } from 'react';
+import { createContext, forwardRef, type ComponentProps, type ReactNode, useCallback, useContext, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { type LayoutChangeEvent, Pressable, StyleSheet, Text, View, type ViewProps, useWindowDimensions } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
@@ -7,6 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from '@/components/Icon';
 import { GlassPressable } from '@/components/glass';
 import { MenuGlassBackdrop } from '@/components/MenuGlassBackdrop';
+import { MenuItemsContext } from '@/components/MenuMorphItem';
+import { MenuItemRegistry, type MenuItemSelection } from '@/lib/menuItems';
 import { useBottomSheetAnim } from '@/hooks/useBottomSheetAnim';
 import type { MenuMorphController } from '@/lib/menuMorph';
 import { captureMenuTouchMove, captureMenuTouchStart } from '@/lib/menuOrigin';
@@ -23,20 +25,26 @@ const AnimatedMenuMorph = Animated.createAnimatedComponent(MenuMorphView);
 
 /** Fixed Yoga layout, separate native material/content tracks. Native motion
  * begins after attachment/pre-draw instead of racing creation of a Modal. */
-export function MenuMorphSurface({ children, style, radius = MENU_GLASS_RADIUS, motion, onLayout, ...props }:
-  Omit<ViewProps, 'style'> & { style?: AnimatedViewStyle; radius?: number; motion?: MenuMorphController }) {
+export function MenuMorphSurface({ children, style, radius = MENU_GLASS_RADIUS, motion, onLayout, menuDragEnabled = true, ...props }:
+  Omit<ViewProps, 'style'> & { style?: AnimatedViewStyle; radius?: number; motion?: MenuMorphController; menuDragEnabled?: boolean }) {
   const fallback = useBottomSheetAnim(!motion, undefined, 'card');
   const controller = motion ?? fallback.motion;
+  const [items] = useState(() => new MenuItemRegistry());
+  const menuRows = useSyncExternalStore(items.subscribe, items.getSnapshot, items.getSnapshot);
+  useLayoutEffect(() => { items.setSession(controller.sessionId, controller.open); }, [items, controller.sessionId, controller.open]);
+  useLayoutEffect(() => () => items.dispose(), [items]);
+  const onMenuSelect = useCallback((event: { nativeEvent: MenuItemSelection }) => { items.select(event.nativeEvent); }, [items]);
   // Preserve an explicit caller defer, such as a dropdown awaiting natural
   // content height. Native attachment/pre-draw guards cover ordinary cards.
-  return <AnimatedMenuMorph {...props} collapsable={false}
+  return <MenuItemsContext.Provider value={items}><AnimatedMenuMorph {...props} collapsable={false}
     style={[style, controller.fallbackStyle, { backgroundColor: 'transparent', borderRadius: radius, overflow: 'visible' }]}
     radius={radius} open={controller.open} ready={controller.ready} sessionId={controller.sessionId}
     sourceRect={controller.sourceRect} onMotionStart={controller.onMotionStart} onMotionComplete={controller.onMotionComplete}
+    menuRows={menuRows} menuDragEnabled={menuDragEnabled} onMenuSelect={onMenuSelect}
     onLayout={(event) => { controller.onLayoutReady(); onLayout?.(event); }}>
     <MenuGlassBackdrop radius={radius} />
     <View collapsable={false} style={{ flexShrink: 1, minHeight: 0, alignSelf: 'stretch' }}>{children}</View>
-  </AnimatedMenuMorph>;
+  </AnimatedMenuMorph></MenuItemsContext.Provider>;
 }
 
 /** The artist picker's single glass surface, also usable by anchored/inline dialogs. */
@@ -53,7 +61,7 @@ export const MenuGlassPanel = forwardRef<View, ViewProps & { radius?: number }>(
 });
 
 /** One bounded surface for a menu's details, with the same material and anchor. */
-export function MenuGlassCardFrame({ children, onClose, backdropStyle, cardStyle, onLayout, maxWidth = 312, motion }: {
+export function MenuGlassCardFrame({ children, onClose, backdropStyle, cardStyle, onLayout, maxWidth = 312, motion, menuDragEnabled }: {
   children: ReactNode;
   onClose: () => void;
   backdropStyle?: AnimatedViewStyle;
@@ -61,6 +69,7 @@ export function MenuGlassCardFrame({ children, onClose, backdropStyle, cardStyle
   onLayout?: (event: LayoutChangeEvent) => void;
   maxWidth?: number;
   motion?: MenuMorphController;
+  menuDragEnabled?: boolean;
 }) {
   useTheme();
   const dark = useThemeMode() === 'dark';
@@ -90,7 +99,7 @@ export function MenuGlassCardFrame({ children, onClose, backdropStyle, cardStyle
         <Pressable style={StyleSheet.absoluteFill} onPress={close} accessibilityRole="button" accessibilityLabel={t('Close')} />
       </Animated.View>
       <MenuCloseContext.Provider value={motion ? null : automatic.dismiss}>
-        <MenuMorphSurface accessibilityViewIsModal onLayout={onLayout} motion={controller}
+        <MenuMorphSurface accessibilityViewIsModal onLayout={onLayout} motion={controller} menuDragEnabled={menuDragEnabled}
           style={[styles.card, { top, right: 16 + insets.right, width: cardWidth, maxHeight }, cardStyle]}>
           {children}
         </MenuMorphSurface>

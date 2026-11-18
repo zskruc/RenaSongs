@@ -104,6 +104,24 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
 
   init { view.transitionAlpha = 0f }
 
+  /** Refresh only the same live weak source; never resolve a replacement row/tag. */
+  fun currentScreenBounds(out: RectF): Boolean {
+    if (released || !MenuTriggerSnapshots.owns(this)) return false
+    val view = source.get() ?: return false
+    if (!view.isAttachedToWindow || !view.isShown || view.width <= 0 || view.height <= 0) return false
+    val location = IntArray(2)
+    view.getLocationOnScreen(location)
+    val sx = abs(view.scaleX)
+    val sy = abs(view.scaleY)
+    if (!sx.isFinite() || !sy.isFinite() || sx <= 0f || sy <= 0f) return false
+    // Keep the original normalized hit diameter; refresh its actual center.
+    val x = location[0] + view.width * sx / 2f
+    val y = location[1] + view.height * sy / 2f
+    out.set(x - morphSourceWidth / 2f, y - morphSourceHeight / 2f,
+      x + morphSourceWidth / 2f, y + morphSourceHeight / 2f)
+    return true
+  }
+
   fun draw(canvas: Canvas, frame: GlassMorphFrame, originX: Float, originY: Float) {
     if (released || !canvas.isHardwareAccelerated || frame.sourceOpacity <= 0.001f) return
     val lobe = frame.sourceLobe

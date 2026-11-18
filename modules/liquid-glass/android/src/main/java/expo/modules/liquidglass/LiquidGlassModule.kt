@@ -181,12 +181,14 @@ class LiquidGlassModule : Module() {
 
     View(MenuMorphView::class) {
       Name("MenuMorph")
-      Events("onMotionStart", "onMotionComplete")
+      Events("onMotionStart", "onMotionComplete", "onMenuSelect")
       Prop("open") { view: MenuMorphView, value: Boolean -> view.setOpen(value) }
       Prop("ready") { view: MenuMorphView, value: Boolean -> view.setReady(value) }
       Prop("sessionId") { view: MenuMorphView, value: Int -> view.setSessionId(value) }
       Prop("sourceRect") { view: MenuMorphView, value: List<Double>? -> view.setSourceRect(value) }
       Prop("radius") { view: MenuMorphView, value: Double -> view.setRadius(value) }
+      Prop("menuRows") { view: MenuMorphView, value: List<MenuMorphRowRecord>? -> view.setMenuRows(value) }
+      Prop("menuDragEnabled") { view: MenuMorphView, value: Boolean -> view.setMenuDragEnabled(value) }
       OnViewDidUpdateProps { view: MenuMorphView -> view.commitProps() }
     }
 

@@ -1,9 +1,10 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /**
  * What a long press on an artist offers: play them, their radio, the heart.
  * The rest lives in the ⋯ of the artist's own screen, a tap away.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import Icon from '@/components/Icon';
 import { COVER, coverArtUrl, getTopSongs, star, type Artist } from '@/api/data';
@@ -79,7 +80,7 @@ export function ArtistMenuSheet() {
   }
 
   const row = (icon: keyof typeof Icon.glyphMap, label: string, onPress: () => void) => (
-    <Pressable
+    <MenuMorphItem
       key={label}
       style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
       onPress={() => {
@@ -89,7 +90,7 @@ export function ArtistMenuSheet() {
     >
       <Icon name={icon} size={24} color={colors.text} />
       <Text style={styles.actionText}>{label}</Text>
-    </Pressable>
+    </MenuMorphItem>
   );
 
   return (

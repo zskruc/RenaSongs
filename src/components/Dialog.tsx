@@ -4,7 +4,6 @@
  * destructive actions (without input).
  */
 import Icon from '@/components/Icon';
-import { GlassPressable } from '@/components/glass';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import {
   Modal,
@@ -18,6 +17,7 @@ import {
 
 import { useT } from '@/i18n';
 import { usePopupMorphPresence } from '@/hooks/usePopupMorphPresence';
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { colors, fontSize, radius, spacing, themed, tracking } from '@/theme';
 import { MENU_GLASS_RADIUS, MenuGlassCardFrame, MenuGlassCardHeader } from './MenuGlassCard';
 
@@ -104,7 +104,7 @@ export function Dialog(props: Props) {
   }
 
   const content = (
-    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion}
+    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion} menuDragEnabled={!input}
       backdropStyle={animation.backdropStyle} cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
       <MenuGlassCardHeader title={title} onClose={() => close(onCancel)} />
       <ScrollView style={styles.menuBody} contentContainerStyle={{ gap: spacing.md }}
@@ -123,8 +123,7 @@ export function Dialog(props: Props) {
             />
           ) : null}
           {neutral ? (
-            <GlassPressable
-              variant="subtle"
+            <MenuMorphItem fullWidth={false}
               hitSlop={8}
               style={[
                 styles.neutral,
@@ -136,14 +135,13 @@ export function Dialog(props: Props) {
               {neutral.icon ? (
                 <Icon name={neutral.icon} size={15} color={colors.textSecondary} />
               ) : null}
-            </GlassPressable>
+            </MenuMorphItem>
           ) : null}
           <View style={styles.actions}>
-            <GlassPressable variant="subtle" hitSlop={8} onPress={() => close(onCancel)}>
+            <MenuMorphItem fullWidth={false} hitSlop={8} onPress={() => close(onCancel)}>
               <Text style={styles.cancel}>{t('Cancel')}</Text>
-            </GlassPressable>
-            <GlassPressable
-              variant="regular"
+            </MenuMorphItem>
+            <MenuMorphItem fullWidth={false}
               hitSlop={8}
               disabled={!canConfirm}
               onPress={() => close(() => onConfirm(value.trim()))}
@@ -158,7 +156,7 @@ export function Dialog(props: Props) {
               >
                 {confirmLabel}
               </Text>
-            </GlassPressable>
+            </MenuMorphItem>
           </View>
       </ScrollView>
     </MenuGlassCardFrame>
@@ -185,7 +183,7 @@ function MenuDialog({ animation, close, title, message, messageColor, input, inp
 }) {
   const t = useT();
   return (
-    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion} backdropStyle={animation.backdropStyle}
+    <MenuGlassCardFrame onClose={() => close(onCancel)} motion={animation.motion} menuDragEnabled={!input} backdropStyle={animation.backdropStyle}
       cardStyle={animation.sheetStyle} onLayout={animation.onSheetLayout}>
       <ScrollView style={styles.menuBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <MenuGlassCardHeader title={title} onClose={() => close(onCancel)} />
@@ -194,20 +192,20 @@ function MenuDialog({ animation, close, title, message, messageColor, input, inp
         {input ? <TextInput ref={inputRef} style={styles.input} placeholder={input.placeholder}
           placeholderTextColor={colors.textMuted} value={value} onChangeText={onChangeText}
           secureTextEntry={input.secure} accessibilityLabel={input.placeholder ?? title} /> : null}
-        {neutral ? <GlassPressable onPress={() => close(neutral.onPress)} accessibilityRole="button"
+        {neutral ? <MenuMorphItem onPress={() => close(neutral.onPress)} accessibilityRole="button"
           style={[styles.neutral, neutral.align === 'end' && { alignSelf: 'flex-end' }]}>
           <Text style={styles.cancel}>{neutral.label}</Text>
           {neutral.icon ? <Icon name={neutral.icon} size={15} color={colors.textSecondary} /> : null}
-        </GlassPressable> : null}
+        </MenuMorphItem> : null}
       </ScrollView>
       <View style={styles.menuActions}>
-        <GlassPressable onPress={() => close(onCancel)} accessibilityRole="button" style={styles.menuButton}>
+        <MenuMorphItem fullWidth={false} onPress={() => close(onCancel)} accessibilityRole="button" style={styles.menuButton}>
           <Text style={styles.cancel}>{t('Cancel')}</Text>
-        </GlassPressable>
-        <GlassPressable tint={destructive ? colors.danger : colors.accent} onPress={() => close(onConfirm)} disabled={!canConfirm} accessibilityRole="button"
+        </MenuMorphItem>
+        <MenuMorphItem fullWidth={false} onPress={() => close(onConfirm)} disabled={!canConfirm} accessibilityRole="button"
           style={[styles.menuButton, { backgroundColor: destructive ? colors.danger : colors.accent }, !canConfirm && { opacity: 0.4 }]}>
           <Text style={[styles.confirm, { color: colors.onAccent }]}>{confirmLabel}</Text>
-        </GlassPressable>
+        </MenuMorphItem>
       </View>
     </MenuGlassCardFrame>
   );

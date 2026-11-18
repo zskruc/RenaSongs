@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 import { captureCustomizationOwner } from '@/lib/localCustomizations';
 import { openMetadataTarget } from '@/store/metadataScraping';
@@ -898,10 +899,10 @@ export default function ArtistScreen() {
         {(close) =>
           menuMode === 'rating' ? (
             <View>
-              <Pressable style={styles.action} onPress={() => setMenuMode('actions')}>
+              <MenuMorphItem keepOpen style={styles.action} onPress={() => setMenuMode('actions')}>
                 <Icon name="chevron-back" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Rate')}</Text>
-              </Pressable>
+              </MenuMorphItem>
               <View style={styles.ratingRow}>
                 <StarRating
                   id={data.artist.id}
@@ -924,31 +925,30 @@ export default function ArtistScreen() {
             <>
               {appleMusic ? (
                 <>
-                  <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
-                    onPress={() => { close(); void shufflePlay(); }}>
+                  <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
+                    onPress={() => close.select(() => { void shufflePlay(); })}>
                     <Icon name="shuffle" size={24} color={colors.text} />
                     <Text style={styles.actionText}>{t('Shuffle')}</Text>
-                  </Pressable>
+                  </MenuMorphItem>
                   {!offline && albums.length > 0 ? (
-                    <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
+                    <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                       onPress={() => { close(() => { void onDownloadPress(); }); }}>
                       <Icon name="arrow-down-circle-outline" size={24} color={colors.text} />
                       <Text style={styles.actionText}>{t('Download')}</Text>
-                    </Pressable>
+                    </MenuMorphItem>
                   ) : null}
                 </>
               ) : null}
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
-                  close();
-                  void playDiscography();
+                  close.select(() => { void playDiscography(); });
                 }}
               >
                 <Icon name="play" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Play discography')}</Text>
-              </Pressable>
-              <Pressable style={styles.action} onPress={() => {
+              </MenuMorphItem>
+              <MenuMorphItem style={styles.action} onPress={() => {
                 if (!metadataOwner() || metadataOpening.current || !metadataPage.current.focused || metadataPage.current.id !== id) return;
                 metadataOpening.current = true;
                 close(() => {
@@ -957,8 +957,8 @@ export default function ArtistScreen() {
                 });
               }}>
                 <Icon name="search-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Metadata and local artwork')}</Text>
-              </Pressable>
-              <Pressable style={styles.action} onPress={() => {
+              </MenuMorphItem>
+              <MenuMorphItem style={styles.action} onPress={() => {
                 if (!metadataOwner() || metadataOpening.current || !metadataPage.current.focused || metadataPage.current.id !== id) return;
                 metadataOpening.current = true;
                 close(() => {
@@ -967,7 +967,7 @@ export default function ArtistScreen() {
                 });
               }}>
                 <Icon name="search-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Batch scrape metadata')}</Text>
-              </Pressable>
+              </MenuMorphItem>
               {/* The way back to the one undivided list the discography was
                   before it was split into shelves (#138): the same screen the
                   shelves open, with no kind asked for.
@@ -980,7 +980,7 @@ export default function ArtistScreen() {
                   than the handful of covers the row has room for. Only an
                   artist with no records of their own has nothing to open. */}
               {albums.length > 0 ? (
-                <Pressable
+                <MenuMorphItem
                   style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                   onPress={() => {
                     close(() => router.push(`/artist/discography/${id}`));
@@ -988,12 +988,12 @@ export default function ArtistScreen() {
                 >
                   <Icon name="albums-outline" size={24} color={colors.text} />
                   <Text style={styles.actionText}>{t('All releases')}</Text>
-                </Pressable>
+                </MenuMorphItem>
               ) : null}
-              <Pressable style={styles.action} onPress={() => close(() => router.push({ pathname: '/settings/local-customizations', params: { artistId: id, artistName: data.artist.name } }))}>
+              <MenuMorphItem style={styles.action} onPress={() => close(() => router.push({ pathname: '/settings/local-customizations', params: { artistId: id, artistName: data.artist.name } }))}>
                 <Icon name="text" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Exact artist aliases')}</Text>
-              </Pressable>
-              <Pressable
+              </MenuMorphItem>
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close(() => { void addToPlaylist(); });
@@ -1001,15 +1001,15 @@ export default function ArtistScreen() {
               >
                 <Icon name="add" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-              </Pressable>
+              </MenuMorphItem>
               {canRate ? (
-                <Pressable
+                <MenuMorphItem keepOpen
                   style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                   onPress={() => setMenuMode('rating')}
                 >
                   <Icon name="star-outline" size={24} color={colors.text} />
                   <Text style={styles.actionText}>{t('Rate')}</Text>
-                </Pressable>
+                </MenuMorphItem>
               ) : null}
               {/* Last, because it is the only thing here that takes something
                   away, but not in red: a download comes back with one tap, and
@@ -1021,7 +1021,7 @@ export default function ArtistScreen() {
                   downloaded artist, since that button only offers to delete once
                   everything is in (#47). */}
               {hasDownloads ? (
-                <Pressable
+                <MenuMorphItem
                   style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                   onPress={() => {
                     close(() => setConfirmDeleteDl(true));
@@ -1029,7 +1029,7 @@ export default function ArtistScreen() {
                 >
                   <Icon name="trash-outline" size={24} color={colors.text} />
                   <Text style={styles.actionText}>{t('Delete downloads')}</Text>
-                </Pressable>
+                </MenuMorphItem>
               ) : null}
             </>
           )

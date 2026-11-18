@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * A genre: its albums (grid or list) and its songs, with infinite scroll.
@@ -16,7 +17,6 @@ import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Dimensions,
-  Pressable,
   Text,
   View,
 } from 'react-native';
@@ -649,7 +649,7 @@ export default function GenreScreen() {
       <SheetModal openRef={menuRef}>
         {(close) => (
           <>
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => { void addGenreToPlaylist(); });
@@ -657,13 +657,13 @@ export default function GenreScreen() {
             >
               <Icon name="add-circle-outline" size={22} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-            </Pressable>
+            </MenuMorphItem>
             {/* Shown whatever is on disk: this screen holds a window into the
                 genre, so it cannot know whether any of it is downloaded without
                 reading the whole thing, and reading it to decide whether to draw
                 a row is a handful of requests for nothing. It says so when
                 pressed instead. */}
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => { void deleteGenreDownloads(); });
@@ -673,7 +673,7 @@ export default function GenreScreen() {
                   red is kept for what does not, like deleting a playlist. */}
               <Icon name="trash-outline" size={22} color={colors.text} />
               <Text style={styles.actionText}>{t('Delete downloads')}</Text>
-            </Pressable>
+            </MenuMorphItem>
           </>
         )}
       </SheetModal>

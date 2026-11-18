@@ -39,6 +39,7 @@ function harness() {
     './SettingAnchor': { SettingAnchor: passthrough, SettingsAnchorProvider: passthrough },
     './BackChevron': { BackChevron: 'Back' },
     './MenuGlassCard': { MenuMorphSurface: 'GlassMenu', menuGlassScrimColor: () => '#00000044' },
+    './MenuMorphItem': { MenuMorphItem: 'Pressable' },
     'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' } },
     '@/lib/menuOrigin': { captureMenuTouchStart() {}, captureMenuTouchMove() {} },
     './useBottomSheetAnim': { useBottomSheetAnim: (open: boolean, _close: unknown, _kind: string, sessionId: number) => ({

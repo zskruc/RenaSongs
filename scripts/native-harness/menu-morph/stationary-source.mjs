@@ -29,7 +29,7 @@ assert.match(material, /shadow = if \(officialMaterial && menuMaterialCapacity =
 assert.ok(material.includes('val glassShape = menuMorphShape ?:') &&
   material.includes('menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)'),
   'The native menu material, lens and highlight must share the current physical spring radius');
-assert.ok(/if \(!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged\) return/.test(material),
+assert.ok(/if \(!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged(?: && !menuPressDirty)?\) return/.test(material),
   'A stationary integer box must still update its changing optical radius');
 console.log('Stationary material source contract passed (no texture transform; image and RenderNode share physical origin).');
 

@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /**
  * Floating action bar for multi-select, above the mini player and at the same
  * height as the toast. Shared so every screen with selection shows the same
@@ -24,7 +25,7 @@
  */
 import Icon from '@/components/Icon';
 import { useRef } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { GlassPressable, GlassSurface } from '@/components/glass';
 import { useFloatingBottom } from '@/hooks/useScreenBottomPadding';
@@ -86,7 +87,7 @@ export function SelectionBar({
           {(close) => (
             <>
               {menu.map((a) => (
-                <Pressable
+                <MenuMorphItem
                   key={a.label}
                   style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
                   accessibilityRole="button"
@@ -97,7 +98,7 @@ export function SelectionBar({
                 >
                   <Icon name={a.icon} size={24} color={colors.text} />
                   <Text style={styles.rowText}>{a.label}</Text>
-                </Pressable>
+                </MenuMorphItem>
               ))}
             </>
           )}

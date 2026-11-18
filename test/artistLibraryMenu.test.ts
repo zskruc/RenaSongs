@@ -31,6 +31,7 @@ function harness() {
   const dependencies: Record<string, unknown> = {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx, Fragment: 'Fragment' },
     'react-native': { Pressable: 'Pressable', Text: 'Text', View: 'View' },
+    '@/components/MenuMorphItem': { MenuMorphItem: 'Pressable' },
     '@/components/Icon': { __esModule: true, default: 'Icon' },
     '@/api/data': { getTopSongs: () => read(), coverArtUrl: () => 'cover', COVER: { thumb: 100 },
       star: async (...args: unknown[]) => calls.push({ kind: 'star', value: args }) },

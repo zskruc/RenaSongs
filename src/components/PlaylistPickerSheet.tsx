@@ -8,10 +8,11 @@
  * the ⋯ menu of the selection now (#164).
  */
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import Icon from '@/components/Icon';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 
 import { addSongsToPlaylist, canEditPlaylist, COVER, coverArtUrl, createPlaylist, getPlaylists, playlistMembership, removeSongsFromPlaylist } from '@/api/data';
@@ -237,19 +238,19 @@ function PlaylistPickerSession({ songs, excludeId, onClose, request }: PlaylistP
       <MenuGlassCardHeader title={t('Manage playlists')} onClose={close} />
       <Text style={styles.description}>{t('Add missing songs or remove all matching entries from a selected playlist.')}</Text>
       <View style={{ maxHeight: playlistsMaxH(screenH), flexShrink: 1, minHeight: 0 }}>
-        <Pressable disabled={!!busy} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+        <MenuMorphItem disabled={!!busy} accessibilityRole="button" style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
           onPress={() => { if (!canAct() || busyRow.current) return; setCreating(request.begin()); }}>
           <View style={styles.newPlaylistIcon}><Icon name="add" size={24} color={colors.text} /></View>
           <Text style={styles.rowText}>{t('New playlist')}</Text>
           {busy === 'create' && <ActivityIndicator size="small" color={colors.accent} />}
-        </Pressable>
+        </MenuMorphItem>
         {isLoading ? <ActivityIndicator style={{ marginVertical: spacing.lg }} color={colors.accent} /> :
           <ScrollView style={{ flexShrink: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled">
             {targets.map((playlist) => {
               const ids = present[playlist.id];
               const editable = canEditPlaylist(playlist);
               const state = ids ? membershipOf(ids, wanted) : null;
-              return <Pressable key={playlist.id} disabled={!editable || !ids || !!busy}
+              return <MenuMorphItem keepOpen key={playlist.id} menuItemId={`playlist:${playlist.id}`} disabled={!editable || !ids || !!busy}
                 accessibilityRole="checkbox" accessibilityState={{ checked: state === 'some' ? 'mixed' : state === 'all', disabled: !editable || !ids || !!busy }}
                 style={({ pressed }) => [styles.row, !editable && { opacity: 0.55 }, pressed && { opacity: 0.6 }]}
                 onPress={() => void toggle(playlist.id)}>
@@ -262,7 +263,7 @@ function PlaylistPickerSession({ songs, excludeId, onClose, request }: PlaylistP
                 {busy === playlist.id || !ids && editable ? <ActivityIndicator size="small" color={colors.textMuted} />
                   : <Icon name={!editable ? 'lock-closed-outline' : state === 'all' ? 'checkmark-circle' : state === 'some' ? 'remove-circle-outline' : 'ellipse-outline'}
                     size={24} color={state === 'all' || state === 'some' ? colors.accent : colors.textMuted} />}
-              </Pressable>;
+              </MenuMorphItem>;
             })}
           </ScrollView>}
       </View>

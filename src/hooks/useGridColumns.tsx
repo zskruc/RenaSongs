@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /**
  * How many across a grid is, and the menu that changes it (#109).
  *
@@ -12,7 +13,7 @@
  */
 import Icon from '@/components/Icon';
 import { memo, type ReactNode, useRef } from 'react';
-import { Pressable, Text } from 'react-native';
+import { Text } from 'react-native';
 
 import { SheetModal } from '@/components/SheetModal';
 import { columnsFor, useScreenSize } from '@/hooks/useScreenSize';
@@ -70,8 +71,11 @@ const GridSheet = memo(function GridSheet({
   const asList = layout?.value === 'list';
 
   const row = (key: string | number, label: string, active: boolean, pick: () => void) => (
-    <Pressable
+    <MenuMorphItem
       key={key}
+      selected={active}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: active }}
       style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
       onPress={pick}
     >
@@ -84,7 +88,7 @@ const GridSheet = memo(function GridSheet({
           style={{ marginLeft: 'auto' }}
         />
       ) : null}
-    </Pressable>
+    </MenuMorphItem>
   );
 
   return (
@@ -96,24 +100,20 @@ const GridSheet = memo(function GridSheet({
         <>
           <Text style={styles.sheetTitle}>{layout ? t('View') : t('Columns')}</Text>
           {layout
-            ? row('list', t('List'), asList, () => {
-                layout.set('list');
-                close();
-              })
+            ? row('list', t('List'), asList, () => close.select(() => layout.set('list')))
             : null}
           {choices.map((n) =>
             // While the rows are showing, none of the densities is what you are
             // looking at, so none of them is ticked. Picking one is also how
             // you get back to cards.
-            row(n, t('{n} columns', { n }), !asList && columns === n, () => {
+            row(n, t('{n} columns', { n }), !asList && columns === n, () => close.select(() => {
               // Only when it is not already cards. Every setter here writes the
               // whole settings blob into SecureStore, which encrypts it, so an
               // "it is already that" write is the kind of work that showed up
               // as a dropped tap in #50.
               if (asList) layout?.set('grid');
               choose(n);
-              close();
-            }),
+            })),
           )}
         </>
       )}

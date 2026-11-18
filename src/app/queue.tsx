@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /**
  * Playback queue, in sections:
  *   · Previous — what is behind the cursor (optional setting).
@@ -407,7 +408,7 @@ export default function QueueScreen() {
       <SheetModal openRef={menuRef}>
         {(close) => (
           <>
-            {queue.some(canGoIntoPlaylist) ? <Pressable
+            {queue.some(canGoIntoPlaylist) ? <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => {
@@ -418,14 +419,14 @@ export default function QueueScreen() {
             >
               <Icon name="add" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-            </Pressable> : null}
+            </MenuMorphItem> : null}
             {/* The queue is pushed to the server as it changes, but what comes
                 back is only read when this device has none of its own: the copy
                 here is the faithful one and replacing it behind somebody's back
                 is not a thing to do on its own. This is that decision, taken by
                 hand — the queue left on another player, brought over. */}
             {hasServerQueue ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close();
@@ -436,7 +437,7 @@ export default function QueueScreen() {
               >
                 <Icon name="cloud-download-outline" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t("Get the server's queue")}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
           </>
         )}

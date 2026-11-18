@@ -127,13 +127,13 @@ function entry(path: string, label: string, artist = false) {
     if (match) return;
     if (!artist && ts.isJsxSelfClosingElement(node) && node.tagName.getText(file) === 'Action'
       && node.attributes.getText(file).includes(`t('${label}')`)) match = node;
-    if (artist && ts.isJsxElement(node) && node.openingElement.tagName.getText(file) === 'Pressable'
+    if (artist && ts.isJsxElement(node) && ['Pressable', 'MenuMorphItem'].includes(node.openingElement.tagName.getText(file))
       && node.getText(file).includes(`t('${label}')`)) match = node;
     if (!match) ts.forEachChild(node, visit);
   }
   visit(file); assert.ok(match, `${path} ${label}`);
   const source = `export function render(env) { const { metadataOwner, metadataOpening, metadataPage, id, album, playlist, item, name, data, styles, t, dismissAction, close, router, openMetadataTarget } = env;
-    const Action = 'Action', Pressable = 'Pressable', Icon = 'Icon', Text = 'Text', colors = {}; return ${match.getText(file)}; }`;
+    const Action = 'Action', Pressable = 'Pressable', MenuMorphItem = 'Pressable', Icon = 'Icon', Text = 'Text', colors = {}; return ${match.getText(file)}; }`;
   return evaluate(source, { 'react/jsx-runtime': JSXRuntime }).render;
 }
 function entryHarness() {

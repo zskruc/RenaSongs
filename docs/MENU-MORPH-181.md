@@ -183,4 +183,33 @@ scale and the incident's approximately (465,965) glass position. Source wiring
 checks complement the mathematical cases; they do not replace physical visual
 confirmation. The 186 frame-time recording is not evidence of 187 performance.
 
+
+### 188: restore selection gestures and release rebound
+
+The previous port included the upstream open/close motion but omitted its
+menu-interaction layer. This follow-up ports `GlassJelly` at the pinned upstream
+defaults, with finite, explicitly registered action bounds. The same live
+rectangle drives the material, liquid outline, foreground portal and RN body;
+the captured page remains fixed in screen coordinates. Press lighting is
+transient and does not change the stored material recipe.
+
+Settings dropdowns, sort/direction/column choices, speed chips, ordinary menu
+actions, route/artist choices and confirmation buttons without text input
+support hold-and-drag selection, a spring-driven highlight and release rebound.
+Grid choices use their actual two-dimensional bounds. The native descriptor
+list is capped at 256; additional mounted rows retain guarded ordinary presses. Input fields, sliders and scrollable lists keep their normal
+interaction. Disabled choices cannot commit, and one native gesture cannot run
+both a native selection and the original RN action. Session changes reject stale
+selections and release retained gesture resources. Scroll/window clipping is
+checked at press and selection, and multiple fingers cancel the selection.
+Async lookup failures keep their original menu usable for retry. Closing releases the existing
+Jelly state instead of resetting it before the absorption spring can draw it.
+The three document/export handoffs that bypassed retained closing now wait for
+the native exit acknowledgement before opening an OS window.
+
+The 187 physical-coordinate raster epoch and bounded transient filtering remain
+in place. Source/default-parameter parity, gesture/lifecycle checks and real
+Samsung observations are recorded separately; automated checks do not establish
+that this adaptation exactly matches the demo on every RN popup.
+
 本预览仅在本机构建，不推送 GitHub，不发布 Release。

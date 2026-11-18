@@ -26,6 +26,7 @@ import expo.modules.liquidglass.menumotion.GlassForegroundPortal
 import expo.modules.liquidglass.menumotion.GlassFrameClock
 import expo.modules.liquidglass.menumotion.GlassMorphTuning
 import expo.modules.liquidglass.menumotion.GlassMotion
+import expo.modules.liquidglass.menumotion.GlassMorphFrame
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -41,8 +42,18 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   ReactPointerEventsView, Choreographer.FrameCallback, ViewTreeObserver.OnPreDrawListener {
   private val onMotionStart by EventDispatcher()
   private val onMotionComplete by EventDispatcher()
+  private val onMenuSelect by EventDispatcher()
   private val density = resources.displayMetrics.density.coerceAtLeast(0.1f)
   private val motion = GlassMotion()
+  private val liveFrame = GlassMorphFrame()
+  private val interaction = MenuMorphInteraction(this, appContext, density,
+    mapPoint = { x, y, out ->
+      val zoom = if (settled) 1f else motion.frame.contentZoom
+      out[0] = (x - localIncoming.centerX()) / max(localIncoming.width() / max(width.toFloat(), 1f) * zoom, .001f) + width / 2f
+      out[1] = (y - localIncoming.centerY()) / max(localIncoming.height() / max(height.toFloat(), 1f) * zoom, .001f) + height / 2f
+    }, requestFrame = { requestInteractionFrame() }, select = { rowId, gestureId ->
+      onMenuSelect(mapOf("sessionId" to activeSession, "rowId" to rowId, "gestureId" to gestureId))
+    })
   private val outline = GlassMorphOutline(density)
   private val contentClip = Path()
   private val localIncoming = RectF()
@@ -80,9 +91,13 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   private var emittedStart = false
   private var completedOpen: Boolean? = null
   private var targetRadius = 0f
+  private var finiteRows = false
+  private var menuDragEnabled = true
+  private var jellyFrames = 0L
+  private var plateFrames = 0L
 
   override val pointerEvents: PointerEvents
-    get() = if (interactive) PointerEvents.BOX_NONE else PointerEvents.NONE
+    get() = if (interactive || finiteInputReady()) PointerEvents.BOX_NONE else PointerEvents.NONE
 
   init {
     clipChildren = false
@@ -102,6 +117,15 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   internal fun setSourceRect(value: List<Double>?) {
     requestedSource = value?.takeIf { it.size >= 4 && it.all(Double::isFinite) }?.toList()
   }
+  internal fun setMenuRows(value: List<MenuMorphRowRecord>?) {
+    finiteRows = !value.isNullOrEmpty()
+    interaction.setRows(value)
+  }
+  internal fun setMenuDragEnabled(value: Boolean) {
+    if (!value && menuDragEnabled) { interaction.cancel(); requestInteractionFrame() }
+    menuDragEnabled = value
+  }
+  private fun finiteInputReady() = initialized && requestedReady && requestedOpen && finiteRows && menuDragEnabled
 
   /** Called after Expo has applied the whole prop batch, irrespective of order. */
   internal fun commitProps() {
@@ -113,6 +137,8 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       emittedStart = false
       completedOpen = null
       frameClock.restart(animationScale)
+      interaction.reset()
+      jellyFrames = 0L; plateFrames = 0L
       setInteractive(false)
       (getChildAt(0) as? LiquidGlassView)?.clearMenuMorph()
       releaseTrigger()
@@ -122,6 +148,15 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       invalidate()
     }
     if (initialized && motion.expanded != requestedOpen) {
+      if (!requestedOpen) {
+        interaction.close()
+        val refreshed = RectF()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && triggerSnapshot?.currentScreenBounds(refreshed) == true) {
+          source.set(refreshed)
+          motion.updateSource(source, through)
+          if (!captureEnvelope.contains(refreshed)) reserveMaterialEnvelope()
+        }
+      }
       motion.retarget(requestedOpen)
       settled = false
       completedOpen = null
@@ -135,7 +170,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       emitComplete(false)
     } else if (initialized && requestedOpen) {
       updateTarget()
-      if (!settled) beginMotion()
+      if (!settled || !interaction.motion.isSettled) beginMotion()
     }
     requestStart()
   }
@@ -152,6 +187,7 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
 
   override fun onDetachedFromWindow() {
     stopFrames()
+    interaction.reset()
     if (preDrawRegistered && viewTreeObserver.isAlive) viewTreeObserver.removeOnPreDrawListener(this)
     preDrawRegistered = false
     preDrawSeen = false
@@ -170,10 +206,10 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
 
   override fun onWindowVisibilityChanged(visibility: Int) {
     super.onWindowVisibilityChanged(visibility)
-    if (visibility != VISIBLE) stopFrames() else if (isAttachedToWindow) {
+    if (visibility != VISIBLE) { interaction.close(); stopFrames() } else if (isAttachedToWindow) {
       frameClock.restart(animationScale)
       requestStart()
-      if (initialized && !settled) beginMotion()
+      if (initialized && (!settled || !interaction.motion.isSettled)) beginMotion()
     }
   }
 
@@ -267,22 +303,37 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     }
   }
 
+  private fun requestInteractionFrame() {
+    if (!initialized || !requestedOpen || !isAttachedToWindow || windowVisibility != VISIBLE) return
+    if (!callbackPosted) frameClock.restart(animationScale)
+    applyFrame()
+    beginMotion()
+  }
+
   override fun doFrame(frameTimeNanos: Long) {
     callbackPosted = false
     if (!initialized || !isAttachedToWindow || windowVisibility != VISIBLE) return
     val seconds = frameClock.advance(frameTimeNanos, display?.refreshRate ?: 60f)
     motionFrames++
     settled = motion.advanceBy(seconds)
+    interaction.motion.advance(seconds)
+    if (!interaction.motion.jellySettled) jellyFrames++
+    if (interaction.motion.plateAlpha > .001f) plateFrames++
     applyFrame()
     if (settled) {
       setInteractive(requestedOpen)
       emitComplete(requestedOpen)
-    } else beginMotion()
+    }
+    if (!settled || (requestedOpen && !interaction.motion.isSettled)) beginMotion()
   }
 
   private fun applyFrame() {
     if (!initialized) return
-    val frame = motion.frame
+    liveFrame.copyFrom(motion.frame)
+    interaction.motion.deform(liveFrame.bounds,
+      if (source.centerX() > rootLocation[0] + rootView.width / 2f) -1f else 1f,
+      if (target.centerY() < source.centerY()) -1f else 1f)
+    val frame = liveFrame
     outline.update(frame, target.left, target.top, settled, sourceHasGlass, lockedFieldStep)
     foregroundPortal?.update(frame, target.left, target.top, sourceHasGlass, outline.smoothedField)
     localIncoming.set(frame.bounds)
@@ -296,12 +347,16 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       // The Gaussian neck can gently bulge outside either lobe's rectangle.
       materialBounds.inset(-frame.smoothing, -frame.smoothing)
     }
+    (getChildAt(0) as? LiquidGlassView)?.updateMenuPressLight(
+      target.left + interaction.motion.lightPositionX, target.top + interaction.motion.lightPositionY,
+      interaction.motion.glowValue * frame.contentProgress)
     (getChildAt(0) as? LiquidGlassView)?.updateMenuMorph(
       target.left + materialBounds.left, target.top + materialBounds.top,
       target.left + materialBounds.right, target.top + materialBounds.bottom, frame.radiusX, frame.radiusY,
       // A completely closed host is not drawn. Leave its bounded layers in
       // place until teardown rather than allocating a hidden full-size frame.
-      !settled || !requestedOpen, if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f))
+      !settled || !requestedOpen || interaction.isGestureActive || !interaction.motion.isSettled,
+      if (sourceHasGlass) 1f else frame.contentProgress.coerceIn(0f, 1f))
     val sx = localIncoming.width() / max(width.toFloat(), 1f)
     val sy = localIncoming.height() / max(height.toFloat(), 1f)
     val reveal = if (settled && requestedOpen) 1f else frame.rowsOpacity.coerceIn(0f, 1f)
@@ -343,21 +398,23 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
       drawChild(canvas, material, drawingTime)
     } finally { canvas.restoreToCount(save) }
     val portal = foregroundPortal
+    val materialView = material as? LiquidGlassView
+    fun drawRows(recording: Canvas) {
+      interaction.drawPlate(recording, localIncoming, if (settled) 1f else liveFrame.contentZoom,
+        materialView?.dark ?: false, materialView?.highlightOpacity ?: 1f)
+      for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
+    }
     if (portal != null && canvas.isHardwareAccelerated && !settled) {
-      portal.draw(canvas, foregroundBounds, true) { recording ->
-        for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
-      }
+      portal.draw(canvas, foregroundBounds, true, ::drawRows)
     } else if (portal != null && canvas.isHardwareAccelerated) {
       val contentSave = canvas.save()
       canvas.clipPath(contentClip)
-      portal.draw(canvas, foregroundBounds, false) { recording ->
-        for (index in 1 until childCount) drawChild(recording, getChildAt(index), drawingTime)
-      }
+      portal.draw(canvas, foregroundBounds, false, ::drawRows)
       canvas.restoreToCount(contentSave)
     } else {
       val contentSave = canvas.save()
       canvas.clipPath(contentClip)
-      for (index in 1 until childCount) drawChild(canvas, getChildAt(index), drawingTime)
+      drawRows(canvas)
       canvas.restoreToCount(contentSave)
     }
     // A nonglass trigger's foreground is drawn outside the glass portal, as in
@@ -366,9 +423,12 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-    if (!interactive) return false
+    if (!interactive && !finiteInputReady()) return false
     if (event.actionMasked == MotionEvent.ACTION_DOWN && !localIncoming.contains(event.x, event.y)) return false
-    return super.dispatchTouchEvent(event)
+    if (!menuDragEnabled) return super.dispatchTouchEvent(event)
+    return interaction.dispatch(event, requestedOpen && initialized) {
+      if (interactive) super.dispatchTouchEvent(event) else false
+    }
   }
 
   private fun setInteractive(value: Boolean) {
@@ -404,7 +464,9 @@ class MenuMorphView(context: Context, appContext: AppContext) : ExpoView(context
     if (motionTrace) Log.d("ResonusGlass", "menuMotion session=$activeSession open=$open " +
       "durationMs=${SystemClock.uptimeMillis() - motionStartedAt} frames=$motionFrames " +
       "portal=${foregroundPortal?.diagnostics()} " +
-      "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()}")
+      "materialRaster=${(getChildAt(0) as? LiquidGlassView)?.menuRasterDiagnostics()} " +
+      "menuJellyFrames=$jellyFrames menuPlateFrames=$plateFrames menuSelectionDispatches=${interaction.selectionDispatches} " +
+      "menuGestureCancels=${interaction.gestureCancels} triggerSnapshotPresent=${triggerSnapshot != null}")
     if (!open) { releaseTrigger(); foregroundPortal?.release() }
     onMotionComplete(mapOf("sessionId" to activeSession, "open" to open))
   }

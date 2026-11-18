@@ -20,6 +20,7 @@ function harness() {
       StyleSheet: { absoluteFill: {} } },
     '@/components/Icon': { __esModule: true, default: 'Icon' },
     '@/components/glass': { GlassPressable: 'Button' },
+    '@/components/MenuMorphItem': { MenuMorphItem: 'Button' },
     './MenuGlassCard': { MENU_GLASS_RADIUS: 28, MenuGlassCardFrame: 'Frame', MenuGlassCardHeader: 'Header' },
     'reanimated-color-picker': { __esModule: true, default: 'ColorPicker', HueSlider: 'HueSlider', Panel1: 'Panel' },
     '@/i18n': { useT: () => (text: string) => text },

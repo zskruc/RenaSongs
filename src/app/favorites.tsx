@@ -1,10 +1,11 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Favorites screen: starred songs, Spotify-style. */
 import Icon from '@/components/Icon';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
 
 import { getStarred, starredByDate, unstar } from '@/api/data';
@@ -222,7 +223,7 @@ export default function FavoritesScreen() {
       <SheetModal openRef={menuRef}>
         {(close) => (
           <>
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close();
@@ -233,8 +234,8 @@ export default function FavoritesScreen() {
             >
               <Icon name="play-forward" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Play next')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close();
@@ -244,8 +245,8 @@ export default function FavoritesScreen() {
             >
               <Icon name="list" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to queue')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => {
@@ -255,9 +256,9 @@ export default function FavoritesScreen() {
             >
               <Icon name="add" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-            </Pressable>
+            </MenuMorphItem>
             {canAutoDownload ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close();
@@ -284,12 +285,12 @@ export default function FavoritesScreen() {
                 <Text style={[styles.actionText, autoDownload && { color: colors.accent }]}>
                   {t('Auto-download')}
                 </Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
             {/* Same bulk delete albums and playlists have: clears whatever of
                 these songs is on the device, half-downloaded lists included. */}
             {hasDownloads ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close(() => setConfirmDeleteDl(true));
@@ -297,7 +298,7 @@ export default function FavoritesScreen() {
               >
                 <Icon name="trash-outline" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Delete downloads')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
           </>
         )}

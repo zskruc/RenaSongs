@@ -17,9 +17,11 @@ for motion_source in "$SOURCE"/*.kt; do
   esac
 done
 "$JAVA" -cp "$LIBS" org.jetbrains.kotlin.cli.jvm.K2JVMCompiler -no-stdlib -no-reflect -jvm-target 17 -cp "$LIBS" -d "$OUT" \
-  "${MOTION_SOURCES[@]}" "$SOURCE/../MenuMaterialGeometry.kt" "$SOURCE/../MenuMaterialRaster.kt" "$HERE/AndroidGraphics.kt" "$HERE/MenuMorphHarness.kt" "$HERE/PortalRasterHarness.kt" "$HERE/MaterialRasterHarness.kt" "$HERE/MaterialRasterEpochHarness.kt"
+  "${MOTION_SOURCES[@]}" "$SOURCE/../MenuMaterialGeometry.kt" "$SOURCE/../MenuMaterialRaster.kt" "$HERE/AndroidGraphics.kt" "$HERE/MenuMorphHarness.kt" "$HERE/PortalRasterHarness.kt" "$HERE/MaterialRasterHarness.kt" "$HERE/MaterialRasterEpochHarness.kt" "$HERE/JellyInteractionHarness.kt"
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MenuMorphHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.PortalRasterHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MaterialRasterHarnessKt
 "$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.MaterialRasterEpochHarnessKt
+"$JAVA" -cp "$OUT:$LIBS" expo.modules.liquidglass.menumotion.JellyInteractionHarnessKt
 node "$HERE/stationary-source.mjs"
+node "$HERE/interaction-source.mjs"

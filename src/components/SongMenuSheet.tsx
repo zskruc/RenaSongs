@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Shared floating card with actions for a song (⋯ menu). */
 import Icon from '@/components/Icon';
@@ -120,14 +121,16 @@ function Action({
   icon,
   label,
   onPress,
+  keepOpen = false,
 }: {
   icon: keyof typeof Icon.glyphMap;
   label: string;
   onPress: () => void;
+  keepOpen?: boolean;
 }) {
   const card = useContext(MenuCardContext);
   return (
-    <Pressable
+    <MenuMorphItem menuItemId={`song:${icon}:${label}`} keepOpen={keepOpen}
       accessibilityRole="button"
       accessibilityLabel={label}
       style={({ pressed }) => [styles.action, card && styles.cardAction, pressed && { opacity: 0.6 }]}
@@ -135,7 +138,7 @@ function Action({
     >
       <Icon name={icon} size={card ? 20 : 24} color={colors.text} />
       <Text style={[styles.actionText, card && styles.cardActionText]}>{label}</Text>
-    </Pressable>
+    </MenuMorphItem>
   );
 }
 
@@ -148,15 +151,15 @@ function PlaybackModeActions({ canChange }: { canChange: () => boolean }) {
   const repeatLabel = repeat === 'one' ? t('Repeat one song') : repeat === 'all' ? t('Repeat all songs') : t('Off');
   return (
     <>
-      <Pressable accessibilityRole="switch" accessibilityLabel={t('Shuffle')}
+      <MenuMorphItem keepOpen accessibilityRole="switch" accessibilityLabel={t('Shuffle')}
         accessibilityState={{ checked: shuffle }}
         onPress={() => { if (canChange()) usePlayerStore.getState().toggleShuffle(); }}
         style={({ pressed }) => [styles.action, card && styles.cardAction, pressed && { opacity: .6 }]}>
         <Icon name="shuffle" size={card ? 20 : 24} color={colors.text} />
         <Text style={[styles.actionText, card && styles.cardActionText, { flex: 1 }]}>{t('Shuffle')}</Text>
         <Text style={styles.modeValue}>{shuffle ? t('On') : t('Off')}</Text>
-      </Pressable>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${t('Repeat')}: ${repeatLabel}`}
+      </MenuMorphItem>
+      <MenuMorphItem keepOpen accessibilityRole="button" accessibilityLabel={`${t('Repeat')}: ${repeatLabel}`}
         accessibilityValue={{ text: repeatLabel }}
         onPress={() => { if (canChange()) usePlayerStore.getState().cycleRepeat(); }}
         style={({ pressed }) => [styles.action, card && styles.cardAction, pressed && { opacity: .6 }]}>
@@ -165,7 +168,7 @@ function PlaybackModeActions({ canChange }: { canChange: () => boolean }) {
           <Text style={[styles.actionText, card && styles.cardActionText]}>{t('Repeat')}</Text>
           <Text style={styles.modeValue}>{repeatLabel}</Text>
         </View>
-      </Pressable>
+      </MenuMorphItem>
       <View style={styles.divider} />
     </>
   );
@@ -354,25 +357,26 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
   /**
    * Copies the download into a folder the user picks (#57).
    *
-   * The sheet is only closed once a folder has been chosen: cancelling the
-   * system picker leaves the menu where it was, which is what cancelling
-   * should do. The copy then runs on its own, announced by the toast, because
-   * a large file over a document provider is not instant.
+   * Finish the retained menu exit before handing focus to the system picker.
+   * Cancelling that picker does not start an export. A large copy then runs on
+   * its own, announced by the toast rather than keeping a popup attached.
    */
   async function saveToFolder() {
     if (!isOpenSession() || !dlUri) return;
     const ticket = beginRequest();
     actionClosing.current = true;
-    closeNow();
-    const folder = await pickFolder();
-    if (!folder || !requests.owns(ticket)) return;
-    toast(t('Exporting…'));
-    try {
-      const name = await exportToFolder(song, dlUri, folder);
-      if (requests.owns(ticket)) toast(t('Saved as “{name}”', { name }));
-    } catch {
-      if (requests.owns(ticket)) toast(t("Couldn't save the file"));
-    }
+    dismiss(async () => {
+      if (!requests.owns(ticket) || !closeNow()) return;
+      const folder = await pickFolder();
+      if (!folder || !requests.owns(ticket)) return;
+      toast(t('Exporting…'));
+      try {
+        const name = await exportToFolder(song, dlUri, folder);
+        if (requests.owns(ticket)) toast(t('Saved as “{name}”', { name }));
+      } catch {
+        if (requests.owns(ticket)) toast(t("Couldn't save the file"));
+      }
+    });
   }
 
   /** Hands the download to another app through the system share sheet (#57). */
@@ -380,20 +384,17 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
     if (!isOpenSession() || !dlUri) return;
     const ticket = beginRequest();
     actionClosing.current = true;
-    closeNow();
-    try {
-      // Both of these name the button that was pressed, not the mechanism
-      // behind it: "share" in this app is the link a server mints, which is in
-      // this very menu and is a different thing (raised by @ztx-lyghters).
-      // They also say different things: this one is the system reporting it
-      // has no share sheet, before anything has been attempted, and the one
-      // below is an attempt that failed.
-      if (!(await shareSongFile(song, dlUri)) && requests.owns(ticket)) {
-        toast(t("Sending to another app isn't available on this device"));
+    dismiss(async () => {
+      if (!requests.owns(ticket) || !closeNow()) return;
+      try {
+        // Distinguish an unavailable system share sheet from a failed send.
+        if (!(await shareSongFile(song, dlUri)) && requests.owns(ticket)) {
+          toast(t("Sending to another app isn't available on this device"));
+        }
+      } catch {
+        if (requests.owns(ticket)) toast(t("Couldn't send the file"));
       }
-    } catch {
-      if (requests.owns(ticket)) toast(t("Couldn't send the file"));
-    }
+    });
   }
 
   function removeFromList() {
@@ -490,12 +491,12 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
             <View>
               {mode === 'sleep' ? (
                 <View>
-                  <Pressable style={actionStyle} onPress={() => setMode('actions')}>
+                  <MenuMorphItem keepOpen style={actionStyle} onPress={() => setMode('actions')}>
                     <Icon name="chevron-back" size={rowIconSize} color={colors.text} />
                     <Text style={actionTextStyle}>{t('Sleep timer')}</Text>
-                  </Pressable>
+                  </MenuMorphItem>
                   {[15, 30, 45, 60].map((m) => (
-                    <Pressable
+                    <MenuMorphItem
                       key={m}
                       style={({ pressed }) => [...actionStyle, pressed && { opacity: 0.6 }]}
                       onPress={() => {
@@ -506,9 +507,9 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                     >
                       <Icon name="time-outline" size={rowIconSize} color={colors.text} />
                       <Text style={actionTextStyle}>{t('{n} minutes', { n: m })}</Text>
-                    </Pressable>
+                    </MenuMorphItem>
                   ))}
-                  <Pressable
+                  <MenuMorphItem
                     style={({ pressed }) => [...actionStyle, pressed && { opacity: 0.6 }]}
                     onPress={() => {
                       setSleepAtSongEnd();
@@ -518,9 +519,9 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                   >
                     <Icon name="musical-note-outline" size={rowIconSize} color={colors.text} />
                     <Text style={actionTextStyle}>{t('When the song ends')}</Text>
-                  </Pressable>
+                  </MenuMorphItem>
                   {sleepEndsAt || sleepAtSongEnd ? (
-                    <Pressable
+                    <MenuMorphItem
                       style={({ pressed }) => [...actionStyle, pressed && { opacity: 0.6 }]}
                       onPress={() => {
                         cancelSleepTimer();
@@ -532,15 +533,15 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                       <Text style={[...actionTextStyle, { color: colors.danger }]}>
                         {t('Turn off')}
                       </Text>
-                    </Pressable>
+                    </MenuMorphItem>
                   ) : null}
                 </View>
               ) : mode === 'export' ? (
                 <View>
-                  <Pressable style={actionStyle} onPress={() => setMode('actions')}>
+                  <MenuMorphItem keepOpen style={actionStyle} onPress={() => setMode('actions')}>
                     <Icon name="chevron-back" size={rowIconSize} color={colors.text} />
                     <Text style={actionTextStyle}>{t('Export')}</Text>
-                  </Pressable>
+                  </MenuMorphItem>
                   {/* Said before the file leaves, not after: a download made at
                       a lower bitrate is a worse copy than the server's, and the
                       only moment that matters is while deciding to hand it to
@@ -569,10 +570,10 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                 </View>
               ) : mode === 'rating' ? (
                 <View>
-                  <Pressable style={actionStyle} onPress={() => setMode('actions')}>
+                  <MenuMorphItem keepOpen style={actionStyle} onPress={() => setMode('actions')}>
                     <Icon name="chevron-back" size={rowIconSize} color={colors.text} />
                     <Text style={actionTextStyle}>{t('Rate')}</Text>
-                  </Pressable>
+                  </MenuMorphItem>
                   <View style={styles.ratingRow}>
                     <StarRating
                       id={song.id}
@@ -608,6 +609,7 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                     <Action
                       icon="remove-circle-outline"
                       label={t('Remove from playlist')}
+                      keepOpen
                       onPress={removeFromList}
                     />
                   ) : null}
@@ -702,7 +704,7 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                     <Action
                       icon="save-outline"
                       label={t('Export')}
-                      onPress={() => setMode('export')}
+                      keepOpen onPress={() => setMode('export')}
                     />
                   ) : null}
                   {showLyrics ? (
@@ -810,7 +812,7 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                       radio. Offline is recorded and uploaded on reconnect (the local
                       profile has no account, so it doesn't appear there). */}
                   {!!auth && serverType !== 'jellyfin' && !song.url ? (
-                    <Action icon="star-outline" label={t('Rate')} onPress={() => setMode('rating')} />
+                    <Action keepOpen icon="star-outline" label={t('Rate')} onPress={() => setMode('rating')} />
                   ) : null}
                   {/* Only with a server that mints share links (`useCanShare`),
                       and never for a station: its `url` is not the server's to
@@ -835,7 +837,7 @@ function SongMenuContent({ song, session }: { song: Song; session: number }) {
                           ? t('Sleep timer (end of song)')
                           : t('Sleep timer')
                     }
-                    onPress={() => setMode('sleep')}
+                    keepOpen onPress={() => setMode('sleep')}
                   />
                   <Action
                     icon="information-circle-outline"

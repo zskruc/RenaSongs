@@ -27,6 +27,7 @@ import { CONTENT_MAX_WIDTH } from '@/hooks/useScreenSize';
 import { colors, fontSize, radius, spacing, SCREEN_BOTTOM_PADDING, themed, tracking, useTheme, useThemeMode } from '@/theme';
 import { BackChevron } from './BackChevron';
 import { MenuMorphSurface, menuGlassScrimColor } from './MenuGlassCard';
+import { MenuMorphItem } from './MenuMorphItem';
 import { DynamicGlassBackdrop, StaticGlassBackdropProvider } from './glass/StaticGlassBackdropContext';
 import { SettingsScrollPaddingContext } from './SettingsScrollPaddingContext';
 
@@ -457,8 +458,10 @@ export function SelectList<T extends string | number | boolean>({
               {options.map((opt) => {
                 const isActive = opt.value === value;
                 return (
-                  <Pressable
+                  <MenuMorphItem
                     key={String(opt.value)}
+                    menuItemId={`option:${String(opt.value)}`}
+                    selected={isActive}
                     disabled={disabled}
                     style={({ pressed }) => [settingsStyles.menuItem, pressed && { opacity: 0.6 }]}
                     onPress={() => {
@@ -469,7 +472,7 @@ export function SelectList<T extends string | number | boolean>({
                       {opt.label}
                     </Text>
                     {isActive ? <Icon name="checkmark" size={18} color={accent} /> : null}
-                  </Pressable>
+                  </MenuMorphItem>
                 );
               })}
             </ScrollView>

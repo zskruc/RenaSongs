@@ -14,6 +14,7 @@
 import Icon from '@/components/Icon';
 import { useMediaControls, openSystemAudioOutput, systemMediaControlsAvailable } from '@/hooks/useMediaControls';
 import { MenuGlassCardFrame, MenuGlassCardHeader } from '@/components/MenuGlassCard';
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, AppState, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
@@ -59,7 +60,7 @@ function Row({
   action?: React.ReactNode;
 }) {
   return (
-    <Pressable
+    <MenuMorphItem menuItemId={`output:${label}`} keepOpen selected={active} menuDrag={!action}
       style={({ pressed }) => [styles.action, pressed && !!onPress && { opacity: 0.6 }]}
       disabled={!onPress}
       onPress={onPress}
@@ -71,7 +72,7 @@ function Row({
       <View style={styles.trailing}>
         {action ?? (active ? <Icon name="checkmark" size={20} color={colors.accent} /> : null)}
       </View>
-    </Pressable>
+    </MenuMorphItem>
   );
 }
 
@@ -401,7 +402,7 @@ export function OutputSheet({ visible, onClose }: { visible: boolean; onClose: (
               {devices.length === 0 ? (
                 <Text style={styles.scanText}>{t('No devices found')}</Text>
               ) : null}
-              <Pressable
+              <MenuMorphItem keepOpen
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => void upnpSearch()}
               >
@@ -409,7 +410,7 @@ export function OutputSheet({ visible, onClose }: { visible: boolean; onClose: (
                 <Text style={[styles.actionText, { color: colors.textSecondary }]}>
                   {t('Search again')}
                 </Text>
-              </Pressable>
+              </MenuMorphItem>
             </>
           ) : null}
         </ScrollView>

@@ -12,10 +12,11 @@
  */
 import Icon from '@/components/Icon';
 import { memo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { type SortDirection } from '@/api/subsonic';
 import { SheetModal } from '@/components/SheetModal';
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { useT } from '@/i18n';
 import { colors, fontSize, radius, spacing, themed, useTheme } from '@/theme';
 
@@ -53,12 +54,13 @@ export const SortSheet = memo(function SortSheet({
           {options.map((o) => {
             const active = field === o.key;
             return (
-              <Pressable
+              <MenuMorphItem
                 key={o.key}
+                menuItemId={`sort:${o.key}`}
+                selected={active}
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
-                  onPick(o.key, dir ?? 'asc');
-                  close();
+                  close.select(() => onPick(o.key, dir ?? 'asc'));
                 }}
               >
                 <Text style={[styles.actionText, active && { color: colors.accent }]}>
@@ -72,7 +74,7 @@ export const SortSheet = memo(function SortSheet({
                     style={{ marginLeft: 'auto' }}
                   />
                 ) : null}
-              </Pressable>
+              </MenuMorphItem>
             );
           })}
 
@@ -84,12 +86,13 @@ export const SortSheet = memo(function SortSheet({
             {(['asc', 'desc'] as SortDirection[]).map((d) => {
               const active = dir === d;
               return (
-                <Pressable
+                <MenuMorphItem
                   key={d}
+                  menuItemId={`direction:${d}`}
+                  selected={active}
                   style={[styles.dirChip, active && { backgroundColor: colors.accent }]}
                   onPress={() => {
-                    onPick(field, d);
-                    close();
+                    close.select(() => onPick(field, d));
                   }}
                 >
                   <Icon
@@ -100,7 +103,7 @@ export const SortSheet = memo(function SortSheet({
                   <Text style={[styles.dirChipText, active && { color: colors.onAccent }]}>
                     {d === 'asc' ? t('Ascending') : t('Descending')}
                   </Text>
-                </Pressable>
+                </MenuMorphItem>
               );
             })}
           </View>

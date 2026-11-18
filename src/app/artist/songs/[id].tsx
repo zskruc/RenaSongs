@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /**
  * Every song by one artist, as a list (#139 asked for it next to "Popular").
@@ -32,7 +33,7 @@ import Icon from '@/components/Icon';
 import { useQuery } from '@tanstack/react-query';
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import { useShallow } from 'zustand/react/shallow';
 
@@ -429,7 +430,7 @@ export default function ArtistSongsScreen() {
       <SheetModal openRef={menuRef}>
         {(close) => (
           <>
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => openPlaylistPicker(all));
@@ -437,8 +438,8 @@ export default function ArtistSongsScreen() {
             >
               <Icon name="add-circle-outline" size={22} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => { void deleteArtistDownloads(); });
@@ -448,7 +449,7 @@ export default function ArtistSongsScreen() {
                   red is kept for what does not, like deleting a playlist. */}
               <Icon name="trash-outline" size={22} color={colors.text} />
               <Text style={styles.actionText}>{t('Delete downloads')}</Text>
-            </Pressable>
+            </MenuMorphItem>
           </>
         )}
       </SheetModal>

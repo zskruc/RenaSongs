@@ -1,7 +1,8 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeEpisodeDownloads } from '@/lib/downloadRemoval';
 /** One device-owned podcast menu, presented by the existing floating glass card. */
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, Text, View } from 'react-native';
+import { Linking, Text, View } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 
@@ -73,11 +74,11 @@ export function PodcastMenuSheet() {
   const perform = (value: Target, run: () => Promise<unknown>) => {
     if (current(value)) void run().catch(() => { if (current(value)) toast(t("Couldn't complete the action")); });
   };
-  const row = (icon: keyof typeof Icon.glyphMap, label: string, action: () => void, danger = false) => (
-    <Pressable key={label} style={({ pressed }) => [styles.row, pressed && { opacity: .6 }]} onPress={action} accessibilityRole="button">
+  const row = (icon: keyof typeof Icon.glyphMap, label: string, action: () => void, danger = false, keepOpen = false) => (
+    <MenuMorphItem key={label} keepOpen={keepOpen} style={({ pressed }) => [styles.row, pressed && { opacity: .6 }]} onPress={action} accessibilityRole="button">
       <Icon name={icon} size={23} color={danger ? colors.danger : colors.text} />
       <Text style={[styles.action, danger && { color: colors.danger }]}>{label}</Text>
-    </Pressable>
+    </MenuMorphItem>
   );
   return <>
     <SheetModal key={`${owner}|${hostId(auth)}|${offline}`} openRef={openRef} onClosed={() => setTarget(null)}>
@@ -88,7 +89,7 @@ export function PodcastMenuSheet() {
         const list = episode ? [episode] : episodes.data ?? [];
         const downloaded = list.filter((item) => files[item.id]);
         if (mode === 'sleep') return <>
-          {row('chevron-back', t('Sleep timer'), () => setMode('actions'))}
+          {row('chevron-back', t('Sleep timer'), () => setMode('actions'), false, true)}
           {[15, 30, 45, 60].map((minutes) => row('time-outline', t('{n} minutes', { n: minutes }), () => close.select(() => {
             if (current(value)) usePlayerStore.getState().setSleepTimer(minutes);
           })))}
@@ -100,7 +101,7 @@ export function PodcastMenuSheet() {
           }))}
         </>;
         if (mode === 'notes') return <>
-          {row('chevron-back', t('Episode notes'), () => setMode('actions'))}
+          {row('chevron-back', t('Episode notes'), () => setMode('actions'), false, true)}
           <Text style={[styles.action, { paddingVertical: spacing.md }]}>{episode?.description}</Text>
         </>;
         return <>
@@ -134,7 +135,7 @@ export function PodcastMenuSheet() {
             {value.extras?.queue ? row('list-outline', t('Queue'), () => close(() => { if (current(value)) router.push('/queue'); })) : null}
             {value.extras?.speed ? row('speedometer-outline', t('Playback speed'), () => close(() => { if (current(value)) value.extras?.speed?.(); })) : null}
             {value.extras?.devices ? row('volume-high-outline', t('Output device'), () => close(() => { if (current(value)) value.extras?.devices?.(); })) : null}
-            {row('moon-outline', t('Sleep timer'), () => setMode('sleep'))}
+            {row('moon-outline', t('Sleep timer'), () => setMode('sleep'), false, true)}
           </> : <>
             {row('settings-outline', t('Podcast settings'), () => close(() => { if (current(value)) setSettingsTarget(value); }))}
             {row('checkmark-done-outline', t('Mark all as played'), () => close(() => { if (current(value)) setMarkConfirmation(value); }))}

@@ -13,10 +13,11 @@
  * opening it re-renders the modal instead of the player behind it.
  */
 import { memo, useState } from 'react';
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView, Text, View, useWindowDimensions } from 'react-native';
 
 import { MenuGlassCardHeader } from '@/components/MenuGlassCard';
 import { SheetModal } from '@/components/SheetModal';
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { useT } from '@/i18n';
 import { PLAYBACK_SPEEDS, usePlayerStore } from '@/store/player';
 import { fontSize, radius, spacing, themed, useTheme } from '@/theme';
@@ -54,8 +55,10 @@ export const SpeedSheet = memo(function SpeedSheet({
               {PLAYBACK_SPEEDS.map((v) => {
                 const active = v === speed;
                 return (
-                  <Pressable
+                  <MenuMorphItem
                     key={v}
+                    menuItemId={`speed:${v}`}
+                    keepOpen selected={active} fullWidth={false}
                     style={({ pressed }) => [
                       styles.chip,
                       buttonWidth != null ? { width: buttonWidth } : styles.initialChip,
@@ -69,7 +72,7 @@ export const SpeedSheet = memo(function SpeedSheet({
                     <Text style={[styles.chipText, active && { color: colors.onAccent }]}>
                       {`${v}×`}
                     </Text>
-                  </Pressable>
+                  </MenuMorphItem>
                 );
               })}
             </View>

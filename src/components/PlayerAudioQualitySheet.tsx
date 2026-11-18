@@ -1,6 +1,7 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 /** AM++-inspired floating quality card using Resonus's own playback metadata. */
 import { type MutableRefObject } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 
 import type { Song } from '@/api/subsonic';
 import Icon from '@/components/Icon';
@@ -39,16 +40,16 @@ function QualityContent({ song, close }: { song: Song; close: (after?: () => voi
       <Text style={styles.source}>{sourceLabel}</Text>
       <Text style={styles.description}>{t('Quality follows the source and playback settings; the output device may process audio separately.')}</Text>
       <View style={styles.actions}>
-        <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]}
+        <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]}
           accessibilityRole="button" onPress={() => close(() => useSongInfo.getState().open(song))}>
           <Icon name="information-circle-outline" size={21} color={colors.text} />
           <Text style={styles.actionText}>{t('Song info')}</Text>
-        </Pressable>
-        <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]}
+        </MenuMorphItem>
+        <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]}
           accessibilityRole="button" onPress={() => close(() => pushOnce('/settings/playback'))}>
           <Icon name="options-outline" size={21} color={colors.text} />
           <Text style={styles.actionText}>{t('Quality & playback')}</Text>
-        </Pressable>
+        </MenuMorphItem>
       </View>
       </ScrollView>
     </>

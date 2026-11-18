@@ -1,3 +1,4 @@
+import { MenuMorphItem } from '@/components/MenuMorphItem';
 import { removeSongDownloads } from '@/lib/downloadRemoval';
 /** Playlist detail with its songs. */
 import { GlassPressable } from '@/components/glass';
@@ -928,10 +929,10 @@ export default function PlaylistScreen() {
       <SheetModal openRef={menuRef}>
         {(close) => (
           <>
-            <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]} onPress={() => { close(); router.push({ pathname: '/settings/playlist-recovery', params: { playlistId: id } }); }}>
+            <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: .6 }]} onPress={() => close(() => router.push({ pathname: '/settings/playlist-recovery', params: { playlistId: id } }))}>
               <Icon name="refresh-outline" size={24} color={colors.text} /><Text style={styles.actionText}>{t('Playlist recovery')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close();
@@ -942,8 +943,8 @@ export default function PlaylistScreen() {
             >
               <Icon name="play-forward" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Play next')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close();
@@ -953,8 +954,8 @@ export default function PlaylistScreen() {
             >
               <Icon name="list" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to queue')}</Text>
-            </Pressable>
-            <Pressable
+            </MenuMorphItem>
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => {
@@ -964,9 +965,9 @@ export default function PlaylistScreen() {
             >
               <Icon name="add" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Add to a playlist')}</Text>
-            </Pressable>
+            </MenuMorphItem>
             {canReorder ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close(openReorder);
@@ -974,9 +975,9 @@ export default function PlaylistScreen() {
               >
                 <Icon name="swap-vertical" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Reorder')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => setEditing(true));
@@ -984,9 +985,9 @@ export default function PlaylistScreen() {
             >
               <Icon name="create-outline" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Edit playlist')}</Text>
-            </Pressable>
+            </MenuMorphItem>
             {canAutoDownload ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   // Turning it ON downloads the whole list right away and keeps
@@ -1010,27 +1011,26 @@ export default function PlaylistScreen() {
                 <Text style={[styles.actionText, autoDownload && { color: colors.accent }]}>
                   {t('Auto-download')}
                 </Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
             {!offline ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
-                  close();
-                  void onRefresh();
+                  close.select(() => { void onRefresh(); });
                 }}
               >
                 <Icon name="refresh" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Refresh')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
-            <Pressable style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
+            <MenuMorphItem style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => close(() => router.push({ pathname: '/settings/playlist-exchange', params: { playlistId: id } }))}>
               <Icon name="document-text-outline" size={24} color={colors.text} />
               <Text style={styles.actionText}>{t('Playlist import and export')}</Text>
-            </Pressable>
+            </MenuMorphItem>
             {canShare ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close(() => useSharePicker.getState().open({ id, name: data.playlist.name }));
@@ -1038,13 +1038,13 @@ export default function PlaylistScreen() {
               >
                 <Icon name="share-social-outline" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Share')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
             {/* The album's menu has had this since #47; this one is a screen of
                 its own, so it never got it. Same action: clears whatever of
                 these songs is on the device, half-downloaded lists included. */}
             {hasDownloads ? (
-              <Pressable
+              <MenuMorphItem
                 style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
                 onPress={() => {
                   close(() => setConfirmDeleteDl(true));
@@ -1052,10 +1052,10 @@ export default function PlaylistScreen() {
               >
                 <Icon name="trash-outline" size={24} color={colors.text} />
                 <Text style={styles.actionText}>{t('Delete downloads')}</Text>
-              </Pressable>
+              </MenuMorphItem>
             ) : null}
             <View style={styles.actionDivider} />
-            <Pressable
+            <MenuMorphItem
               style={({ pressed }) => [styles.action, pressed && { opacity: 0.6 }]}
               onPress={() => {
                 close(() => setDeleting(true));
@@ -1063,7 +1063,7 @@ export default function PlaylistScreen() {
             >
               <Icon name="trash-outline" size={24} color={colors.danger} />
               <Text style={[styles.actionText, { color: colors.danger }]}>{t('Delete playlist')}</Text>
-            </Pressable>
+            </MenuMorphItem>
           </>
         )}
       </SheetModal>

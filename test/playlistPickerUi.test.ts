@@ -65,6 +65,7 @@ function pickerHarness() {
   const deps: Record<string, any> = {
     react, 'react/jsx-runtime': { jsx: (type: unknown, props: object) => ({ type, props }), jsxs: (type: unknown, props: object) => ({ type, props }) },
     'react-native': { ActivityIndicator: 'Spinner', Modal: 'Modal', Pressable: 'Pressable', ScrollView: 'Scroll', Text: 'Text', View: 'View', StyleSheet: { absoluteFill: {} } },
+    '@/components/MenuMorphItem': { MenuMorphItem: 'Pressable' },
     '@tanstack/react-query': { useQuery: () => ({ data: lists, isLoading: false }), useQueryClient: () => ({ invalidateQueries: (value: unknown) => invalidations.push(value) }) },
     '@/api/data': {
       canEditPlaylist: (playlist: Playlist) => rules.canEditTracks(playlist, auth.auth.username), COVER: { thumb: 96 }, coverArtUrl: () => undefined,

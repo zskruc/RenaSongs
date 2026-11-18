@@ -184,6 +184,12 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
   private var menuRasterActualWidth = 0
   private var menuRasterActualHeight = 0
   private var menuRasterCommittedScale = 1f
+  private var menuPressX = 0f
+  private var menuPressY = 0f
+  private var menuPressGlow = 0f
+  private var menuPressDirty = false
+  private var menuPressVersion by mutableIntStateOf(0)
+  private val menuPressLight by lazy { if (Build.VERSION.SDK_INT >= 33) MenuPressLight() else null }
   private var menuMaterialCapacity by mutableStateOf(IntSize.Zero)
   private var menuMaterialVersion by mutableIntStateOf(0)
   private var menuPlacementVersion by mutableIntStateOf(0)
@@ -401,7 +407,8 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
       menuCornerRadiusPx = radius
       menuMorphShape = RoundedCornerShape((radius / resources.displayMetrics.density).dp)
     }
-    if (!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged) return
+    if (!geometryChanged && !radiusChanged && !rasterChanged && !opacityChanged && !menuPressDirty) return
+    menuPressDirty = false
     // Measurement owns only this Compose drawing child, as with the native dock.
     if (menuMaterial.sizeChanged || rasterChanged) menuMaterialVersion++
     if (menuMaterial.placementChanged || rasterChanged) menuPlacementVersion++
@@ -411,6 +418,14 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     // An extra requestLayout here would enqueue a second Android layout per tick.
     composeView.invalidate()
     invalidate()
+  }
+
+  internal fun updateMenuPressLight(x: Float, y: Float, glow: Float) {
+    val amount = glow.coerceIn(0f, 1f)
+    if (menuPressX == x && menuPressY == y && menuPressGlow == amount) return
+    menuPressX = x; menuPressY = y; menuPressGlow = amount
+    menuPressDirty = true
+    menuPressVersion++
   }
 
   internal fun clearMenuMorph() {
@@ -424,6 +439,9 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
     composeView.scaleX = 1f
     composeView.scaleY = 1f
     menuMorphShape = null
+    menuPressGlow = 0f
+    menuPressDirty = false
+    menuPressVersion++
     menuCornerRadiusPx = Float.NaN
     menuMaterialVersion++
     menuPlacementVersion++
@@ -1010,6 +1028,16 @@ open class LiquidGlassView(context: Context, appContext: AppContext) : ExpoView(
               }
             },
             onDrawFront = {
+              @Suppress("UNUSED_VARIABLE") val pressVersion = menuPressVersion
+              if (menuMaterial.active && menuPressGlow > .001f) {
+                getLocationOnScreen(sampleLocation)
+                drawIntoCanvas { canvas ->
+                  menuPressLight?.draw(canvas.nativeCanvas, size.width, size.height,
+                    menuCornerRadiusPx, resources.displayMetrics.density, epoch.scale,
+                    menuPressX - sampleLocation[0] - opticalMaterialOffsetX,
+                    menuPressY - sampleLocation[1] - opticalMaterialOffsetY, menuPressGlow)
+                }
+              }
               if (amPlusButtonHighlight != null && dockRole == "mini") {
                 with(amPlusButtonHighlight) {
                   draw(buttonPressProgress,

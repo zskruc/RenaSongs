@@ -6,6 +6,7 @@ import ts from 'typescript';
 
 import { MenuRequestScope } from '@/lib/menuRequest';
 import { MenuMorphSession } from '@/lib/menuMorph';
+import { MenuItemRegistry } from '@/lib/menuItems';
 
 type Element = { type: any; key?: string; props: Record<string, any> };
 type Scope = { slots: any[]; cursor: number };
@@ -48,6 +49,7 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
       return context;
     },
     useContext: (context: { current: unknown }) => context.current,
+    useSyncExternalStore: (_subscribe: unknown, getSnapshot: () => unknown) => getSnapshot(),
     useCallback: (callback: unknown, deps: unknown[]) => memo(() => callback, deps),
     useEffect: (create: () => unknown, deps: unknown[]) => {
       const state = slot(() => ({ deps: undefined as unknown[] | undefined, cleanup: undefined as any }));
@@ -75,6 +77,8 @@ function harness(kind: 'speed' | 'actions' | 'hook' | 'edges' = 'actions') {
     'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 20, right: 0, bottom: 20, left: 0 }) },
     '@/components/Icon': { __esModule: true, default: 'Icon' },
     '@/components/glass': { GlassPressable: 'GlassPressable' }, '@/components/MenuGlassBackdrop': { MenuGlassBackdrop: 'Glass' },
+    '@/components/MenuMorphItem': { MenuMorphItem: 'Pressable', MenuItemsContext: react.createContext(null) },
+    '@/lib/menuItems': { MenuItemRegistry },
     '@/lib/menuRequest': { MenuRequestScope }, '@/i18n': { useT: () => (value: string) => value },
     '@/lib/menuMorph': { MenuMorphSession },
     '@/lib/menuOrigin': { takeMenuOrigin: () => null, captureMenuTouchStart() {}, captureMenuTouchMove() {} },
