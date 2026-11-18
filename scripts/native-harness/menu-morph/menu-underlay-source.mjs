@@ -95,9 +95,30 @@ assert.ok(material.includes('captured.menuUnderlay?.let {') &&
   material.includes('snapshot?.drawMenuScrim(canvas, recorded.geometry, originX, originY)'),
   'Cached and immediate inputs must paint the same current scrim before blur/lens, without baking opacity into the cache key');
 assert.ok(preDraw.includes('if (liveMenuPaint) notifyBackdropDrawingChanged(visible)') &&
-  source.includes('BackdropSceneChanges(includeGlassContent = true)') &&
+  source.includes('BackdropSceneChanges(includeGlassContent = true, observeLeafDirty = false)') &&
   scene.includes('(!includeGlassContent && WindowBackdrops.isGlassContainer(view, root))'),
   'Scrim-only animation must repaint live; real underlay labels/artwork/status must still invalidate cached content');
+assert.ok(scene.includes('private val observeLeafDirty: Boolean = true') &&
+  scene.includes('val changed = signatureChanged || (observeLeafDirty && dirtyLeaf)') &&
+  scene.includes('else if (dirtyLeaf) leafOnlyObservationCount++') &&
+  scene.includes('else if (view.isDirty)') &&
+  source.includes('private val backgroundChanges = BackdropSceneChanges()'),
+  'Only trusted-menu metadata mode may ignore level-triggered leaf dirtiness; ordinary capture must preserve it and observations remain counted');
+for (const metadata of ['view.matrix.getValues', 'view.scrollY', 'view.visibility',
+  'view.alpha.toRawBits()', 'view.imageMatrix.getValues', 'view.currentTextColor',
+  'text[index].code', 'view.progress', 'drawable.level', 'drawable.state'])
+  assert.ok(scene.includes(metadata), `The menu dirty-level fix must retain real source metadata: ${metadata}`);
+const activityDraw = section('private val menuUnderlayDrawListener =', 'private var failureClass');
+assert.ok(activityDraw.includes('!WindowBackdrops.isCapturing && !menuSourceRecording') &&
+  activityDraw.includes('menuProgram != null && nativeMenuScrim() != null') &&
+  activityDraw.includes('sceneVersion++') && activityDraw.includes('requestFrameClock()') &&
+  activityDraw.includes('root.invalidate()') &&
+  source.includes('addOnDrawListener(menuUnderlayDrawListener)') &&
+  source.includes('removeOnDrawListener(menuUnderlayDrawListener)'),
+  'Trusted menu must still invalidate custom Canvas/drawable content on a real Activity draw, with paired observer lifetime and manual-record guards');
+assert.ok(source.includes('"menuMetadataChanges" to menuBackgroundChanges.signatureChangeCount') &&
+  source.includes('"menuLeafOnlyObservations" to menuBackgroundChanges.leafOnlyObservationCount'),
+  'Cache proof must distinguish metadata changes from repeated dirty-only observations without per-frame logging');
 const bounds = material.slice(material.indexOf('internal fun getMaterialBoundsOnScreen('), material.indexOf('internal fun reserveMenuMorph('));
 assert.ok(bounds.includes('if (menuMaterial.active)') && bounds.includes('menuMaterial.captureLeft') &&
   bounds.includes('menuMaterial.captureRight') && !bounds.includes('menuMaterial.width'),
