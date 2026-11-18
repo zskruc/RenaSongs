@@ -3,12 +3,9 @@ package expo.modules.liquidglass
 import android.graphics.Canvas
 import android.graphics.Bitmap
 import android.graphics.Paint
-import android.graphics.ColorFilter
-import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.RenderEffect
-import android.graphics.RenderNode
 import android.graphics.Shader
 import android.os.Build
 import android.os.SystemClock
@@ -18,12 +15,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.SurfaceView
 import android.view.TextureView
-import android.graphics.drawable.Drawable
 import com.facebook.react.R
 import androidx.annotation.RequiresApi
 import expo.modules.liquidglass.menumotion.GlassMorphFrame
 import expo.modules.liquidglass.menumotion.MenuSourceOwnership
 import expo.modules.liquidglass.menumotion.menuSourcePixels
+import expo.modules.liquidglass.menumotion.MenuSourceCapture
 import java.io.File
 import java.io.FileOutputStream
 import java.lang.ref.WeakReference
@@ -31,16 +28,30 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.ceil
 
 /** One measured trigger, never a retained View/event registry. All calls run on MAIN. */
 @RequiresApi(Build.VERSION_CODES.S)
 internal object MenuTriggerSnapshots {
   private const val MAX_PIXEL_COUNT = 360_000L
   private var active = WeakReference<MenuTriggerSnapshot>(null)
+  private val capturedOwners = ArrayList<WeakReference<MenuTriggerSnapshot>>()
+  private var captureDepth = 0
   private var lastCapture: Map<String, Any> = emptyMap()
   private var captureSerial = 0L
   private val diagnosticRun = "menu-source-${Process.myPid()}-${SystemClock.uptimeMillis()}"
   fun captureDiagnostics(): Map<String, Any> = lastCapture
+  fun beginCapture(root: View, captureSource: View, activityDecor: View?) {
+    captureDepth++
+    active.get()?.let { if (it.suppressForCapture(root, captureSource, activityDecor)) capturedOwners.add(WeakReference(it)) }
+  }
+  fun endCapture() {
+    captureDepth = (captureDepth - 1).coerceAtLeast(0)
+    if (captureDepth != 0) return
+    val owners = capturedOwners.toList()
+    capturedOwners.clear()
+    owners.forEach { it.get()?.restoreAfterCapture() }
+  }
 
   fun take(sourceScreen: RectF, exactView: View?): MenuTriggerSnapshot? {
     lastCapture = mapOf("sourceCaptureMode" to "geometry-only")
@@ -111,21 +122,6 @@ internal object MenuTriggerSnapshots {
       mutable?.recycle()
       metadata["sourceCaptureDurationMs"] = SystemClock.uptimeMillis() - started
     }
-    val node = RenderNode("RenaSongs immutable menu trigger")
-    node.setPosition(0, 0, view.width, view.height)
-    try {
-      val recording = node.beginRecording(view.width, view.height)
-      try {
-        recording.clipRect(0, 0, view.width, view.height)
-        // Explicit pixel rectangles bypass Canvas/Bitmap density conversion.
-        recording.drawBitmap(immutable, null, Rect(0, 0, view.width, view.height),
-          Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-      } finally { node.endRecording() }
-    } catch (_: RuntimeException) {
-      metadata["sourceCaptureResult"] = "record-rejected"
-      node.discardDisplayList()
-      return null
-    }
     metadata["sourceCaptureResult"] = "immutable-ready"
     metadata["sourceBitmapMutable"] = immutable.isMutable
     metadata["sourceBitmapDensity"] = immutable.density
@@ -143,7 +139,12 @@ internal object MenuTriggerSnapshots {
         } catch (_: Exception) { Log.d("ResonusGlass", "sourceCapturePng=write-failed") }
       }, "menu-source-png").apply { isDaemon = true; priority = Thread.MIN_PRIORITY; start() }
     }
-    val snapshot = MenuTriggerSnapshot(view, node, immutable, metadata.toMap(), density, sourceScreen.width(), sourceScreen.height())
+    val guard = ceil(13f * density).toInt()
+    if ((view.width + guard * 2).toLong() * (view.height + guard * 2) > 720_000L) {
+      metadata["sourceCaptureResult"] = "owner-budget-rejected"
+      return null
+    }
+    val snapshot = MenuTriggerSnapshot(view, immutable, metadata.toMap(), density, sourceScreen.width(), sourceScreen.height())
     active = WeakReference(snapshot)
     return snapshot
   }
@@ -182,9 +183,9 @@ internal object MenuTriggerSnapshots {
   }
 }
 
-/** RenderNode owns recorded pixels; only a weak source reference is needed for restoration. */
+/** A small overlay View replays immutable pixels; source restoration retains only a weak View reference. */
 @RequiresApi(Build.VERSION_CODES.S)
-internal class MenuTriggerSnapshot internal constructor(view: View, private val node: RenderNode,
+internal class MenuTriggerSnapshot internal constructor(view: View,
   @Suppress("unused") private val sourcePixels: Bitmap, private val captureMetadata: Map<String, Any>,
   private val density: Float, private val morphSourceWidth: Float, private val morphSourceHeight: Float) {
   private val source = WeakReference(view)
@@ -195,6 +196,10 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
   private val blurEffects = arrayOfNulls<RenderEffect>(18)
   private var lastBlurStep = -1
   private val ownership = MenuSourceOwnership()
+  private val captureState = MenuSourceCapture()
+  private val sourcePaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+  private val guard = ceil(13f * density).toInt()
+  private val pixelRect = Rect(guard, guard, guard + view.width, guard + view.height)
   private var overlayRoot = WeakReference<View>(null)
   private val overlayFrame = GlassMorphFrame()
   private val overlayLocation = IntArray(2)
@@ -204,52 +209,64 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
   private var draws = 0L
   private var clipMisses = 0L
   private var closingAt = 0L
+  private var captureSuppressions = 0L
+  private var captureRestores = 0L
+  private var captureDraws = 0L
   private val samples = linkedMapOf<Int, Map<String, Any>>()
-  private val overlayDrawable = object : Drawable() {
-    override fun draw(canvas: Canvas) {
-      if (WindowBackdrops.isCapturing || !hasFrame || ownership.released) return
-      val root = overlayRoot.get() ?: return
-      root.getLocationOnScreen(overlayLocation)
-      drawSource(canvas, overlayFrame, overlayLocation[0].toFloat(), overlayLocation[1].toFloat())
+  private val sourceOwner = object : View(view.context) {
+    init {
+      isClickable = false; isFocusable = false
+      importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
+      setWillNotDraw(false)
+      isForceDarkAllowed = false
     }
-    override fun setAlpha(alpha: Int) = Unit
-    override fun setColorFilter(filter: ColorFilter?) = Unit
-    @Deprecated("Deprecated in Java") override fun getOpacity() = PixelFormat.TRANSLUCENT
+    override fun onDraw(canvas: Canvas) {
+      if (!hasFrame || ownership.released) return
+      if (WindowBackdrops.isCapturing) captureDraws++
+      // Real pixels always live in this independent small View display list.
+      // Capture exclusion changes visibility, never erases this drawing body.
+      canvas.drawBitmap(sourcePixels, null, pixelRect, sourcePaint)
+      recordDraw(canvas)
+    }
   }
 
-  /** Window-level ownership avoids every fixed-card/parent drawing clip. */
+  /** A bounded View owns pixels/filtering; no Drawable or borrowed RenderNode. */
   fun attachOverlay(root: View): Boolean {
-    if (ownership.released || !hasFrame || !root.isAttachedToWindow || !root.isHardwareAccelerated || root.width <= 0 || root.height <= 0 ||
-      !node.hasDisplayList() || !MenuTriggerSnapshots.owns(this)) return false
+    if (ownership.released || !hasFrame || root !is ViewGroup || !root.isAttachedToWindow ||
+      !root.isHardwareAccelerated || root.width <= 0 || root.height <= 0 || !MenuTriggerSnapshots.owns(this)) return false
     val view = source.get() ?: return false
     if (!view.isAttachedToWindow || view.id != sourceId || !view.isShown ||
       (!ownership.hidden && view.transitionAlpha != originalTransitionAlpha)) return false
     if (overlayRoot.get() !== root) detachOverlay()
     overlayRoot = WeakReference(root)
-    overlayDrawable.setBounds(0, 0, root.width, root.height)
-    try { root.overlay.add(overlayDrawable) } catch (_: RuntimeException) {
-      try { root.overlay.remove(overlayDrawable) } catch (_: RuntimeException) { /* release retries the same weak root */ }
-      if (overlayDrawable.callback == null) overlayRoot.clear()
+    val ownerWidth = width.toInt() + guard * 2
+    val ownerHeight = height.toInt() + guard * 2
+    sourceOwner.measure(View.MeasureSpec.makeMeasureSpec(ownerWidth, View.MeasureSpec.EXACTLY),
+      View.MeasureSpec.makeMeasureSpec(ownerHeight, View.MeasureSpec.EXACTLY))
+    sourceOwner.layout(0, 0, ownerWidth, ownerHeight)
+    try { root.overlay.add(sourceOwner) } catch (_: RuntimeException) {
+      try { root.overlay.remove(sourceOwner) } catch (_: RuntimeException) { /* release retries */ }
+      if (sourceOwner.parent == null) overlayRoot.clear()
       return false
     }
-    if (!ownership.attach(MenuTriggerSnapshots.owns(this), view.id == sourceId, overlayDrawable.callback != null)) {
-      root.overlay.remove(overlayDrawable); overlayRoot.clear(); return false
+    if (!ownership.attach(MenuTriggerSnapshots.owns(this), view.id == sourceId, sourceOwner.parent != null)) {
+      root.overlay.remove(sourceOwner); overlayRoot.clear(); return false
     }
-    // Hide only after the full-window replacement has an actual drawing owner.
+    sourceOwner.visibility = View.VISIBLE
+    applyOwnerFrame()
     view.transitionAlpha = 0f
-    overlayDrawable.invalidateSelf()
+    sourceOwner.invalidate()
+    root.invalidate()
     return true
   }
 
   fun detachOverlay() {
     val view = source.get()
-    // The weak reference is the exact Java View instance we zeroed. Its React
-    // tag may have changed during recycling; undo our owned alpha write there
-    // too, without authorizing the recycled identity for capture or retarget.
     if (ownership.detach(MenuTriggerSnapshots.owns(this), view != null, view?.transitionAlpha == 0f))
       view?.transitionAlpha = originalTransitionAlpha
-    try { overlayRoot.get()?.overlay?.remove(overlayDrawable) }
-    catch (_: RuntimeException) { /* cleanup must not block node release/menu completion */ }
+    sourceOwner.visibility = View.INVISIBLE
+    try { (overlayRoot.get() as? ViewGroup)?.overlay?.remove(sourceOwner) }
+    catch (_: RuntimeException) { /* cleanup cannot block completion */ }
     finally { overlayRoot.clear() }
   }
 
@@ -257,13 +274,76 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
     if (ownership.released) return
     overlayFrame.copyFrom(frame)
     hasFrame = true
-    overlayDrawable.invalidateSelf()
+    applyOwnerFrame()
+    sourceOwner.invalidate()
   }
+
+  private fun applyOwnerFrame() {
+    val root = overlayRoot.get() ?: return
+    root.getLocationOnScreen(overlayLocation)
+    val frame = overlayFrame
+    val sx = frame.sourceLobe.width() / max(morphSourceWidth, 1f) * frame.sourceZoom
+    val sy = frame.sourceLobe.height() / max(morphSourceHeight, 1f) * frame.sourceZoom
+    sourceOwner.pivotX = sourceOwner.width / 2f
+    sourceOwner.pivotY = sourceOwner.height / 2f
+    sourceOwner.translationX = frame.sourceLobe.centerX() - overlayLocation[0] - sourceOwner.width / 2f
+    sourceOwner.translationY = frame.sourceLobe.centerY() - overlayLocation[1] - sourceOwner.height / 2f
+    sourceOwner.scaleX = sx
+    sourceOwner.scaleY = sy
+    sourceOwner.alpha = frame.sourceOpacity.coerceIn(0f, 1f)
+    val step = (frame.sourceBlur / density * 4f).roundToInt().coerceIn(0, blurEffects.lastIndex)
+    if (step != lastBlurStep) {
+      lastBlurStep = step
+      sourceOwner.setRenderEffect(if (step == 0) null else blurEffects[step] ?: RenderEffect.createBlurEffect(
+        step * density / 4f, step * density / 4f, Shader.TileMode.DECAL).also { blurEffects[step] = it })
+    }
+    glyphBounds.set(frame.sourceLobe.centerX() - overlayLocation[0] - width * sx / 2f,
+      frame.sourceLobe.centerY() - overlayLocation[1] - height * sy / 2f,
+      frame.sourceLobe.centerX() - overlayLocation[0] + width * sx / 2f,
+      frame.sourceLobe.centerY() - overlayLocation[1] + height * sy / 2f)
+  }
+
+  fun suppressForCapture(root: View, captureSource: View, activityDecor: View?): Boolean {
+    val ownerRoot = overlayRoot.get() ?: return false
+    val included = ownerRoot === captureSource ||
+      (captureSource === root && ownerRoot === activityDecor)
+    if (!captureState.stage(included, MenuTriggerSnapshots.owns(this) && ownership.attached,
+        sourceOwner.visibility == View.VISIBLE && sourceOwner.alpha > .001f)) return false
+    WindowBackdrops.onMenuSourceCaptureStaging(ownerRoot)
+    sourceOwner.visibility = View.INVISIBLE
+    captureSuppressions++
+    return true
+  }
+
+  fun restoreAfterCapture() {
+    if (!captureState.finish(true, MenuTriggerSnapshots.owns(this) && ownership.attached && !ownership.released)) return
+    sourceOwner.visibility = View.VISIBLE
+    sourceOwner.invalidate()
+    overlayRoot.get()?.invalidate()
+    captureRestores++
+  }
+
   fun beginClosing() { closingAt = SystemClock.uptimeMillis(); samples.clear() }
-  fun diagnostics(): Map<String, Any> = mapOf("sourceOverlayAttached" to ownership.attached,
-    "sourceCloneDraws" to draws, "sourceCloneClipMisses" to clipMisses,
-    "sourceCloneLastBounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
-    "sourceCloneClosingSamples" to samples.values.toList(), "sourceCapture" to captureMetadata)
+  fun diagnostics(): Map<String, Any> {
+    val root = overlayRoot.get()
+    val chain = ArrayList<Map<String, Any>>()
+    var ancestor: View? = sourceOwner
+    while (ancestor != null && chain.size < 8) {
+      chain.add(mapOf("class" to ancestor.javaClass.name, "alpha" to ancestor.alpha,
+        "transitionAlpha" to ancestor.transitionAlpha, "visibility" to ancestor.visibility))
+      ancestor = ancestor.parent as? View
+    }
+    return mapOf("sourceOverlayAttached" to ownership.attached, "sourceOwnerKind" to "bounded-view",
+      "sourceOwnerWidth" to sourceOwner.width, "sourceOwnerHeight" to sourceOwner.height,
+      "sourceOwnerPixels" to sourceOwner.width.toLong() * sourceOwner.height,
+      "sourceOwnerRootClass" to (root?.javaClass?.name ?: "none"),
+      "sourceOwnerRootAlpha" to (root?.alpha ?: -1f), "sourceOwnerRootTransitionAlpha" to (root?.transitionAlpha ?: -1f),
+      "sourceOwnerChain" to chain, "sourceCaptureSuppressCount" to captureSuppressions,
+      "sourceCaptureRestoreCount" to captureRestores, "sourceOwnerCaptureDraws" to captureDraws,
+      "sourceCloneDraws" to draws, "sourceCloneClipMisses" to clipMisses,
+      "sourceCloneLastBounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
+      "sourceCloneClosingSamples" to samples.values.toList(), "sourceCapture" to captureMetadata)
+  }
 
   /** Refresh only the same live weak source; never resolve a replacement row/tag. */
   fun currentScreenBounds(out: RectF): Boolean {
@@ -283,44 +363,19 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
     return true
   }
 
-  private fun drawSource(canvas: Canvas, frame: GlassMorphFrame, originX: Float, originY: Float) {
-    if (ownership.released || !canvas.isHardwareAccelerated || frame.sourceOpacity <= 0.001f) return
-    val lobe = frame.sourceLobe
-    val zoom = frame.sourceZoom
-    node.setPivotX(width / 2f)
-    node.setPivotY(height / 2f)
-    // RN expands tiny measured icons to a 44dp hit origin. That expands the
-    // morph geometry, not the glyph itself: preserve the actual recorded size.
-    node.setScaleX(lobe.width() / max(morphSourceWidth, 1f) * zoom)
-    node.setScaleY(lobe.height() / max(morphSourceHeight, 1f) * zoom)
-    node.setTranslationX(lobe.centerX() - originX - width / 2f)
-    node.setTranslationY(lobe.centerY() - originY - height / 2f)
-    node.setAlpha(frame.sourceOpacity.coerceIn(0f, 1f))
-    glyphBounds.set(lobe.centerX() - originX - width * node.scaleX / 2f,
-      lobe.centerY() - originY - height * node.scaleY / 2f,
-      lobe.centerX() - originX + width * node.scaleX / 2f,
-      lobe.centerY() - originY + height * node.scaleY / 2f)
+  private fun recordDraw(canvas: Canvas) {
     canvas.getClipBounds(clip)
-    val missed = glyphBounds.right <= clip.left || glyphBounds.left >= clip.right ||
-      glyphBounds.bottom <= clip.top || glyphBounds.top >= clip.bottom
+    val missed = !Rect.intersects(clip, pixelRect)
     draws++
     if (missed) clipMisses++
     if (closingAt > 0L) {
       val elapsed = SystemClock.uptimeMillis() - closingAt
       for (at in intArrayOf(50, 100, 150, 200, 300, 450)) if (elapsed >= at && !samples.containsKey(at)) {
-        samples[at] = mapOf("atMs" to elapsed, "sourceAlpha" to frame.sourceOpacity,
+        samples[at] = mapOf("atMs" to elapsed, "sourceAlpha" to sourceOwner.alpha,
           "bounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom),
-          "clip" to listOf(clip.left, clip.top, clip.right, clip.bottom), "clipMiss" to missed)
+          "localClip" to listOf(clip.left, clip.top, clip.right, clip.bottom), "clipMiss" to missed)
       }
     }
-    // The upstream source blur spans 0–4dp. Quarter-dp steps reuse its GPU effects.
-    val step = (frame.sourceBlur / density * 4f).roundToInt().coerceIn(0, blurEffects.lastIndex)
-    if (step != lastBlurStep) {
-      lastBlurStep = step
-      node.setRenderEffect(if (step == 0) null else blurEffects[step] ?: RenderEffect.createBlurEffect(
-        step * density / 4f, step * density / 4f, Shader.TileMode.DECAL).also { blurEffects[step] = it })
-    }
-    canvas.drawRenderNode(node)
   }
 
   fun release() {
@@ -328,9 +383,9 @@ internal class MenuTriggerSnapshot internal constructor(view: View, private val 
     detachOverlay()
     if (MenuTriggerSnapshots.owns(this)) MenuTriggerSnapshots.forget(this)
     source.clear()
-    node.setAlpha(0f)
-    node.setRenderEffect(null)
-    node.discardDisplayList()
+    captureState.release()
+    sourceOwner.alpha = 0f
+    sourceOwner.setRenderEffect(null)
     blurEffects.fill(null)
   }
 }

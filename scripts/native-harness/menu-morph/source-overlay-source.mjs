@@ -13,45 +13,51 @@ assert.ok(host.includes('menuSourceTag(rect?.getOrNull(5))') && host.includes('t
 assert.ok(source.includes('interactiveCount(view, 0) > 1') && source.includes('containsGlass(view, 0)'),
   'A small toolbar or unsupported glass hierarchy must not be hidden as one ordinary trigger');
 assert.doesNotMatch(source, /\binit\s*\{\s*view\.transitionAlpha\s*=\s*0f/,
-  'Recording a snapshot must not hide a source before a replacement Drawable has attached');
+  'Capturing pixels must not hide a source before its replacement View has attached');
 const attach = source.slice(source.indexOf('fun attachOverlay('), source.indexOf('fun detachOverlay('));
 assert.ok(attach.includes('!hasFrame') && attach.includes('!root.isHardwareAccelerated') &&
-  attach.includes('!node.hasDisplayList()') && attach.includes('overlayDrawable.callback != null'),
-  'Overlay takeover requires a real first frame, usable window/RenderNode and an actual Drawable callback');
-assert.ok(attach.indexOf('root.overlay.add(overlayDrawable)') < attach.indexOf('ownership.attach(') &&
+  attach.includes('root !is ViewGroup') && attach.includes('sourceOwner.parent != null'),
+  'Overlay takeover requires a first source frame, usable ViewGroup window and actually attached small View');
+assert.ok(attach.indexOf('root.overlay.add(sourceOwner)') < attach.indexOf('ownership.attach(') &&
   attach.indexOf('ownership.attach(') < attach.indexOf('view.transitionAlpha = 0f'),
-  'A source must be hidden only after the real window overlay and exact-source lease both succeed');
+  'The original source must hide only after the real window View owner and exact-source lease succeed');
+assert.ok(attach.includes('sourceOwner.measure(') && attach.includes('sourceOwner.layout(0, 0, ownerWidth, ownerHeight)') &&
+  attach.indexOf('applyOwnerFrame()') < attach.indexOf('view.transitionAlpha = 0f'),
+  'The real replacement must have physical dimensions and the current transform before its source hides');
 const failedAttach = attach.slice(attach.indexOf('catch (_: RuntimeException)'), attach.indexOf('if (!ownership.attach('));
-assert.ok(failedAttach.includes('root.overlay.remove(overlayDrawable)') &&
-  failedAttach.includes('if (overlayDrawable.callback == null) overlayRoot.clear()'),
-  'A partially failed Drawable attachment must remove itself or retain its weak root for cleanup retry without hiding the source');
+assert.ok(failedAttach.includes('root.overlay.remove(sourceOwner)') &&
+  failedAttach.includes('if (sourceOwner.parent == null) overlayRoot.clear()'),
+  'Failed attachment must remove the small View or retain its weak root for cleanup retry without hiding the source');
 const requestStart = host.slice(host.indexOf('private fun requestStart('), host.indexOf('private fun updateTarget('));
 assert.ok(requestStart.indexOf('applyFrame()') < requestStart.indexOf('attachOverlay(rootView)'),
   'The overlay replacement must receive its initial source frame before taking visibility ownership');
-const drawable = source.slice(source.indexOf('private val overlayDrawable'), source.indexOf('fun attachOverlay('));
-assert.ok(drawable.includes('WindowBackdrops.isCapturing') && drawable.includes('root.getLocationOnScreen(overlayLocation)') &&
-  drawable.includes('drawSource(canvas, overlayFrame, overlayLocation[0].toFloat(), overlayLocation[1].toFloat())'),
-  'The source Drawable must bypass capture recursion and sample the current root-window screen origin');
+const placement = source.slice(source.indexOf('private fun applyOwnerFrame('), source.indexOf('fun suppressForCapture('));
+assert.ok(placement.includes('root.getLocationOnScreen(overlayLocation)') &&
+  placement.includes('frame.sourceLobe.centerX() - overlayLocation[0] - sourceOwner.width / 2f') &&
+  placement.includes('frame.sourceLobe.centerY() - overlayLocation[1] - sourceOwner.height / 2f') &&
+  placement.includes('sourceOwner.pivotX = sourceOwner.width / 2f') &&
+  placement.includes('sourceOwner.alpha = frame.sourceOpacity.coerceIn(0f, 1f)'),
+  'Source View transforms must use current root-local physical origin, center pivot and original motion alpha');
 const dispatch = host.slice(host.indexOf('override fun dispatchDraw('), host.indexOf('override fun dispatchTouchEvent('));
 assert.doesNotMatch(dispatch, /triggerSnapshot\?\.(?:draw|drawSource)\s*\(/,
   'The source clone must no longer be drawn through the fixed menu host\'s possible ancestor clips');
-assert.ok(source.includes('canvas.getClipBounds(clip)') && source.includes('"clip" to listOf(clip.left, clip.top, clip.right, clip.bottom)') &&
+assert.ok(source.includes('canvas.getClipBounds(clip)') && source.includes('"localClip" to listOf(clip.left, clip.top, clip.right, clip.bottom)') &&
   source.includes('"bounds" to listOf(glyphBounds.left, glyphBounds.top, glyphBounds.right, glyphBounds.bottom)') &&
-  source.includes('"sourceAlpha" to frame.sourceOpacity'),
+  source.includes('"sourceAlpha" to sourceOwner.alpha'),
   'Record actual source-draw Canvas clipping/geometry/alpha for real-device acceptance instead of assuming JVM visibility');
 const detach = source.slice(source.indexOf('fun detachOverlay('), source.indexOf('fun updateOverlay('));
-assert.ok(detach.includes('remove(overlayDrawable)') && detach.includes('overlayRoot.clear()') &&
+assert.ok(detach.includes('remove(sourceOwner)') && detach.includes('overlayRoot.clear()') &&
   detach.includes('ownership.detach(MenuTriggerSnapshots.owns(this), view != null, view?.transitionAlpha == 0f)') &&
   detach.includes('view?.transitionAlpha = originalTransitionAlpha'),
-  'Window detach must remove its Drawable and conditionally restore only the exact active source\'s own hidden alpha');
+  'Window detach must remove its small View and conditionally restore only the exact active source\'s own hidden alpha');
 assert.ok(attach.includes('view.id != sourceId') && source.includes('view.id != sourceId || !view.isShown'),
   'Cloning/refresh must still reject a recycled tag even when cleanup restores the same weak physical instance');
 assert.ok(detach.includes('catch (_: RuntimeException)') && detach.includes('finally'),
   'A failed overlay removal must not block node disposal or native motion completion');
-assert.ok(detach.indexOf('view?.transitionAlpha = originalTransitionAlpha') < detach.indexOf('remove(overlayDrawable)'),
-  'A window handoff must restore its exact source before removing the replacement Drawable');
+assert.ok(detach.indexOf('view?.transitionAlpha = originalTransitionAlpha') < detach.indexOf('remove(sourceOwner)'),
+  'A window handoff must restore its exact source before removing the replacement View');
 const release = source.slice(source.lastIndexOf('fun release('));
 assert.ok(release.includes('if (!ownership.release()) return') && release.includes('detachOverlay()') &&
-  release.includes('source.clear()') && release.includes('node.discardDisplayList()'),
-  'Release must be idempotent and symmetrically release overlay, weak source and recorded pixels');
-console.log('Menu source overlay contract passed (explicit identity, attach-before-hide, root-local replay, capture exclusion, real Canvas clip diagnostics and symmetric cleanup).');
+  release.includes('source.clear()') && release.includes('captureState.release()') && release.includes('sourceOwner.setRenderEffect(null)'),
+  'Release must be idempotent and symmetrically release overlay, weak source, pending capture and filtered owner');
+console.log('Menu source overlay contract passed (explicit identity, attached small-View takeover, root-local physical replay, real local Canvas clips and symmetric cleanup).');

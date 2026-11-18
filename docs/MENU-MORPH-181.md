@@ -269,3 +269,38 @@ nonempty bitmap alone does not prove a glyph remains visible through the final
 composite. JS source and test hashes are unchanged, so its previous 2,113-test
 suite is reused with explicit provenance; fresh native checks and device results
 are recorded separately. No GitHub push or Release is included.
+
+
+### 191: restore source-overlay drawing after backdrop staging
+
+190 also failed physical acceptance: its software source captured nonzero glyph
+pixels (Sort 1,016 alpha / 951 bright pixels; Download 1,757 / 1,475), but the
+screen recording showed only a uniform toolbar background during the absorption
+tail. The original glyph appeared at completion. Local-contrast checks also
+exclude a black/grey glyph as the explanation. More was not a valid recorded
+third case, so no visual result is claimed for that source.
+
+The investigation now covers backdrop staging and the live window's drawing
+state. Android View.draw can consume a host's dirty state during an offscreen
+capture even when the transient-source draw guard omits that source. Retaining
+a nonempty immutable bitmap is insufficient if the real window reuses a host
+display list without the overlay. Capture suppression and post-capture source
+restoration therefore need symmetric ownership, including exceptional and
+nested exits, without creating a new idle frame loop.
+
+The source now uses a real, bounded View in the window overlay. Its onDraw
+records the immutable bitmap directly with a physical-pixel destination Rect;
+there is no custom source RenderNode or Drawable replay. A 13dp transparent
+guard contains the existing blur, and the owner raster is capped at 720,000
+pixels. The existing source position, scale, opacity and cached small blur
+filters apply to this View. Platform automatic darkening is disabled because
+the bitmap already has the correct icon color. Capture staging excludes only
+a source owner that belongs to the sampled window, then restores its visibility
+and dirty state after the outermost transaction. Release/replacement reject
+stale restores and dispose the overlay. No per-frame source image capture or
+full-window filtered source View is added.
+
+Implementation checks and Samsung visual acceptance remain separate; the phone
+is in use and no further installation or interaction is included in this
+build-only iteration. 190 remains a failed candidate, and 191 must pass a new
+actual-glyph video check before claiming the visual issue resolved.

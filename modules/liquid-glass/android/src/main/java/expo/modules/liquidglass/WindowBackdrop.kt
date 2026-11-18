@@ -99,6 +99,8 @@ internal object WindowBackdrops {
     suppressedHosts.add(surface)
   }
 
+  fun onMenuSourceCaptureStaging(root: View) { windows[root]?.onForeignCaptureStaging() }
+
   @RequiresApi(Build.VERSION_CODES.S)
   fun attach(surface: LiquidGlassView, activityDecor: View?): WindowBackdrop {
     val root = surface.rootView
@@ -152,6 +154,7 @@ internal object WindowBackdrops {
     val wasCapturing = isCapturing
     isCapturing = true
     try {
+      MenuTriggerSnapshots.beginCapture(root, captureSource, activityDecor)
       // A Modal also stages/restores glass in its Activity underlay. Those
       // mutations invalidate that other window's hosts, not just this capture's
       // root. Give the existing backing owner the same finite redraw ownership
@@ -174,17 +177,19 @@ internal object WindowBackdrops {
         excluded.forEachIndexed { index, view -> view.transitionAlpha = originalTransitionAlpha[index] }
       } finally {
         isCapturing = wasCapturing
-        if (!isCapturing) {
-          try {
-            capturedSurfaces.forEach { it.restoreSelectionOverlayAfterCapture() }
-          } finally {
-            // Drawing an alpha-zero parent can still re-record dirty child nodes.
-            // Restore suppressed hosts even if an overlay's restoration fails.
+        try {
+          if (!isCapturing) {
             try {
-              suppressedHosts.forEach { it.restoreDisplayListAfterCapture() }
-            } finally { suppressedHosts.clear() }
+              capturedSurfaces.forEach { it.restoreSelectionOverlayAfterCapture() }
+            } finally {
+              // Drawing an alpha-zero parent can still re-record dirty child nodes.
+              // Restore suppressed hosts even if an overlay's restoration fails.
+              try {
+                suppressedHosts.forEach { it.restoreDisplayListAfterCapture() }
+              } finally { suppressedHosts.clear() }
+            }
           }
-        }
+        } finally { MenuTriggerSnapshots.endCapture() }
       }
     }
   }
@@ -1098,8 +1103,13 @@ internal class WindowBackdrop(
         val checkpoint = recording.save()
         recording.translate((activityLocation[0] - location[0]).toFloat(),
           (activityLocation[1] - location[1]).toFloat())
-        underlay.draw(recording)
-        recording.restoreToCount(checkpoint)
+        try {
+          MenuTriggerSnapshots.beginCapture(root, underlay, null)
+          underlay.draw(recording)
+        } finally {
+          try { recording.restoreToCount(checkpoint) }
+          finally { MenuTriggerSnapshots.endCapture() }
+        }
         menuScrimPaint.color = scrimColor
         menuScrimPaint.alpha = (Color.alpha(scrimColor) * opacity).toInt().coerceIn(0, 255)
         recording.drawRect(captureRect, menuScrimPaint)
